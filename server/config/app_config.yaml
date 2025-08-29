@@ -1,0 +1,29 @@
+# 土壌雨量指数計算システム設定ファイル
+
+# プロキシ設定
+proxy:
+  # 本番環境用プロキシ
+  http: "http://172.17.34.11:3128"
+  https: "http://172.17.34.11:3128"
+  
+  # 開発環境ではプロキシを無効にする場合は下記をコメントアウト
+  # http: null
+  # https: null
+
+# GRIB2データ取得設定
+grib2:
+  # タイムアウト設定（秒）
+  download_timeout: 300
+  
+  # 接続リトライ設定
+  retry_count: 3
+  retry_delay: 5
+
+# データディレクトリ設定
+data:
+  directory: "data"
+  
+# ログ設定
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
