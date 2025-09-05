@@ -40,6 +40,7 @@ export interface CalculationResult {
   swi_initial_time?: string;    // SWI初期時刻（ISO8601）
   guid_initial_time?: string;   // ガイダンス初期時刻（ISO8601）
   prefectures: Record<string, Prefecture>;  // 都道府県データ
+  used_urls?: string[];         // 本番API使用時のGRIB2 URL（デバッグ用）
 }
 
 export interface CalculationParams {

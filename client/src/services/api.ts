@@ -88,6 +88,15 @@ export class SoilRainfallAPIClient {
   }
 
   /**
+   * 本番用土壌雨量指数計算（時刻指定対応）
+   */
+  async calculateProductionSoilRainfallIndex(params?: { initial?: string }): Promise<CalculationResult> {
+    const queryParams = params?.initial ? `?initial=${encodeURIComponent(params.initial)}` : '';
+    const response = await apiClient.get<CalculationResult>(`/production-soil-rainfall-index${queryParams}`);
+    return response.data;
+  }
+
+  /**
    * パフォーマンス分析（デバッグ用）
    */
   async getPerformanceAnalysis(): Promise<any> {

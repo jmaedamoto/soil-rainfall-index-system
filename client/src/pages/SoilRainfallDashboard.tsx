@@ -23,6 +23,17 @@ const SoilRainfallDashboard: React.FC = () => {
   const [guidInitialTime, setGuidInitialTime] = useState('2023-06-01T12:00:00Z');
   const [useSeparateTimes, setUseSeparateTimes] = useState(false);
   
+  // データソース選択の状態
+  const [dataSource, setDataSource] = useState<'test' | 'production'>('test');
+  const [productionDateTime, setProductionDateTime] = useState(() => {
+    // デフォルトは現在時刻の3時間前（6時間区切り）
+    const now = new Date();
+    const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    const hours = Math.floor(threeHoursAgo.getHours() / 6) * 6;
+    threeHoursAgo.setHours(hours, 0, 0, 0);
+    return threeHoursAgo.toISOString().slice(0, 19);
+  });
+  
   // 時刻変更ハンドラー
   const handleTimeChange = (newTime: number) => {
     setIsTimeChanging(true);
@@ -186,33 +197,23 @@ const SoilRainfallDashboard: React.FC = () => {
         });
       }, 2000);
       
-      // 時刻パラメータに基づいてAPI呼び出し
+      // データソースに基づいてAPI呼び出し
       let result;
       
-      // 開発環境では実際のGRIB2ダウンロードを避けて、テスト用エンドポイントを使用
-      const isDevelopment = import.meta.env.DEV;
-      
-      if (isDevelopment) {
-        // 開発環境：ローカルのテストデータを使用（時刻指定対応）
-        console.log('開発環境: テスト用データを使用します');
+      if (dataSource === 'test') {
+        // テストデータを使用（時刻指定対応）
+        console.log('テストデータソース: ローカルテストデータを使用します');
         const params = useSeparateTimes ? 
           { swi_initial: swiInitialTime, guid_initial: guidInitialTime } :
           { swi_initial: swiInitialTime };
         result = await apiClient_.testCalculationWithTime(params);
       } else {
-        // 本番環境：実際のGRIB2データを使用
-        if (useSeparateTimes) {
-          // 別々の時刻を指定
-          result = await apiClient_.calculateSoilRainfallIndex({
-            swi_initial: swiInitialTime,
-            guid_initial: guidInitialTime
-          });
-        } else {
-          // 同じ時刻を使用（SWIの時刻を使用）
-          result = await apiClient_.calculateSoilRainfallIndex({
-            swi_initial: swiInitialTime
-          });
-        }
+        // 本番データを使用：気象庁サーバーから実際のGRIB2データを取得
+        console.log('本番データソース: 気象庁GRIB2データを使用します');
+        const initialTime = productionDateTime + 'Z';
+        result = await apiClient_.calculateProductionSoilRainfallIndex({ 
+          initial: initialTime 
+        });
       }
       clearInterval(progressInterval);
       
@@ -265,10 +266,7 @@ const SoilRainfallDashboard: React.FC = () => {
     }
   };
 
-  // 初回データ読み込み
-  useEffect(() => {
-    loadData();
-  }, []);
+  // 初回データ読み込みは削除 - ユーザーが設定後に手動で読み込み
 
   // 利用可能時刻が変更された時のみ実行
   useEffect(() => {
@@ -386,44 +384,126 @@ const SoilRainfallDashboard: React.FC = () => {
       }}>
         <h2>土壌雨量指数計算システム</h2>
         
-        {/* 時刻設定UI */}
+        {/* データソース・時刻設定UI */}
         <div style={{
           backgroundColor: '#f5f5f5',
           padding: '20px',
           borderRadius: '8px',
           margin: '20px 0',
           textAlign: 'left',
-          maxWidth: '600px',
+          maxWidth: '800px',
           marginLeft: 'auto',
           marginRight: 'auto'
         }}>
-          <h3 style={{ marginTop: 0 }}>計算時刻設定</h3>
+          <h3 style={{ marginTop: 0 }}>データソース・時刻設定</h3>
           
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
-              <input
-                type="checkbox"
-                checked={useSeparateTimes}
-                onChange={(e) => setUseSeparateTimes(e.target.checked)}
-                style={{ marginRight: '8px' }}
-              />
-              SWIとガイダンスで異なる時刻を使用する
-            </label>
+          {/* データソース選択 */}
+          <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#e3f2fd', borderRadius: '6px' }}>
+            <h4 style={{ marginTop: 0, marginBottom: '10px' }}>データソース</h4>
+            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="radio"
+                  name="dataSource"
+                  value="test"
+                  checked={dataSource === 'test'}
+                  onChange={(e) => setDataSource(e.target.value as 'test' | 'production')}
+                  style={{ marginRight: '8px' }}
+                />
+                <div>
+                  <strong>テストデータ</strong>
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+                    ローカルのサンプルデータ（高速・開発用）
+                  </div>
+                </div>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="radio"
+                  name="dataSource"
+                  value="production"
+                  checked={dataSource === 'production'}
+                  onChange={(e) => setDataSource(e.target.value as 'test' | 'production')}
+                  style={{ marginRight: '8px' }}
+                />
+                <div>
+                  <strong>本番データ</strong>
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+                    気象庁GRIB2サーバーから取得（実データ・時間要）
+                  </div>
+                </div>
+              </label>
+            </div>
           </div>
           
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: useSeparateTimes ? '1fr 1fr' : '1fr',
-            gap: '15px' 
-          }}>
+          {/* 時刻設定 - データソースに応じて表示 */}
+          {dataSource === 'test' ? (
+            /* テストデータ用の時刻設定 */
+            <>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
+                  <input
+                    type="checkbox"
+                    checked={useSeparateTimes}
+                    onChange={(e) => setUseSeparateTimes(e.target.checked)}
+                    style={{ marginRight: '8px' }}
+                  />
+                  SWIとガイダンスで異なる時刻を使用する
+                </label>
+              </div>
+              
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: useSeparateTimes ? '1fr 1fr' : '1fr',
+                gap: '15px' 
+              }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                    {useSeparateTimes ? 'SWI初期時刻:' : '初期時刻:'}
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={swiInitialTime.replace('Z', '').replace('+00:00', '')}
+                    onChange={(e) => setSwiInitialTime(e.target.value + 'Z')}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      border: '1px solid #ccc',
+                      borderRadius: '4px'
+                    }}
+                  />
+                </div>
+                
+                {useSeparateTimes && (
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                      ガイダンス初期時刻:
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={guidInitialTime.replace('Z', '').replace('+00:00', '')}
+                      onChange={(e) => setGuidInitialTime(e.target.value + 'Z')}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        border: '1px solid #ccc',
+                        borderRadius: '4px'
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            /* 本番データ用の時刻設定 */
             <div>
               <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                {useSeparateTimes ? 'SWI初期時刻:' : '初期時刻:'}
+                本番データ取得時刻:
               </label>
               <input
                 type="datetime-local"
-                value={swiInitialTime.replace('Z', '').replace('+00:00', '')}
-                onChange={(e) => setSwiInitialTime(e.target.value + 'Z')}
+                value={productionDateTime}
+                onChange={(e) => setProductionDateTime(e.target.value)}
                 style={{
                   width: '100%',
                   padding: '8px',
@@ -431,27 +511,20 @@ const SoilRainfallDashboard: React.FC = () => {
                   borderRadius: '4px'
                 }}
               />
-            </div>
-            
-            {useSeparateTimes && (
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-                  ガイダンス初期時刻:
-                </label>
-                <input
-                  type="datetime-local"
-                  value={guidInitialTime.replace('Z', '').replace('+00:00', '')}
-                  onChange={(e) => setGuidInitialTime(e.target.value + 'Z')}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    border: '1px solid #ccc',
-                    borderRadius: '4px'
-                  }}
-                />
+              <div style={{ 
+                fontSize: '12px', 
+                color: '#666', 
+                marginTop: '5px',
+                backgroundColor: '#fff3cd',
+                padding: '8px',
+                borderRadius: '4px',
+                border: '1px solid #ffeaa7'
+              }}>
+                ⚠️ 気象庁のGRIB2データは6時間間隔（00, 06, 12, 18 UTC）で提供されます。<br />
+                指定した時刻に最も近い利用可能な時刻のデータが使用されます。
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
         
         <button 
@@ -495,24 +568,57 @@ const SoilRainfallDashboard: React.FC = () => {
         </div>
       </div>
       
-      {/* データ情報 */}
+      {/* データ情報と再読み込み */}
       <div style={{ 
         backgroundColor: '#f5f5f5', 
         padding: '15px', 
         borderRadius: '8px',
-        marginBottom: '20px'
+        marginBottom: '20px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        gap: '20px'
       }}>
-        <h3>データ情報</h3>
-        <p><strong>計算時刻:</strong> {new Date(data.calculation_time).toLocaleString('ja-JP')}</p>
-        {data.swi_initial_time && (
-          <p><strong>SWI初期時刻:</strong> {new Date(data.swi_initial_time).toLocaleString('ja-JP')}</p>
-        )}
-        {data.guid_initial_time && (
-          <p><strong>ガイダンス初期時刻:</strong> {new Date(data.guid_initial_time).toLocaleString('ja-JP')}</p>
-        )}
-        <p><strong>初期時刻:</strong> {new Date(data.initial_time).toLocaleString('ja-JP')}</p>
-        <p><strong>メッシュ数:</strong> {allMeshes.length.toLocaleString()}個</p>
-        <p><strong>対象地域:</strong> {Object.keys(data.prefectures).join(', ')}</p>
+        <div style={{ flex: 1 }}>
+          <h3 style={{ marginTop: 0 }}>データ情報</h3>
+          <p><strong>データソース:</strong> {dataSource === 'test' ? 'テストデータ' : '本番データ（気象庁GRIB2）'}</p>
+          <p><strong>計算時刻:</strong> {new Date(data.calculation_time).toLocaleString('ja-JP')}</p>
+          {data.swi_initial_time && (
+            <p><strong>SWI初期時刻:</strong> {new Date(data.swi_initial_time).toLocaleString('ja-JP')}</p>
+          )}
+          {data.guid_initial_time && (
+            <p><strong>ガイダンス初期時刻:</strong> {new Date(data.guid_initial_time).toLocaleString('ja-JP')}</p>
+          )}
+          <p><strong>初期時刻:</strong> {new Date(data.initial_time).toLocaleString('ja-JP')}</p>
+          <p><strong>メッシュ数:</strong> {allMeshes.length.toLocaleString()}個</p>
+          <p><strong>対象地域:</strong> {Object.keys(data.prefectures).join(', ')}</p>
+          {data.used_urls && (
+            <div style={{ marginTop: '10px', fontSize: '12px', color: '#666' }}>
+              <p><strong>使用URLs:</strong></p>
+              {data.used_urls.map((url: string, index: number) => (
+                <div key={index} style={{ wordBreak: 'break-all', marginLeft: '10px' }}>
+                  • {url}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <button 
+            onClick={loadData}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            データ再読み込み
+          </button>
+        </div>
       </div>
 
       {/* データ調査ツール */}

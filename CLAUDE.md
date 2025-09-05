@@ -1182,3 +1182,74 @@ server/
 
 **技術的重要性**: 
 このバグ修正により、本番環境でのGRIB2データ取得成功率が大幅に改善される予定。特に本番テスト用API (`/api/production-soil-rainfall-index`) での動作が正常化されます。
+
+## 🆕 **2025年9月5日 フロントエンド日時指定機能追加**
+
+### ✅ **新機能実装完了**
+
+#### **日時指定データ取得機能**
+ダッシュボードに本番データ取得機能を追加しました。既存のテストデータ機能は維持したまま、新たに気象庁GRIB2サーバーからリアルタイムデータを取得する機能を実装。
+
+**主要機能:**
+- **データソース選択**: テストデータ vs 本番データのラジオボタン選択
+- **日時指定**: 本番データ用のシンプルな日時ピッカー
+- **自動時刻調整**: 気象庁の6時間間隔データに対応
+- **URL表示**: デバッグ用の使用GRIB2 URL表示機能
+
+#### **実装詳細**
+
+**1. APIクライアント機能追加** (`client/src/services/api.ts`):
+```typescript
+// 本番用土壌雨量指数計算（時刻指定対応）
+async calculateProductionSoilRainfallIndex(params?: { initial?: string }): Promise<CalculationResult> {
+  const queryParams = params?.initial ? `?initial=${encodeURIComponent(params.initial)}` : '';
+  const response = await apiClient.get<CalculationResult>(`/production-soil-rainfall-index${queryParams}`);
+  return response.data;
+}
+```
+
+**2. UI改善** (`client/src/pages/SoilRainfallDashboard.tsx`):
+- データソース選択UI（テスト/本番）
+- 本番データ用日時ピッカー（6時間間隔の説明付き）
+- データ情報表示の強化（使用URL表示）
+- 再読み込みボタンの追加
+
+**3. 型定義更新** (`client/src/types/api.ts`):
+```typescript
+export interface CalculationResult {
+  // 既存フィールド...
+  used_urls?: string[];  // 本番API使用時のGRIB2 URL（デバッグ用）
+}
+```
+
+#### **使用方法**
+
+**テストデータモード（既存機能維持）:**
+- 高速なローカルテストデータ
+- SWIとガイダンスの個別時刻設定可能
+- 開発・デモ用途に最適
+
+**本番データモード（新機能）:**
+- 気象庁GRIB2サーバーからリアルタイムデータ取得
+- シンプルな日時指定（6時間間隔自動調整）
+- 使用したGRIB2 URLの表示でデバッグ支援
+- `/api/production-soil-rainfall-index` エンドポイント使用
+
+#### **UI操作手順**
+1. ダッシュボードでデータソースを選択（テスト/本番）
+2. 時刻を設定（本番の場合は日時ピッカー）
+3. 「データを読み込む」ボタンクリック
+4. データ表示後、「データ再読み込み」で設定変更可能
+
+#### **技術的特徴**
+- **後方互換性**: 既存テストデータ機能を完全保持
+- **エラーハンドリング**: 本番データ取得失敗時の適切な処理
+- **デバッグ支援**: 使用GRIB2 URLの表示機能
+- **レスポンシブUI**: データソースに応じた動的UI切り替え
+- **6時間間隔対応**: 気象庁データ提供間隔への自動調整
+
+#### **開発生産性向上**
+- テストデータでの高速開発継続可能
+- 本番データでの実動作確認が容易
+- 一つのUIで両方のデータソース利用可能
+- デバッグ情報の充実によるトラブルシュート効率化
