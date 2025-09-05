@@ -48,6 +48,17 @@ ExcelのVBA（Visual Basic for Applications）で実装されていた土壌雨�
 - **降水量予測**: `http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc/`
 - **フォーマット**: GRIB2バイナリ形式
 - **境界データ**: `dosha_*.csv`（市区町村別警報基準値）
+
+#### **GRIB2 URL構築パターン（2025年9月5日修正済み）**
+```python
+# 土壌雨量指数データ URL
+swi_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/swi10/{initial_time.strftime('%Y/%m/%d')}/Z__C_RJTD_{initial_time.strftime('%Y%m%d%H%M%S')}_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin"
+
+# 降水量予測データ URL（修正済み：二重スラッシュ除去）
+guidance_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc/{initial_time.strftime('%Y/%m/%d')}/guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax00.bin"
+```
+
+**修正点**: guidance_url の構築で `/gdc//` となっていた二重スラッシュを `/gdc/` に修正
 - **土砂災害データ**: `dosyakei_*.csv`（メッシュ別危険度レベル）
 
 ## プロジェクト構造
@@ -658,6 +669,24 @@ curl -X POST http://localhost:5000/api/soil-rainfall-index \
 
 ## 開発履歴・技術的な修正
 
+### URL構築バグの修正（2025年9月5日）
+
+**問題**: `main_service.py` の URL 構築処理で guidance_url に二重スラッシュが含まれる不具合
+
+**修正内容**:
+```python
+# 修正前（145行目）
+guidance_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc//{initial_time.strftime('%Y/%m/%d')}/guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax00.bin"
+
+# 修正後
+guidance_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc/{initial_time.strftime('%Y/%m/%d')}/guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax00.bin"
+```
+
+**影響**: 
+- `/gdc//` → `/gdc/` 正しい URL パスに修正
+- GRIB2 降水量予測データのダウンロード成功率向上
+- main_process_from_urls() 処理の安定性向上
+
 ### JSON Serialization エラーの修正（2025-07-25）
 
 **問題**: `/api/test-full-soil-rainfall-index` エンドポイントで `Object of type int64 is not JSON serializable` エラーが発生
@@ -993,6 +1022,21 @@ curl "http://localhost:5000/api/production-soil-rainfall-index?initial=2023-06-0
 curl "http://localhost:5000/api/production-soil-rainfall-index"
 ```
 
+### ⚠️ **URL構築バグ修正の影響（2025年9月5日追加）**
+
+本日修正されたURL構築バグは、本番テスト用APIでも影響がある重要な修正です：
+
+**修正内容**: `services/main_service.py:145` の guidance_url 構築
+- **修正前**: `/gdc//` (二重スラッシュエラー)
+- **修正後**: `/gdc/` (正しいパス)
+
+**影響範囲**:
+- `/api/production-soil-rainfall-index` - 本番テスト用API
+- `/api/soil-rainfall-index` - メインAPI  
+- `main_process_from_urls()` - URL ベースの全処理
+
+**検証推奨**: 修正後は実際の気象庁サーバーからのデータ取得成功率が向上するはずです。
+
 ## 🔄 **2025年8月29日 アーキテクチャリファクタリング完了**
 
 ### ✅ **STEP 4A-4B: API層の完全分離アーキテクチャ実装**
@@ -1113,7 +1157,28 @@ server/
 
 ---
 
-**最終更新**: 2025年8月29日  
-**バージョン**: 5.0.0（Blueprint-based + Proxy対応完了版）  
+**最終更新**: 2025年9月5日  
+**バージョン**: 5.0.1（URL構築バグ修正版）  
 **アーキテクチャ**: プロダクション対応完了
 **プロジェクト**: 土壌雨量指数計算システム（企業級アーキテクチャ実装完了版）
+
+## 🔄 **2025年9月5日 緊急バグ修正**
+
+### ✅ **URL構築の重要なバグ修正完了**
+
+**発見された問題**: 
+- `services/main_service.py` の145行目で guidance_url 構築時に二重スラッシュ（`/gdc//`）が発生
+- 本番環境での気象庁サーバーアクセスでHTTP 404エラーの原因となる可能性
+
+**修正内容**:
+- guidance_url パターンの正規化 (`/gdc//` → `/gdc/`)
+- URL構築ロジックの整合性向上
+- エラーハンドリングの安定性向上
+
+**影響範囲**:
+- メインAPI処理 (`/api/soil-rainfall-index`)
+- 本番テスト用API (`/api/production-soil-rainfall-index`)
+- URL ベース処理全般 (`main_process_from_urls`)
+
+**技術的重要性**: 
+このバグ修正により、本番環境でのGRIB2データ取得成功率が大幅に改善される予定。特に本番テスト用API (`/api/production-soil-rainfall-index`) での動作が正常化されます。
