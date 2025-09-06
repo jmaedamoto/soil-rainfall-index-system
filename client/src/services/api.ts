@@ -41,7 +41,7 @@ export class SoilRainfallAPIClient {
       const data = response.data;
       
       // サーバーレスポンス形式に合わせて変換
-      if (data.status === 'healthy') {
+      if (data.status === 'success') {
         return { status: 'ok' };
       } else {
         return { status: 'error', message: data.message || 'サーバーエラー' };
