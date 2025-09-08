@@ -40,7 +40,16 @@ export interface CalculationResult {
   swi_initial_time?: string;    // SWI初期時刻（ISO8601）
   guid_initial_time?: string;   // ガイダンス初期時刻（ISO8601）
   prefectures: Record<string, Prefecture>;  // 都道府県データ
-  used_urls?: string[];         // 本番API使用時のGRIB2 URL（デバッグ用）
+  used_urls?: {                 // 本番API使用時のGRIB2 URL（デバッグ用）
+    swi_url: string;
+    guidance_url: string;
+  };
+  statistics?: {                // テストAPI使用時の統計情報
+    total_meshes: number;
+    processed_meshes: number;
+    success_rate: string;
+  };
+  note?: string;                // テストAPI使用時の説明
 }
 
 export interface CalculationParams {
@@ -50,8 +59,10 @@ export interface CalculationParams {
 }
 
 export interface HealthStatus {
-  status: 'ok' | 'error';
+  status: 'success' | 'error';
   message?: string;
+  architecture?: string;
+  version?: string;
 }
 
 // リスクレベルの定義

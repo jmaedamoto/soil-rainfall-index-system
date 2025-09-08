@@ -179,7 +179,7 @@ const SoilRainfallDashboard: React.FC = () => {
       const healthStatus = await apiClient_.getHealthStatus();
       console.log('ヘルスチェック結果:', healthStatus);
       
-      if (healthStatus.status !== 'ok') {
+      if (healthStatus.status !== 'success') {
         throw new Error(`APIサーバーエラー: ${healthStatus.message}`);
       }
       
@@ -595,11 +595,12 @@ const SoilRainfallDashboard: React.FC = () => {
           {data.used_urls && (
             <div style={{ marginTop: '10px', fontSize: '12px', color: '#666' }}>
               <p><strong>使用URLs:</strong></p>
-              {data.used_urls.map((url: string, index: number) => (
-                <div key={index} style={{ wordBreak: 'break-all', marginLeft: '10px' }}>
-                  • {url}
-                </div>
-              ))}
+              <div style={{ wordBreak: 'break-all', marginLeft: '10px' }}>
+                • <strong>SWI URL:</strong> {data.used_urls.swi_url}
+              </div>
+              <div style={{ wordBreak: 'break-all', marginLeft: '10px' }}>
+                • <strong>Guidance URL:</strong> {data.used_urls.guidance_url}
+              </div>
             </div>
           )}
         </div>

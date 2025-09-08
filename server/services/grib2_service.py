@@ -52,6 +52,15 @@ class Grib2Service:
         retry_count = grib2_config['retry_count']
         retry_delay = grib2_config['retry_delay']
         
+        # プロキシ設定を取得
+        proxy_config = self.config.get_proxy_config()
+        proxies = None
+        if proxy_config.get('http'):
+            proxies = {
+                'http': proxy_config.get('http'),
+                'https': proxy_config.get('https') or proxy_config.get('http')
+            }
+        
         for attempt in range(retry_count):
             try:
                 if attempt > 0:
@@ -61,10 +70,10 @@ class Grib2Service:
                 else:
                     logger.info(f"ダウンロード開始: {url}")
                 
-                if self.session.proxies:
-                    logger.debug(f"Proxy経由でアクセス: {self.session.proxies}")
+                if proxies:
+                    logger.debug(f"Proxy経由でアクセス: {proxies}")
                 
-                response = self.session.get(url, stream=True, timeout=timeout)
+                response = self.session.get(url, stream=True, timeout=timeout, proxies=proxies)
                 response.raise_for_status()
                 
                 content_length = len(response.content)

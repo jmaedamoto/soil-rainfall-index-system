@@ -40,12 +40,13 @@ export class SoilRainfallAPIClient {
       const response = await apiClient.get('/health');
       const data = response.data;
       
-      // サーバーレスポンス形式に合わせて変換
-      if (data.status === 'success') {
-        return { status: 'ok' };
-      } else {
-        return { status: 'error', message: data.message || 'サーバーエラー' };
-      }
+      // サーバーレスポンスをそのまま返す
+      return {
+        status: data.status,
+        message: data.message,
+        architecture: data.architecture,
+        version: data.version
+      };
     } catch (error) {
       return { status: 'error', message: 'APIサーバーに接続できません' };
     }
