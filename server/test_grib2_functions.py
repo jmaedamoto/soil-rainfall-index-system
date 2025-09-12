@@ -32,7 +32,7 @@ def test_unpack_swi_grib2():
     print("=== unpack_swi_grib2 テスト開始 ===")
     
     # SWI GRIB2ファイルのパス
-    swi_file = "data/Z__C_RJTD_20250101000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin"
+    swi_file = "data/Z__C_RJTD_20230602000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin"
     
     if not os.path.exists(swi_file):
         print(f"エラー: SWIファイルが見つかりません: {swi_file}")
@@ -91,7 +91,7 @@ def test_unpack_guidance_grib2():
     print("\n=== unpack_guidance_grib2 テスト開始 ===")
     
     # ガイダンス GRIB2ファイルのパス
-    guidance_file = "data/guid_msm_grib2_20250101000000_rmax00.bin"
+    guidance_file = "data/guid_msm_grib2_20230602000000_rmax00.bin"
     
     if not os.path.exists(guidance_file):
         print(f"エラー: ガイダンスファイルが見つかりません: {guidance_file}")

@@ -43,8 +43,8 @@ class PerformanceController:
             # === 1. ファイル操作の計測 ===
             file_start = time.time()
             
-            swi_bin_path = os.path.join(self.data_dir, "Z__C_RJTD_20250101000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin")
-            guidance_bin_path = os.path.join(self.data_dir, "guid_msm_grib2_20250101000000_rmax00.bin")
+            swi_bin_path = os.path.join(self.data_dir, "Z__C_RJTD_20230602000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin")
+            guidance_bin_path = os.path.join(self.data_dir, "guid_msm_grib2_20230602000000_rmax00.bin")
             
             if not os.path.exists(swi_bin_path) or not os.path.exists(guidance_bin_path):
                 return jsonify({
@@ -300,8 +300,8 @@ class PerformanceController:
             
             if prefectures and prefectures[0].areas and prefectures[0].areas[0].meshes:
                 # binファイルが存在する場合のみ計算テスト
-                swi_bin_path = os.path.join(self.data_dir, "Z__C_RJTD_20250101000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin")
-                guidance_bin_path = os.path.join(self.data_dir, "guid_msm_grib2_20250101000000_rmax00.bin")
+                swi_bin_path = os.path.join(self.data_dir, "Z__C_RJTD_20230602000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin")
+                guidance_bin_path = os.path.join(self.data_dir, "guid_msm_grib2_20230602000000_rmax00.bin")
                 
                 if os.path.exists(swi_bin_path) and os.path.exists(guidance_bin_path):
                     base_info, swi_grib2 = self.main_service.grib2_service.unpack_swi_grib2_from_file(swi_bin_path)

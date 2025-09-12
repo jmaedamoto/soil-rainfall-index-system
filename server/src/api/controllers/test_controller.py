@@ -30,8 +30,8 @@ class TestController:
     def test_bin_data(self):
         """binファイルデータテスト"""
         try:
-            swi_bin_path = os.path.join(self.data_dir, "Z__C_RJTD_20250101000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin")
-            guidance_bin_path = os.path.join(self.data_dir, "guid_msm_grib2_20250101000000_rmax00.bin")
+            swi_bin_path = os.path.join(self.data_dir, "Z__C_RJTD_20230602000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin")
+            guidance_bin_path = os.path.join(self.data_dir, "guid_msm_grib2_20230602000000_rmax00.bin")
             
             result = {
                 "swi_file": {
@@ -58,8 +58,8 @@ class TestController:
     def test_grib2_analysis(self):
         """GRIB2解析テスト"""
         try:
-            swi_bin_path = os.path.join(self.data_dir, "Z__C_RJTD_20250101000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin")
-            guidance_bin_path = os.path.join(self.data_dir, "guid_msm_grib2_20250101000000_rmax00.bin")
+            swi_bin_path = os.path.join(self.data_dir, "Z__C_RJTD_20230602000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin")
+            guidance_bin_path = os.path.join(self.data_dir, "guid_msm_grib2_20230602000000_rmax00.bin")
             
             if not os.path.exists(swi_bin_path) or not os.path.exists(guidance_bin_path):
                 return jsonify({
@@ -193,8 +193,8 @@ class TestController:
         
         try:
             # binファイルのパス
-            swi_bin_path = os.path.join(self.data_dir, "Z__C_RJTD_20250101000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin")
-            guidance_bin_path = os.path.join(self.data_dir, "guid_msm_grib2_20250101000000_rmax00.bin")
+            swi_bin_path = os.path.join(self.data_dir, "Z__C_RJTD_20230602000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin")
+            guidance_bin_path = os.path.join(self.data_dir, "guid_msm_grib2_20230602000000_rmax00.bin")
             
             # ファイル存在確認（ベースラインと同じエラー形式）
             if not os.path.exists(swi_bin_path):
