@@ -35,6 +35,13 @@ logs/
 htmlcov/
 .DS_Store
 Thumbs.db
+# Node.js
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
 # Large test response files
 server/baseline_test_full_response.json
 server/step1_test_response.json
