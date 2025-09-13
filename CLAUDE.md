@@ -667,147 +667,17 @@ curl -X POST http://localhost:5000/api/soil-rainfall-index \
 - 外部データソースアクセスのため適切なファイアウォール設定
 - 入力値検証の実装推奨
 
-## 開発履歴・技術的な修正
+## 技術的成果
 
-### URL構築バグの修正（2025年9月5日）
+### パフォーマンス最適化
+- CSV処理を62.7倍高速化（pandas vectorized operations採用）
+- 26,051メッシュを5秒以下で処理
+- メモリキャッシュによる高速レスポンス
 
-**問題**: `main_service.py` の URL 構築処理で guidance_url に二重スラッシュが含まれる不具合
-
-**修正内容**:
-```python
-# 修正前（145行目）
-guidance_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc//{initial_time.strftime('%Y/%m/%d')}/guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax00.bin"
-
-# 修正後
-guidance_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc/{initial_time.strftime('%Y/%m/%d')}/guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax00.bin"
-```
-
-**影響**: 
-- `/gdc//` → `/gdc/` 正しい URL パスに修正
-- GRIB2 降水量予測データのダウンロード成功率向上
-- main_process_from_urls() 処理の安定性向上
-
-### JSON Serialization エラーの修正（2025-07-25）
-
-**問題**: `/api/test-full-soil-rainfall-index` エンドポイントで `Object of type int64 is not JSON serializable` エラーが発生
-
-**原因**: pandas CSV読み込み時に生成される numpy int64/float64 型が Flask の jsonify() でシリアライズできない
-
-**修正内容**:
-```python
-# 修正前
-mesh_result = {
-    "lat": mesh.lat,                    # numpy float64
-    "advisary_bound": mesh.advisary_bound,  # numpy int64
-    "swi_timeline": [{"ft": s.ft, "value": s.value}]  # numpy型
-}
-
-# 修正後
-mesh_result = {
-    "lat": float(mesh.lat),             # Python float
-    "advisary_bound": int(mesh.advisary_bound),  # Python int
-    "swi_timeline": [{"ft": int(s.ft), "value": float(s.value)}]  # Python型
-}
-```
-
-**影響範囲**:
-- `get_dosyakei_bound()`: 境界値を int() で変換
-- 全 `mesh_result` 辞書: lat, lon, boundary値を明示的型変換
-- `risk_timeline`: ft, value を int() で変換
-
-**検証結果**: 26,051メッシュの全データが正常にJSON出力され、HTTP 200でレスポンス成功
-
-### 大規模性能最適化の実装（2025-07-25）
-
-#### **1. CSV処理の劇的高速化**
-
-**問題**: CSV処理が全体の90.4%を占める最大のボトルネック（26.2秒）
-
-**最適化内容**:
-- **pandas vectorized operations**: `iterrows()` を pandas ベクトル演算に置換
-- **dosyakei data indexing**: O(1) lookup のための事前インデックス作成
-- **batch coordinate calculations**: 座標変換の一括処理
-- **5-minute memory caching**: TTL付きインメモリキャッシュ
-
-**最適化結果**:
-```
-# 最適化前
-CSV処理時間: 26.23秒 (993 meshes/second)
-
-# 最適化後  
-CSV処理時間: 0.42秒 (62,230 meshes/second)
-キャッシュ適用: 0.0秒 (即時レスポンス)
-
-改善率: 62.7倍高速化 / 98.4%時間短縮
-```
-
-#### **2. 並列処理フレームワークの実装**
-
-**実装内容**:
-- `calc_mesh_timelines()`: 個別メッシュ処理の関数化
-- `process_meshes_parallel()`: ThreadPoolExecutor による並列処理
-- `process_meshes_batch()`: 大規模データセット向けバッチ処理
-- `/api/test-optimization-analysis`: 最適処理手法の自動選択
-
-**性能分析結果**:
-```
-# Sequential Processing (最適化済み)
-処理時間: 0.78秒
-処理速度: 33,336 meshes/second
-推奨: CPU集約的計算に最適
-
-# Parallel Processing (2 workers)
-処理時間: 4.04秒 (予想)
-スループット向上: 1.33倍
-効率: 66.3% (ThreadingOverhead考慮)
-```
-
-#### **3. 総合性能改善結果**
-
-**API全体の処理時間分析** (`/api/test-full-soil-rainfall-index`):
-```
-総処理時間: 4.85秒 (26,051メッシュ処理)
-
-内訳:
-- GRIB2解析: 2.62秒 (54.0%)
-- メッシュ処理: 2.23秒 (46.0%) 
-- CSV処理: 0.42秒 → 0.0秒 (キャッシュ適用)
-- JSON作成: 0.0秒 (最適化済み)
-
-処理速度: 11,665 meshes/second
-成功率: 100%
-```
-
-**詳細メッシュ処理性能**:
-```
-平均処理時間: 0.086ms/mesh
-- SWI計算: 0.52ms/mesh
-- Rain計算: 0.01ms/mesh  
-- Risk計算: 0.88ms/mesh (最高負荷)
-- Dict作成: 0.03ms/mesh
-```
-
-#### **4. 新規パフォーマンス分析API**
-
-追加された性能監視エンドポイント:
-- `/api/test-performance-analysis`: 詳細な処理時間分析
-- `/api/test-performance-summary`: 軽量ボトルネック分析
-- `/api/test-csv-optimization`: CSV最適化効果の比較
-- `/api/test-parallel-processing`: 並列処理性能の評価
-- `/api/test-optimization-analysis`: 最適手法の自動推奨
-
-#### **5. 技術的改善の要点**
-
-**コード品質向上**:
-- numpy → Python native型の明示的変換でJSON serialization問題を完全解決
-- pandas vectorized operations でイテレーション処理を63倍高速化
-- メモリキャッシュによる重複計算の排除
-- 並列処理のオーバーヘッド特性を分析し適切な処理方式を選択
-
-**実用性の向上**:
-- 26,051メッシュを5秒以下で処理する実用的レスポンス時間を実現
-- 大規模データセットでの安定動作を確認
-- 詳細な性能監視により継続的最適化が可能
+### VBA完全互換性達成
+- 100%の数値一致を検証済み
+- 3段タンクモデルの完全再現
+- GRIB2解析の忠実な実装
 
 ## 今後の拡張予定
 
@@ -995,7 +865,7 @@ unpack_guidance_grib2テスト 成功
 
 **作成日**: 2025年7月23日
 **最終更新**: 2025年9月14日
-**バージョン**: 5.1.0（VBA完全互換性検証完了版）
+**バージョン**: 6.0.0（プロダクション対応完了版）
 **作成者**: Claude (Anthropic)
 **プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・プロダクション対応完了版）
 
@@ -1223,144 +1093,19 @@ VBA Module.basから出力されたCSV参照データ（Shift_JIS）との完全
 ---
 
 **最終更新**: 2025年9月14日
-**バージョン**: 5.1.0（VBA完全互換性検証完了版）
+**バージョン**: 6.0.0（プロダクション対応完了版）
 **作成者**: Claude (Anthropic)
 **プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・プロダクション対応完了版）
 
-## 📈 **プロジェクト開発履歴**
+## 実装完了状況
 
-## 🔄 **2025年9月5日 緊急バグ修正**
+### ✅ VBA完全互換性検証達成
+- 26,045メッシュのSWI計算で100%一致
+- 26,039メッシュのRain計算で100%一致
+- Module.basとの数値レベル完全対応
 
-### ✅ **URL構築の重要なバグ修正完了**
-
-**発見された問題**: 
-- `services/main_service.py` の145行目で guidance_url 構築時に二重スラッシュ（`/gdc//`）が発生
-- 本番環境での気象庁サーバーアクセスでHTTP 404エラーの原因となる可能性
-
-**修正内容**:
-- guidance_url パターンの正規化 (`/gdc//` → `/gdc/`)
-- URL構築ロジックの整合性向上
-- エラーハンドリングの安定性向上
-
-**影響範囲**:
-- メインAPI処理 (`/api/soil-rainfall-index`)
-- 本番テスト用API (`/api/production-soil-rainfall-index`)
-- URL ベース処理全般 (`main_process_from_urls`)
-
-**技術的重要性**: 
-このバグ修正により、本番環境でのGRIB2データ取得成功率が大幅に改善される予定。特に本番テスト用API (`/api/production-soil-rainfall-index`) での動作が正常化されます。
-
-## 🔄 **2025年9月8日 プロキシ設定・型整合性修正**
-
-### ✅ **プロキシ設定の修正完了**
-
-**発見された問題**: 
-- `services/grib2_service.py` で `session.proxies.update()` による設定が環境変数で上書きされる問題
-- `requests.get()` の際にプロキシ設定が正しく適用されない
-
-**修正内容**:
-- `download_file()` メソッドで `requests.get(url, proxies=proxies)` の形で明示的にプロキシ指定
-- 環境変数による上書きを回避し、設定ファイルのプロキシ設定を確実に使用
-
-**影響範囲**:
-- 本番環境でのGRIB2データダウンロード処理
-- 企業プロキシ経由でのデータアクセス
-
-### ✅ **クライアント・サーバー型整合性修正完了**
-
-**発見された問題**: 
-- `used_urls` フィールドでサーバーはオブジェクト、クライアントは配列として型定義
-- ヘルスチェックで `status: 'success'` vs `status: 'ok'` の不一致
-- テストAPI独自フィールドの型定義不足
-
-**修正内容**:
-1. **`used_urls` 型修正**:
-   - `string[]` → `{swi_url: string, guidance_url: string}` に修正
-   - 表示ロジックをオブジェクトプロパティアクセスに変更
-
-2. **ヘルスチェック型修正**:
-   - `status: 'ok'` → `status: 'success'` に統一
-   - `architecture`, `version` フィールドを型定義に追加
-
-3. **テストAPI型追加**:
-   - `statistics` フィールド（統計情報）を型定義に追加
-   - `note` フィールド（説明）を型定義に追加
-
-**影響範囲**:
-- ヘルスチェック通信の正常化
-- 本番データ使用時のURL表示機能
-- TypeScriptコンパイル時の型安全性向上
-
-**技術的重要性**: 
-これらの修正により、サーバーとクライアント間の通信が完全に整合し、プロキシ環境での本番運用が可能になります。
-
-## 🆕 **2025年9月5日 フロントエンド日時指定機能追加**
-
-### ✅ **新機能実装完了**
-
-#### **日時指定データ取得機能**
-ダッシュボードに本番データ取得機能を追加しました。既存のテストデータ機能は維持したまま、新たに気象庁GRIB2サーバーからリアルタイムデータを取得する機能を実装。
-
-**主要機能:**
-- **データソース選択**: テストデータ vs 本番データのラジオボタン選択
-- **日時指定**: 本番データ用のシンプルな日時ピッカー
-- **自動時刻調整**: 気象庁の6時間間隔データに対応
-- **URL表示**: デバッグ用の使用GRIB2 URL表示機能
-
-#### **実装詳細**
-
-**1. APIクライアント機能追加** (`client/src/services/api.ts`):
-```typescript
-// 本番用土壌雨量指数計算（時刻指定対応）
-async calculateProductionSoilRainfallIndex(params?: { initial?: string }): Promise<CalculationResult> {
-  const queryParams = params?.initial ? `?initial=${encodeURIComponent(params.initial)}` : '';
-  const response = await apiClient.get<CalculationResult>(`/production-soil-rainfall-index${queryParams}`);
-  return response.data;
-}
-```
-
-**2. UI改善** (`client/src/pages/SoilRainfallDashboard.tsx`):
-- データソース選択UI（テスト/本番）
-- 本番データ用日時ピッカー（6時間間隔の説明付き）
-- データ情報表示の強化（使用URL表示）
-- 再読み込みボタンの追加
-
-**3. 型定義更新** (`client/src/types/api.ts`):
-```typescript
-export interface CalculationResult {
-  // 既存フィールド...
-  used_urls?: string[];  // 本番API使用時のGRIB2 URL（デバッグ用）
-}
-```
-
-#### **使用方法**
-
-**テストデータモード（既存機能維持）:**
-- 高速なローカルテストデータ
-- SWIとガイダンスの個別時刻設定可能
-- 開発・デモ用途に最適
-
-**本番データモード（新機能）:**
-- 気象庁GRIB2サーバーからリアルタイムデータ取得
-- シンプルな日時指定（6時間間隔自動調整）
-- 使用したGRIB2 URLの表示でデバッグ支援
-- `/api/production-soil-rainfall-index` エンドポイント使用
-
-#### **UI操作手順**
-1. ダッシュボードでデータソースを選択（テスト/本番）
-2. 時刻を設定（本番の場合は日時ピッカー）
-3. 「データを読み込む」ボタンクリック
-4. データ表示後、「データ再読み込み」で設定変更可能
-
-#### **技術的特徴**
-- **後方互換性**: 既存テストデータ機能を完全保持
-- **エラーハンドリング**: 本番データ取得失敗時の適切な処理
-- **デバッグ支援**: 使用GRIB2 URLの表示機能
-- **レスポンシブUI**: データソースに応じた動的UI切り替え
-- **6時間間隔対応**: 気象庁データ提供間隔への自動調整
-
-#### **開発生産性向上**
-- テストデータでの高速開発継続可能
-- 本番データでの実動作確認が容易
-- 一つのUIで両方のデータソース利用可能
-- デバッグ情報の充実によるトラブルシュート効率化
+### ✅ フルスタックWebアプリケーション完成
+- Flask Blueprint-based サーバーアーキテクチャ
+- React 18 + TypeScript クライアント
+- 15個のAPI エンドポイント稼働
+- 本番・テストデータ両対応
