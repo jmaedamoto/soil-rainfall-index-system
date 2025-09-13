@@ -297,7 +297,7 @@ class TestController:
                     
                     # エリアのリスクタイムラインを計算（サービス層使用）
                     try:
-                        area.risk_timeline = self.main_service.calculation_service.calc_risk_timeline(area)
+                        area.risk_timeline = self.main_service.calculation_service.calc_risk_timeline(area.meshes)
                         area_result["risk_timeline"] = [
                             {"ft": int(r.ft), "value": int(r.value)}
                             for r in area.risk_timeline

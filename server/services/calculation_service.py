@@ -228,21 +228,45 @@ class CalculationService:
         リスクレベル計算
         """
         try:
-            if not meshes or not meshes[0].swi:
+            # 詳細デバッグログ
+            logger.info(f"=== calc_risk_timeline called with {len(meshes) if isinstance(meshes, list) else 'invalid'} meshes ===")
+
+            # 入力データ型の確認
+            if not isinstance(meshes, list):
+                logger.error(f"Risk calculation error: meshes is not a list, got {type(meshes)}")
                 return []
-            
+
+            if not meshes:
+                logger.error("Risk calculation error: meshes list is empty")
+                return []
+
+            # 最初のメッシュのSWIデータ確認
+            first_mesh = meshes[0]
+            logger.info(f"First mesh: code={getattr(first_mesh, 'code', 'no code')}, has swi attr: {hasattr(first_mesh, 'swi')}")
+
+            if not hasattr(first_mesh, 'swi') or not first_mesh.swi:
+                logger.error(f"Risk calculation error: first mesh has no swi data. Has swi attr: {hasattr(first_mesh, 'swi')}, swi length: {len(first_mesh.swi) if hasattr(first_mesh, 'swi') and first_mesh.swi else 0}")
+                return []
+
             # 時系列の長さを取得
-            timeline_length = len(meshes[0].swi)
+            timeline_length = len(first_mesh.swi)
+            logger.info(f"Timeline length: {timeline_length}")
+            logger.info(f"First mesh boundaries: advisory={getattr(first_mesh, 'advisary_bound', 'N/A')}, warning={getattr(first_mesh, 'warning_bound', 'N/A')}, dosyakei={getattr(first_mesh, 'dosyakei_bound', 'N/A')}")
+            logger.info(f"First 3 SWI values: {[first_mesh.swi[i].value for i in range(min(3, timeline_length))]}")
+
             risk_timeline = []
-            
+
             for t in range(timeline_length):
-                ft = meshes[0].swi[t].ft
+                ft = first_mesh.swi[t].ft
                 max_risk = 0
-                
+
                 for mesh in meshes:
+                    if not hasattr(mesh, 'swi') or not mesh.swi:
+                        continue
+
                     if t < len(mesh.swi):
                         swi_value = mesh.swi[t].value
-                        
+
                         # VBAリスクレベル判定
                         if swi_value >= mesh.dosyakei_bound:
                             risk = 3  # 土砂災害
@@ -252,15 +276,24 @@ class CalculationService:
                             risk = 1  # 注意
                         else:
                             risk = 0  # 正常
-                        
+
                         max_risk = max(max_risk, risk)
-                
+
                 risk_timeline.append(Risk(ft=ft, value=max_risk))
-            
+
+            logger.info(f"Risk timeline calculated: {len(risk_timeline)} entries")
+            if risk_timeline:
+                logger.info(f"First 3 risk values: {[(r.ft, r.value) for r in risk_timeline[:3]]}")
+
             return risk_timeline
-            
+
         except Exception as e:
             logger.error(f"Risk calculation error: {e}")
+            logger.error(f"meshes type: {type(meshes)}")
+            if isinstance(meshes, list) and meshes:
+                logger.error(f"first mesh type: {type(meshes[0])}")
+            import traceback
+            logger.error(f"Risk calculation traceback: {traceback.format_exc()}")
             return []
 
     def process_mesh_calculations(self, mesh: Mesh, swi_grib2: Dict[str, Any], guidance_grib2: Dict[str, Any]) -> Mesh:
