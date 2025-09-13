@@ -87,8 +87,8 @@ class DataService:
             logger.error(f"土砂災害境界値取得エラー: {meshcode} - {e}")
             return 999
     
-    def load_csv_data(self, prefecture_code: str) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
-        """CSVデータ読み込み"""
+    def load_csv_data(self, prefecture_code: str) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+        """CSVデータ読み込み（dosha, dosyakei, VBA SWI data）"""
         dosha_file = os.path.join(self.data_dir, f"dosha_{prefecture_code}.csv")
         dosha_data = None
         if os.path.exists(dosha_file):
@@ -107,7 +107,17 @@ class DataService:
             except Exception as e:
                 logger.error(f"Error loading {dosyakei_file}: {e}")
 
-        return dosha_data, dosyakei_data
+        # VBA SWI CSVファイル読み込み（VBA X,Y座標のため）
+        vba_swi_file = os.path.join(self.data_dir, f"{prefecture_code}_swi.csv")
+        vba_swi_data = None
+        if os.path.exists(vba_swi_file):
+            try:
+                vba_swi_data = pd.read_csv(vba_swi_file, encoding='shift_jis', skiprows=1)
+                logger.info(f"Loaded {vba_swi_file}: {len(vba_swi_data)} rows")
+            except Exception as e:
+                logger.error(f"Error loading {vba_swi_file}: {e}")
+
+        return dosha_data, dosyakei_data, vba_swi_data
     
     def prepare_areas(self) -> List[Prefecture]:
         """地域データ構築（最適化版）"""
@@ -126,13 +136,16 @@ class DataService:
         csv_loading_start = time.time()
         all_dosha_data = {}
         all_dosyakei_data = {}
-        
+        all_vba_swi_data = {}
+
         for pref_code in PREFECTURES_MASTER.keys():
-            dosha_data, dosyakei_data = self.load_csv_data(pref_code)
+            dosha_data, dosyakei_data, vba_swi_data = self.load_csv_data(pref_code)
             if dosha_data is not None:
                 all_dosha_data[pref_code] = dosha_data
             if dosyakei_data is not None:
                 all_dosyakei_data[pref_code] = dosyakei_data
+            if vba_swi_data is not None:
+                all_vba_swi_data[pref_code] = vba_swi_data
         
         csv_loading_time = time.time() - csv_loading_start
         logger.info(f"CSV読み込み時間: {csv_loading_time:.2f}秒")
@@ -148,6 +161,7 @@ class DataService:
             
             dosha_data = all_dosha_data[pref_code]
             dosyakei_data = all_dosyakei_data.get(pref_code)
+            vba_swi_data = all_vba_swi_data.get(pref_code)
             
             # pandas vectorized operations を使用
             mesh_codes = dosha_data.iloc[:, 2].astype(str).values
@@ -167,6 +181,27 @@ class DataService:
                 else:
                     bound = 999
                 dosyakei_bounds.append(bound)
+
+            # VBA X,Y座標のルックアップテーブル作成
+            vba_coordinates_lookup = {}
+            if vba_swi_data is not None:
+                for idx, row in vba_swi_data.iterrows():
+                    try:
+                        area_name = str(row.iloc[0]).strip()
+                        vba_x = int(row.iloc[1])
+                        vba_y = int(row.iloc[2])
+                        advisary = int(row.iloc[3]) if str(row.iloc[3]).strip() != '' else 9999
+                        warning = int(row.iloc[4]) if str(row.iloc[4]).strip() != '' else 9999
+                        dosyakei = int(row.iloc[5]) if str(row.iloc[5]).strip() != '' else 9999
+
+                        # 一意なキーを作成（エリア名 + 境界値の組み合わせ）
+                        key = f"{area_name}_{advisary}_{warning}_{dosyakei}"
+                        vba_coordinates_lookup[key] = {
+                            'vba_x': vba_x,
+                            'vba_y': vba_y
+                        }
+                    except (ValueError, IndexError):
+                        continue
             
             # メッシュオブジェクト一括作成
             meshes = []
@@ -176,7 +211,16 @@ class DataService:
                 try:
                     lat, lon = coords[i]
                     x, y = indices[i]
-                    
+
+                    # VBA X,Y座標をルックアップ
+                    vba_x = None
+                    vba_y = None
+                    lookup_key = f"{area_names[i]}_{int(advisary_bounds[i])}_{int(warning_bounds[i])}_{dosyakei_bounds[i]}"
+                    if lookup_key in vba_coordinates_lookup:
+                        vba_coords = vba_coordinates_lookup[lookup_key]
+                        vba_x = vba_coords['vba_x']
+                        vba_y = vba_coords['vba_y']
+
                     mesh = Mesh(
                         area_name=area_names[i],
                         code=mesh_codes[i],
@@ -188,7 +232,9 @@ class DataService:
                         warning_bound=int(warning_bounds[i]),
                         dosyakei_bound=dosyakei_bounds[i],
                         swi=[],
-                        rain=[]
+                        rain=[],
+                        vba_x=vba_x,
+                        vba_y=vba_y
                     )
                     
                     meshes.append(mesh)

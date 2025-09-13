@@ -1,8 +1,11 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-土壌雨量指数計算サービス
+VBA Module.basの完全再現によるCalculationService
+既存のcalculation_service.pyを完全に置き換え
 """
-from typing import List, Dict, Any
+
+from typing import List, Dict, Any, Tuple
 import logging
 from datetime import datetime, timedelta
 
@@ -11,217 +14,287 @@ from models import (
     Mesh, Area, Prefecture
 )
 
-
 logger = logging.getLogger(__name__)
 
-
 class CalculationService:
-    """土壌雨量指数計算サービス"""
+    """VBA Module.basの完全再現によるCalculationService"""
     
-    # 3段タンクモデルパラメータ (VBAと同じ値)
-    L1, L2, L3, L4 = 15.0, 60.0, 15.0, 15.0
-    A1, A2, A3, A4 = 0.1, 0.15, 0.05, 0.01
-    B1, B2, B3 = 0.12, 0.05, 0.01
-    
-    def calc_tunk_model(self, s1: float, s2: float, s3: float, r: float, dt: float = 1.0) -> tuple:
-        """3段タンクモデル計算（VBAと同じアルゴリズム）"""
+    # VBA タンクモデルパラメータ (完全同一)
+    l1, l2, l3, l4 = 15.0, 60.0, 15.0, 15.0
+    a1, a2, a3, a4 = 0.1, 0.15, 0.05, 0.01
+    b1, b2, b3 = 0.12, 0.05, 0.01
+
+    def get_data_num(self, lat: float, lon: float, base_info: Any) -> int:
+        """
+        VBA Function get_data_num の完全再現
+        VBA 1-based戻り値をそのまま返す（Python配列アクセス時に-1）
+        """
+        # VBA: y = Int((base_info.s_lat / 1000000 - lat) / (base_info.d_lat / 1000000)) + 1
+        y = int((base_info.s_lat / 1000000 - lat) / (base_info.d_lat / 1000000)) + 1
+
+        # VBA: x = Int((lon - base_info.s_lon / 1000000) / (base_info.d_lon / 1000000)) + 1
+        x = int((lon - base_info.s_lon / 1000000) / (base_info.d_lon / 1000000)) + 1
+
+        # VBA: get_data_num = (y - 1) * base_info.x_num + x
+        return (y - 1) * base_info.x_num + x
+
+    def get_data_num_from_vba_coordinates(self, vba_x: int, vba_y: int, base_info: Any) -> int:
+        """
+        VBA座標の処理は通常の緯度経度変換経由で行う
+        VBA Module.basの実装と同じ方式に戻す
+        """
+        # VBA座標をメッシュコードに変換してから緯度経度を取得
+        # これはdataServiceでのmeshcode_to_coordinateと同等の処理
         try:
-            # 流出量計算
-            q1 = self.A1 * max(0, s1 - self.L1) + self.A2 * max(0, s1 - self.L2)
-            q2 = self.A3 * max(0, s2 - self.L3)
-            q3 = self.A4 * max(0, s3 - self.L4)
+            # VBA座標からメッシュコード様式の座標を復元
+            # 通常のget_data_num関数を使用するために緯度経度変換を行う
+            lat, lon = self.vba_coordinates_to_latlon(vba_x, vba_y)
+
+            # VBA: get_data_num(lat, lon, base_info)と同じ処理
+            return self.get_data_num(lat, lon, base_info)
+
+        except Exception as e:
+            logger.error(f"Error in get_data_num_from_vba_coordinates for ({vba_x}, {vba_y}): {e}")
+            return 1  # エラー時のデフォルト値
+
+    def vba_coordinates_to_latlon(self, vba_x: int, vba_y: int) -> tuple[float, float]:
+        """
+        VBA座標から緯度経度を計算
+        メッシュコード変換ロジックに基づく
+        """
+        try:
+            # VBA座標をメッシュコード形式として解釈
+            lat = (vba_y + 0.5) * 30 / 3600  # メッシュコード変換式
+            lon = (vba_x + 0.5) * 45 / 3600 + 100  # メッシュコード変換式
+            return lat, lon
+        except Exception:
+            return 35.0, 135.0  # デフォルト座標（関西地方中央）
+
+    def calc_tunk_model(self, s1: float, s2: float, s3: float, t: float, r: float) -> Tuple[float, float, float]:
+        """
+        VBA Sub calc_tunk_model の完全再現
+        """
+        # VBA: q1 = 0, q2 = 0, q3 = 0
+        q1 = q2 = q3 = 0.0
+        
+        # VBA: If s1 > l1 Then q1 = q1 + a1 * (s1 - l1)
+        if s1 > self.l1:
+            q1 = q1 + self.a1 * (s1 - self.l1)
             
-            # 貯留量更新
-            s1_new = (1 - self.B1 * dt) * s1 - q1 * dt + r
-            s2_new = (1 - self.B2 * dt) * s2 - q2 * dt + self.B1 * s1 * dt
-            s3_new = (1 - self.B3 * dt) * s3 - q3 * dt + self.B2 * s2 * dt
+        # VBA: If s1 > l2 Then q1 = q1 + a2 * (s1 - l2)
+        if s1 > self.l2:
+            q1 = q1 + self.a2 * (s1 - self.l2)
             
-            # 負の値を0にクリップ
-            s1_new = max(0, s1_new)
-            s2_new = max(0, s2_new)
-            s3_new = max(0, s3_new)
+        # VBA: If s2 > l3 Then q2 = a3 * (s2 - l3)
+        if s2 > self.l3:
+            q2 = self.a3 * (s2 - self.l3)
             
-            return s1_new, s2_new, s3_new
+        # VBA: If s3 > l4 Then q3 = a4 * (s3 - l4)
+        if s3 > self.l4:
+            q3 = self.a4 * (s3 - self.l4)
+        
+        # VBA: s1_new = (1 - b1 * t) * s1 - q1 * t + r
+        s1_new = (1 - self.b1 * t) * s1 - q1 * t + r
+        
+        # VBA: s2_new = (1 - b2 * t) * s2 - q2 * t + b1 * s1 * t
+        s2_new = (1 - self.b2 * t) * s2 - q2 * t + self.b1 * s1 * t
+
+        # VBA: s3_new = (1 - b3 * t) * s3 - q3 * t + b2 * s2 * t
+        s3_new = (1 - self.b3 * t) * s3 - q3 * t + self.b2 * s2 * t
+        
+        # VBA: If s1_new < 0 Then s1_new = 0
+        if s1_new < 0:
+            s1_new = 0
+            
+        # VBA: If s2_new < 0 Then s2_new = 0
+        if s2_new < 0:
+            s2_new = 0
+            
+        # VBA: If s3_new < 0 Then s3_new = 0
+        if s3_new < 0:
+            s3_new = 0
+        
+        return s1_new, s2_new, s3_new
+
+    def calc_rain_timelapse(self, mesh: Mesh, guidance_grib2: Dict[str, Any]) -> List[GuidanceTimeSeries]:
+        """
+        VBA Function calc_rain_timelapse の完全再現
+        """
+        try:
+            # VBA: guidance_index = get_data_num(m.lat, m.lon, guidance_grib2.base_info)
+            guidance_index = self.get_data_num(mesh.lat, mesh.lon, guidance_grib2['base_info'])
+
+            # VBA配列は1-based、Pythonは0-basedなので変換
+            python_index = guidance_index - 1
+            
+            # VBA: ReDim rain_timeseries(UBound(guidance_grib2.data))
+            rain_timeseries = []
+            
+            # VBA: For i = 1 To UBound(guidance_grib2.data)
+            for i in range(len(guidance_grib2['data'])):  # Python 0-based
+                guidance_item = guidance_grib2['data'][i]
+                
+                # VBA: rain_timeseries(i).ft = guidance_grib2.data(i).ft
+                # VBA: rain_timeseries(i).value = guidance_grib2.data(i).value(guidance_index)
+                if python_index < len(guidance_item['value']):
+                    value = guidance_item['value'][python_index]
+                    rain_timeseries.append(GuidanceTimeSeries(
+                        ft=guidance_item['ft'],
+                        value=value
+                    ))
+            
+            return rain_timeseries
             
         except Exception as e:
-            logger.error(f"タンクモデル計算エラー: {e}")
-            return 0.0, 0.0, 0.0
-    
-    def calc_swi_timelapse(
-        self, 
-        mesh: Mesh, 
-        swi_grib2: Dict[str, Any], 
-        guidance_grib2: Dict[str, Any]
-    ) -> List[SwiTimeSeries]:
-        """土壌雨量指数時系列計算（元の実装と同じ）"""
+            logger.error(f"Rain calculation error for mesh {mesh.code}: {e}")
+            return []
+
+    def calc_swi_timelapse(self, mesh: Mesh, swi_grib2: Dict[str, Any], guidance_grib2: Dict[str, Any]) -> List[SwiTimeSeries]:
+        """
+        VBA Function calc_swi_timelapse の完全再現
+        """
         try:
+            # VBA: swi_index = get_data_num(m.lat, m.lon, swi_grib2.base_info)
             swi_index = self.get_data_num(mesh.lat, mesh.lon, swi_grib2['base_info'])
+            guidance_index = self.get_data_num(mesh.lat, mesh.lon, guidance_grib2['base_info'])
+
+            # VBA配列は1-based、Pythonは0-basedなので変換
+            python_swi_index = swi_index - 1
             
-            if (swi_index >= len(swi_grib2['swi']) or
-                swi_index >= len(swi_grib2['first_tunk']) or
-                swi_index >= len(swi_grib2['second_tunk'])):
+            if (python_swi_index >= len(swi_grib2['swi']) or
+                python_swi_index >= len(swi_grib2['first_tunk']) or
+                python_swi_index >= len(swi_grib2['second_tunk'])):
                 return []
             
-            # 初期値取得
-            initial_swi = swi_grib2['swi'][swi_index]
-            first_tunk = swi_grib2['first_tunk'][swi_index]  
-            second_tunk = swi_grib2['second_tunk'][swi_index]
+            # VBA: swi = swi_grib2.swi(swi_index) / 10
+            swi = swi_grib2['swi'][python_swi_index] / 10
             
-            # NaNや無効値チェック
-            if (initial_swi != initial_swi or initial_swi >= 9999 or
-                first_tunk != first_tunk or first_tunk >= 9999 or
-                second_tunk != second_tunk or second_tunk >= 9999):
-                return []
+            # VBA: first_tunk = swi_grib2.first_tunk(swi_index) / 10
+            first_tunk = swi_grib2['first_tunk'][python_swi_index] / 10
             
-            # 初期タンク状態設定（VBAと同じロジック）
-            s1 = first_tunk
-            s2 = second_tunk
-            s3 = initial_swi - first_tunk - second_tunk
+            # VBA: second_tunk = swi_grib2.second_tunk(swi_index) / 10
+            second_tunk = swi_grib2['second_tunk'][python_swi_index] / 10
             
-            result = []
+            # VBA: third_tunk = swi - first_tunk - second_tunk
+            third_tunk = swi - first_tunk - second_tunk
             
-            # FT=0の初期値
-            result.append(SwiTimeSeries(ft=0, value=initial_swi))
+            # guidance_indexは上で既に計算済み
+            python_guidance_index = guidance_index - 1
             
-            # 予測値計算
-            for i, guidance_values in enumerate(guidance_grib2['data']):
-                if swi_index < len(guidance_values):
-                    rain = guidance_values[swi_index]
-                    
-                    # NaNや無効値チェック
-                    if rain != rain or rain >= 9999:  # NaN check
-                        rain = 0.0
-                    
-                    # タンクモデル計算
-                    s1, s2, s3 = self.calc_tunk_model(s1, s2, s3, rain, 1.0)
-                    swi_value = s1 + s2 + s3
-                    
-                    ft = (i + 1) * 3  # 3時間間隔
-                    result.append(SwiTimeSeries(ft=ft, value=swi_value))
+            # VBA: ReDim swi_time_siries(UBound(guidance_grib2.data) + 1)
+            swi_time_series = []
             
-            return result
+            # VBA: swi_time_siries(1).ft = 0
+            # VBA: swi_time_siries(1).value = swi
+            swi_time_series.append(SwiTimeSeries(ft=0, value=swi))
+            
+            # VBA: tmp_f = 0, tmp_s = 0, tmp_t = 0 (VBAでは初期化)
+            # しかし実際には初期タンク値が使用される
+            current_first_tunk = first_tunk
+            current_second_tunk = second_tunk
+            current_third_tunk = third_tunk
+
+            # VBA: For i = 1 To UBound(guidance_grib2.data)
+            for i in range(len(guidance_grib2['data'])):  # Python 0-based
+                guidance_item = guidance_grib2['data'][i]
+
+                if python_guidance_index < len(guidance_item['value']):
+                    # VBA: Call calc_tunk_model(first_tunk, second_tunk, third_tunk, 3, guidance_grib2.data(i).value(guidance_index), tmp_f, tmp_s, tmp_t)
+                    rain_value = guidance_item['value'][python_guidance_index]
+                    tmp_f, tmp_s, tmp_t = self.calc_tunk_model(current_first_tunk, current_second_tunk, current_third_tunk, 3, rain_value)
+
+                    # VBA: swi_time_siries(i + 1).ft = guidance_grib2.data(i).ft
+                    # VBA: swi_time_siries(i + 1).value = tmp_f + tmp_s + tmp_t
+                    swi_value = tmp_f + tmp_s + tmp_t
+                    swi_time_series.append(SwiTimeSeries(
+                        ft=guidance_item['ft'],
+                        value=swi_value
+                    ))
+
+                    # VBA: first_tunk = tmp_f, second_tunk = tmp_s, third_tunk = tmp_t
+                    current_first_tunk = tmp_f
+                    current_second_tunk = tmp_s
+                    current_third_tunk = tmp_t
+            
+            return swi_time_series
             
         except Exception as e:
-            logger.error(f"SWI時系列計算エラー: {e}")
+            logger.error(f"SWI calculation error for mesh {mesh.code}: {e}")
             return []
-    
-    def calc_rain_timelapse(
-        self, 
-        mesh: Mesh, 
-        guidance_grib2: Dict[str, Any]
-    ) -> List[GuidanceTimeSeries]:
-        """降水量時系列計算（元の実装と同じ）"""
+
+    def calc_risk_timeline(self, meshes: List[Mesh]) -> List[Risk]:
+        """
+        VBA Function calc_risk_timeline の完全再現
+        リスクレベル計算
+        """
         try:
-            rain_index = self.get_data_num(mesh.lat, mesh.lon, guidance_grib2['base_info'])
-            
-            result = []
-            
-            for i, guidance_values in enumerate(guidance_grib2['data']):
-                if rain_index < len(guidance_values):
-                    rain = guidance_values[rain_index]
-                    
-                    # NaNや無効値チェック
-                    if rain != rain or rain >= 9999:  # NaN check
-                        rain = 0.0
-                    
-                    ft = (i + 1) * 3  # 3時間間隔
-                    result.append(GuidanceTimeSeries(ft=ft, value=rain))
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"降水量時系列計算エラー: {e}")
-            return []
-    
-    def calc_risk_timeline(self, area: Area) -> List[Risk]:
-        """リスクレベル判定（VBAのcalc_risk_timelineロジック）"""
-        try:
-            if not area.meshes:
+            if not meshes or not meshes[0].swi:
                 return []
             
-            # 最初のメッシュからFT情報を取得
-            first_mesh = area.meshes[0]
-            if not first_mesh.swi:
-                return []
+            # 時系列の長さを取得
+            timeline_length = len(meshes[0].swi)
+            risk_timeline = []
             
-            result = []
-            
-            for swi_data in first_mesh.swi:
-                ft = swi_data.ft
-                risk_level = 0
+            for t in range(timeline_length):
+                ft = meshes[0].swi[t].ft
+                max_risk = 0
                 
-                # 各メッシュの最高リスクレベルを計算
-                for mesh in area.meshes:
-                    # 該当FTのSWI値を取得
-                    mesh_swi = None
-                    for mesh_swi_data in mesh.swi:
-                        if mesh_swi_data.ft == ft:
-                            mesh_swi = mesh_swi_data.value
-                            break
-                    
-                    if mesh_swi is not None:
-                        # VBAと同じリスクレベル判定
-                        mesh_risk = 0
-                        if mesh_swi >= mesh.dosyakei_bound:
-                            mesh_risk = 3  # 土砂災害
-                        elif mesh_swi >= mesh.warning_bound:
-                            mesh_risk = 2  # 警報
-                        elif mesh_swi >= mesh.advisary_bound:
-                            mesh_risk = 1  # 注意報
+                for mesh in meshes:
+                    if t < len(mesh.swi):
+                        swi_value = mesh.swi[t].value
                         
-                        risk_level = max(risk_level, mesh_risk)
+                        # VBAリスクレベル判定
+                        if swi_value >= mesh.dosyakei_bound:
+                            risk = 3  # 土砂災害
+                        elif swi_value >= mesh.warning_bound:
+                            risk = 2  # 警報
+                        elif swi_value >= mesh.advisary_bound:
+                            risk = 1  # 注意
+                        else:
+                            risk = 0  # 正常
+                        
+                        max_risk = max(max_risk, risk)
                 
-                result.append(Risk(ft=ft, value=risk_level))
+                risk_timeline.append(Risk(ft=ft, value=max_risk))
             
-            return result
+            return risk_timeline
             
         except Exception as e:
-            logger.error(f"リスク計算エラー: {e}")
+            logger.error(f"Risk calculation error: {e}")
             return []
-    
-    def get_data_num(self, lat: float, lon: float, base_info: BaseInfo) -> int:
-        """緯度経度からデータ番号を計算"""
+
+    def process_mesh_calculations(self, mesh: Mesh, swi_grib2: Dict[str, Any], guidance_grib2: Dict[str, Any]) -> Mesh:
+        """
+        VBA calc_data の一部処理
+        単一メッシュの計算を実行
+        """
         try:
-            # ミリ度に変換
-            lat_milli = int(lat * 1000000)
-            lon_milli = int(lon * 1000000)
-            
-            # グリッドインデックス計算
-            x = int((lon_milli - base_info.s_lon) / base_info.d_lon)
-            y = int((base_info.e_lat - lat_milli) / base_info.d_lat)
-            
-            # 範囲チェック
-            if x < 0 or x >= base_info.x_num or y < 0 or y >= base_info.y_num:
-                return -1
-            
-            # データ番号計算
-            data_num = y * base_info.x_num + x
-            
-            return data_num if data_num < base_info.grid_num else -1
-            
-        except Exception as e:
-            logger.error(f"データ番号変換エラー: lat={lat}, lon={lon} - {e}")
-            return -1
-    
-    def process_mesh_calculations(
-        self,
-        mesh: Mesh,
-        swi_grib2: Dict[str, Any],
-        guidance_grib2: Dict[str, Any]
-    ) -> Mesh:
-        """メッシュごとの計算処理（元の実装と同じ）"""
-        try:
-            # SWI時系列計算
+            # VBA: prefectures(i).areas(j).meshes(k).swi = calc_swi_timelapse(...)
             mesh.swi = self.calc_swi_timelapse(mesh, swi_grib2, guidance_grib2)
-            
-            # 降水量時系列計算
+
+            # VBA: prefectures(i).areas(j).meshes(k).rain = calc_rain_timelapse(...)
             mesh.rain = self.calc_rain_timelapse(mesh, guidance_grib2)
-            
+
             return mesh
-            
+
         except Exception as e:
-            logger.error(f"メッシュ計算エラー: {mesh.code} - {e}")
-            # エラーの場合も空のリストを設定
-            mesh.swi = []
-            mesh.rain = []
+            logger.error(f"Mesh calculations error: {e}")
             return mesh
+
+    def process_area_calculations(self, areas: List[Area]) -> None:
+        """
+        VBA calc_data の一部処理
+        各エリアのリスク計算を実行
+        """
+        try:
+            for area in areas:
+                # VBA: prefectures(i).areas(j).risk_timeline = calc_risk_timeline(prefectures(i).areas(j).meshes)
+                area.risk_timeline = self.calc_risk_timeline(area.meshes)
+                
+        except Exception as e:
+            logger.error(f"Area calculations error: {e}")
+
+    # 既存の互換性のため、古いメソッド名も保持
+    def calc_tunk_model_legacy(self, s1: float, s2: float, s3: float, dt: float, r: float) -> Tuple[float, float, float]:
+        """既存コードとの互換性のため"""
+        return self.calc_tunk_model(s1, s2, s3, dt, r)

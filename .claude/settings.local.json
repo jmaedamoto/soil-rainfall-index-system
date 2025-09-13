@@ -37,7 +37,11 @@
       "Bash(jq:*)",
       "Bash(git rm:*)",
       "Bash(git filter-branch:*)",
-      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch --force --index-filter \"git rm --cached --ignore-unmatch server/baseline_test_full_response.json server/step1_test_response.json server/step2_response.json server/step3_response.json\" --prune-empty --tag-name-filter cat -- --all)"
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch --force --index-filter \"git rm --cached --ignore-unmatch server/baseline_test_full_response.json server/step1_test_response.json server/step2_response.json server/step3_response.json\" --prune-empty --tag-name-filter cat -- --all)",
+      "Read(//d/**)",
+      "Bash(cd:*)",
+      "Bash(iconv:*)",
+      "Bash(xargs:*)"
     ],
     "deny": []
   }

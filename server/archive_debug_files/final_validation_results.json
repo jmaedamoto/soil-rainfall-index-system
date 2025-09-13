@@ -1,0 +1,121 @@
+{
+  "total_server_meshes": 26045,
+  "total_vba_meshes": 26045,
+  "total_comparisons": 7723171,
+  "perfect_matches": 76341,
+  "boundary_mismatches": 7014116,
+  "rain_mismatches": 537978,
+  "swi_mismatches": 94736,
+  "match_rate_server": 293.1119216740257,
+  "match_rate_vba": 293.1119216740257,
+  "prefecture_counts": {
+    "shiga": 8192,
+    "kyoto": 17057,
+    "osaka": 2811,
+    "hyogo": 28916,
+    "nara": 9145,
+    "wakayama": 10220
+  },
+  "perfect_match_details": [
+    {
+      "server_key": "52352679_大津市南部",
+      "vba_key": "28694187_大津市南部",
+      "pref": "shiga",
+      "area": "大津市南部",
+      "server_meshcode": "52352679",
+      "vba_meshcode": "28694187",
+      "vba_coords": "x=2869, y=4187",
+      "boundary_values": "93/141/224"
+    },
+    {
+      "server_key": "52352689_大津市南部",
+      "vba_key": "28694188_大津市南部",
+      "pref": "shiga",
+      "area": "大津市南部",
+      "server_meshcode": "52352689",
+      "vba_meshcode": "28694188",
+      "vba_coords": "x=2869, y=4188",
+      "boundary_values": "90/137/219"
+    },
+    {
+      "server_key": "52352751_大津市南部",
+      "vba_key": "28714185_大津市南部",
+      "pref": "shiga",
+      "area": "大津市南部",
+      "server_meshcode": "52352751",
+      "vba_meshcode": "28714185",
+      "vba_coords": "x=2871, y=4185",
+      "boundary_values": "90/137/218"
+    },
+    {
+      "server_key": "52352761_大津市南部",
+      "vba_key": "28714185_大津市南部",
+      "pref": "shiga",
+      "area": "大津市南部",
+      "server_meshcode": "52352761",
+      "vba_meshcode": "28714185",
+      "vba_coords": "x=2871, y=4185",
+      "boundary_values": "90/137/218"
+    },
+    {
+      "server_key": "52352770_大津市南部",
+      "vba_key": "28714185_大津市南部",
+      "pref": "shiga",
+      "area": "大津市南部",
+      "server_meshcode": "52352770",
+      "vba_meshcode": "28714185",
+      "vba_coords": "x=2871, y=4185",
+      "boundary_values": "90/137/218"
+    },
+    {
+      "server_key": "52352752_大津市南部",
+      "vba_key": "28724185_大津市南部",
+      "pref": "shiga",
+      "area": "大津市南部",
+      "server_meshcode": "52352752",
+      "vba_meshcode": "28724185",
+      "vba_coords": "x=2872, y=4185",
+      "boundary_values": "90/137/218"
+    },
+    {
+      "server_key": "52352755_大津市南部",
+      "vba_key": "28754185_大津市南部",
+      "pref": "shiga",
+      "area": "大津市南部",
+      "server_meshcode": "52352755",
+      "vba_meshcode": "28754185",
+      "vba_coords": "x=2875, y=4185",
+      "boundary_values": "90/137/219"
+    },
+    {
+      "server_key": "52352766_大津市南部",
+      "vba_key": "28754185_大津市南部",
+      "pref": "shiga",
+      "area": "大津市南部",
+      "server_meshcode": "52352766",
+      "vba_meshcode": "28754185",
+      "vba_coords": "x=2875, y=4185",
+      "boundary_values": "90/137/219"
+    },
+    {
+      "server_key": "52352776_大津市南部",
+      "vba_key": "28754185_大津市南部",
+      "pref": "shiga",
+      "area": "大津市南部",
+      "server_meshcode": "52352776",
+      "vba_meshcode": "28754185",
+      "vba_coords": "x=2875, y=4185",
+      "boundary_values": "90/137/219"
+    },
+    {
+      "server_key": "52352760_大津市南部",
+      "vba_key": "28704186_大津市南部",
+      "pref": "shiga",
+      "area": "大津市南部",
+      "server_meshcode": "52352760",
+      "vba_meshcode": "28704186",
+      "vba_coords": "x=2870, y=4186",
+      "boundary_values": "90/137/218"
+    }
+  ]
+}

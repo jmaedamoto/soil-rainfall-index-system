@@ -171,73 +171,85 @@ class Grib2Service:
     def unpack_runlength(self, data: bytes, bit_num: int, level_num: int, level_max: int,
                          grid_num: int, level: List[int], s_position: int,
                          e_position: int) -> List[float]:
-        """ランレングス圧縮データの展開（詳細デバッグ版）"""
+        """ランレングス圧縮データの展開（VBA line-by-line完全対応）"""
         try:
-            # 手動トレースで完全一致が確認されたアルゴリズムを移植
-            result = [0.0] * grid_num
-            d_index = 0
-            p = s_position
-            byte_size = bit_num // 8
+            # VBA: lngu = 2 ^ bit_num - 1 - level_max
+            lngu = 2 ** bit_num - 1 - level_max  # VBAの^は累乗演算子
             
-            # TARGET位置のデバッグ用（座標 X=2869, Y=4187 → data_num=4025749）
-            target_d_index = 4025749
-            debug_enabled = True
-
-            while p < e_position and d_index < grid_num:
-                if p + 2 * byte_size > len(data):
-                    break
+            # VBA: ReDim data(grid_num)
+            data_result = [0.0] * (grid_num + 1)  # VBAの1ベース配列に対応
+            
+            # VBA: d_index = 1
+            d_index = 1  # VBAは1ベース
+            
+            # VBA: p = s_position
+            p = s_position
+            
+            # VBA: Do While p < e_position
+            while p < e_position:
+                # VBA: d = get_dat(buf, p, bit_num / 8)
+                d = self.get_dat(data, p, bit_num // 8)
+                # VBA: p = p + bit_num / 8
+                p = p + bit_num // 8
                 
-                d = self.get_dat(data, p, byte_size)
-                p += byte_size
-                
+                # VBA: If d > level_num Then MsgBox... Stop
                 if d > level_num:
                     logger.error(f"VBA停止条件: d({d}) > level_num({level_num})")
                     break
                 
-                dd = self.get_dat(data, p, byte_size)
+                # VBA: dd = get_dat(buf, p, bit_num / 8)
+                dd = self.get_dat(data, p, bit_num // 8)
                 
-                # TARGET位置での詳細デバッグ
-                if debug_enabled and d_index == target_d_index:
-                    level_val = level[d - 1] if 1 <= d <= len(level) else 0
-                    logger.error(f"★ grib2_service TARGET位置:")
-                    logger.error(f"  d_index={d_index}")
-                    logger.error(f"  d={d}")
-                    logger.error(f"  dd={dd}")
-                    logger.error(f"  level[{d}] → level[{d-1}] = {level_val}")
-                    logger.error(f"  ÷10結果: {level_val/10}")
-                
+                # VBA: If dd <= level_max Then
                 if dd <= level_max:
-                    # 配列に値を格納（VBAロジック完全再現）
-                    if 1 <= d <= len(level):
-                        result[d_index] = float(level[d - 1])
+                    # VBA: data(d_index) = level(d)
+                    # VBAではlevel(d)が未設定（d > level_max）の場合は0を返す
+                    if 1 <= d < len(level):
+                        data_result[d_index] = float(level[d])  # VBAの1ベース配列アクセス
                     else:
-                        result[d_index] = 0.0
-                    d_index += 1
+                        # VBA配列の未設定要素は0（VBAのデフォルト動作）
+                        data_result[d_index] = 0.0
+                    # VBA: d_index = d_index + 1
+                    d_index = d_index + 1
                 else:
-                    # ランレングス圧縮処理（手動トレースと同一）
-                    lngu = 2 ** bit_num - 1 - level_max
+                    # VBA: nlength = 0
                     nlength = 0
+                    # VBA: p2 = 1
                     p2 = 1
                     
+                    # VBA: Do While p <= e_position And dd > level_max
                     while p <= e_position and dd > level_max:
+                        # VBA: nlength = nlength + ((lngu ^ (p2 - 1)) * (dd - level_max - 1))
                         nlength = nlength + ((lngu ** (p2 - 1)) * (dd - level_max - 1))
-                        p += byte_size
-                        if p + byte_size > len(data):
-                            break
-                        dd = self.get_dat(data, p, byte_size)
-                        p2 += 1
-                    
-                    # nlength + 1個の同じ値を格納
-                    for i in range(nlength + 1):
-                        if d_index >= grid_num:
-                            break
-                        if 1 <= d <= len(level):
-                            result[d_index] = float(level[d - 1])
+                        # VBA: p = p + bit_num / 8
+                        p = p + bit_num // 8
+                        # VBA: dd = get_dat(buf, p, bit_num / 8)
+                        if p < len(data) and p + (bit_num // 8) <= len(data):
+                            dd = self.get_dat(data, p, bit_num // 8)
                         else:
-                            result[d_index] = 0.0
-                        d_index += 1
+                            break
+                        # VBA: p2 = p2 + 1
+                        p2 = p2 + 1
+                    
+                    # VBA: For i = 1 To nlength + 1
+                    for i in range(1, nlength + 2):  # 1 To nlength + 1
+                        # VBA: data(d_index) = level(d)
+                        if d_index < len(data_result):
+                            if 1 <= d < len(level):
+                                data_result[d_index] = float(level[d])  # VBAの1ベース配列アクセス
+                            else:
+                                # VBA配列の未設定要素は0（VBAのデフォルト動作）
+                                data_result[d_index] = 0.0
+                        # VBA: d_index = d_index + 1
+                        d_index = d_index + 1
+                        if d_index > grid_num:
+                            break
+                
+                if d_index > grid_num:
+                    break
 
-            return result
+            # VBAの1ベース配列から0ベースに変換して返す
+            return data_result[1:grid_num + 1]
             
         except Exception as e:
             logger.error(f"ランレングス展開エラー: {e}")
@@ -245,25 +257,27 @@ class Grib2Service:
     
     def unpack_data(self, data: bytes, position: int, grid_num: int,
                     data_type: int, level: List[int], ref_val: float) -> List[float]:
-        """GRIB2データ値解析（VBA版に完全対応）"""
+        """GRIB2データ値解析（VBA版line-by-line完全対応）"""
         try:
             if data_type == 200:  # ランレングス圧縮
                 # セクション5: データ表現（VBA版完全対応）
                 section_size = self.get_dat(data, position, 4)
-                bit_num = self.get_dat(data, position + 11, 1)    # VBA: position + 12, 1 (1ベース調整)
-                level_max = self.get_dat(data, position + 12, 2)  # VBA: position + 13, 2 (1ベース調整)
-                level_num = self.get_dat(data, position + 14, 2)  # VBA: position + 15, 2 (1ベース調整)
+                bit_num = self.get_dat(data, position + 11, 1)    # VBA: position + 12, 1
+                level_max = self.get_dat(data, position + 12, 2)  # VBA: position + 13, 2
+                level_num = self.get_dat(data, position + 14, 2)  # VBA: position + 15, 2
+                fct = self.get_dat(data, position + 16, 1)        # VBA: position + 17, 1 基準値係数
                 
-                # レベル配列を作成（VBA版完全対応）
-                # VBA: ReDim level(level_num), For i = 1 To level_max
-                level = [0] * (level_num + 1)  # VBAの1ベース配列に対応（0番目は未使用）
-                for i in range(1, min(level_max + 1, level_num + 1)):  # level_numを超えないように制限
-                    # VBA: level(i) = get_dat(buf, position + 16 + 2 * i, 2) (1ベース)
-                    val = self.get_dat(data, position + 15 + 2 * i, 2)  # 0ベース調整
-                    if val >= 65536 // 2:  # 整数除算に修正
-                        val = int(val - 65536 // 2)
-                    if i < len(level):  # 安全のため境界チェック
-                        level[i] = val  # VBAの1ベース配列に合わせてインデックス使用
+                # VBA: ReDim level(level_num)
+                level = [0] * (level_num + 1)  # VBAの1ベース配列に対応
+                
+                # VBA: For i = 1 To level_max (level_numではなくlevel_maxまで！)
+                for i in range(1, level_max + 1):
+                    # VBA: level(i) = get_dat(buf, position + 16 + 2 * i, 2)
+                    val = self.get_dat(data, position + 15 + 2 * i, 2)
+                    # VBA: If level(i) >= 65536 / 2 Then level(i) = level(i) - 65536 / 2
+                    if val >= 65536 / 2:  # VBAは浮動小数点除算
+                        val = val - 65536 / 2
+                    level[i] = int(val)
                 
                 position += section_size
                 
@@ -301,46 +315,51 @@ class Grib2Service:
             raise
     
     def unpack_swi_grib2(self, data: bytes) -> Tuple[BaseInfo, Dict[str, Any]]:
-        """土壌雨量指数データ解析（元の実装と同じ形式で返却）"""
+        """土壌雨量指数データ解析（VBA line-by-line完全対応）"""
         try:
+            # VBA: base_info = unpack_info(position, total_size, buf)
             base_info, position, total_size = self.unpack_info(data, 0)
             
+            # VBAの変数に対応
             swi_data = None
             first_tunk = None
             second_tunk = None
             
-            # VBAのDo While total_size - position > 4ループを再現
-            # VBAでは最初のdata_type=200セクションのみ処理するため、フラグで制御
-            swi_processed = False
-            
+            # VBA: Do While total_size - position > 4
             while total_size - position > 4:
-                # セクション4: プロダクト定義
-                section_size = self.get_dat(data, position, 4)
-                data_type = self.get_dat(data, position + 22, 1)
-                data_sub_type = self.get_dat(data, position + 24, 4)
+                # VBA: section_size = get_dat(buf, position + 1, 4)
+                section_size = self.get_dat(data, position, 4)  # 0ベース調整
+                # VBA: data_type = get_dat(buf, position + 23, 1)
+                data_type = self.get_dat(data, position + 22, 1)  # 0ベース調整
+                # VBA: data_sub_type = get_dat(buf, position + 25, 4)
+                data_sub_type = self.get_dat(data, position + 24, 4)  # 0ベース調整
+                # VBA: position = position + section_size
                 position += section_size
                 
-                # データタイプに応じて処理を分岐（VBAの動作を正確に再現）
-                if data_type == 200 and not swi_processed:  # 最初の土壌雨量指数のみ処理
-                    logger.warning(f"SWI処理: data_type=200セクションを処理開始")
+                # VBA: If data_type = 200 Then
+                if data_type == 200:
+                    # VBA: swi = unpack_data(position, buf, base_info.grid_num)
+                    # 重要: 新しい配列を作成して上書きを防ぐ
+                    logger.warning(f"SWI処理: data_type=200 土壌雨量指数処理")
                     swi_data, position = self._unpack_data_section(data, position, base_info.grid_num)
-                    swi_processed = True  # 最初の処理のみで終了
-                    logger.warning(f"SWI処理: data_type=200セクション処理完了、今後スキップ")
-                elif data_type == 200 and swi_processed:  # 2番目以降のdata_type=200はスキップ
-                    logger.warning(f"スキップ: data_type=200セクション（既に処理済み）")
-                    dummy_data, position = self._skip_data_sections(data, position)
-                elif data_type == 201 and data_sub_type == 1:  # 第1タンク値
-                    logger.debug(f"スキップ: data_type=201, sub_type=1")
-                    first_tunk, position = self._skip_data_sections(data, position)
-                elif data_type == 201 and data_sub_type == 2:  # 第2タンク値  
-                    logger.debug(f"スキップ: data_type=201, sub_type=2")
-                    second_tunk, position = self._skip_data_sections(data, position)
+                # VBA: ElseIf data_type = 201 And data_sub_type = 1 Then
+                elif data_type == 201 and data_sub_type == 1:
+                    # VBA: first_tunk = unpack_data(position, buf, base_info.grid_num)
+                    # 重要: 新しい配列を作成して上書きを防ぐ
+                    logger.warning(f"SWI処理: data_type=201, sub_type=1 第1タンク値")
+                    first_tunk, position = self._unpack_data_section(data, position, base_info.grid_num)
+                # VBA: ElseIf data_type = 201 And data_sub_type = 2 Then
+                elif data_type == 201 and data_sub_type == 2:
+                    # VBA: second_tunk = unpack_data(position, buf, base_info.grid_num)
+                    # 重要: 新しい配列を作成して上書きを防ぐ
+                    logger.warning(f"SWI処理: data_type=201, sub_type=2 第2タンク値")
+                    second_tunk, position = self._unpack_data_section(data, position, base_info.grid_num)
                 else:
-                    # 不明なデータタイプはスキップ
-                    logger.warning(f"不明データタイプ: data_type={data_type}, sub_type={data_sub_type}")
+                    # VBA: MsgBox... Stop
+                    logger.error(f"VBA停止条件: 不明データタイプ data_type={data_type}, sub_type={data_sub_type}")
                     break
-            
-            # 元の実装と同じ辞書形式で返却
+                    
+            # VBA: unpack_swi_grib2.base_info = base_info, 等
             result = {
                 'base_info': base_info,
                 'swi': swi_data or [],
@@ -417,7 +436,7 @@ class Grib2Service:
             raise
     
     def unpack_guidance_grib2(self, data: bytes) -> Tuple[BaseInfo, Dict[str, Any]]:
-        """降水量予測データ解析（元の実装と同じ形式で返却）"""
+        """降水量予測データ解析（VBA完全再現版 - 全26個データ取得）"""
         try:
             base_info, position, total_size = self.unpack_info(data, 0)
             guidance_data = []
@@ -425,29 +444,43 @@ class Grib2Service:
             loop_count = 1
             prev_ft = 0
             
-            # VBAのDoループを再現（1ベース→0ベース変換）
+            # VBA Doループを line-by-line で再現
             while position < total_size - 4:
-                # セクション4: プロダクト定義（VBA: position+1 → Python: position+0）
-                section_size = self.get_dat(data, position + 0, 4)  # VBA: position+1
-                span = self.get_dat(data, position + 49, 4)  # VBA: position+50
-                ft = self.get_dat(data, position + 18, 4) + span  # VBA: position+19
+                # VBA: section_size = get_dat(buf, position + 1, 4)
+                section_size = self.get_dat(data, position + 0, 4)  # 0ベース調整
+                # VBA: span = get_dat(buf, position + 50, 4)
+                span = self.get_dat(data, position + 49, 4)  # 0ベース調整
+                # VBA: ft = get_dat(buf, position + 19, 4) + span
+                ft = self.get_dat(data, position + 18, 4) + span  # 0ベース調整
                 
+                # VBA: If prev_ft > ft Then loop_count = loop_count + 1
                 if prev_ft > ft:
                     loop_count += 1
                 
+                # VBA: position = position + section_size
                 position += section_size
                 
-                # VBAの条件: span = 3 And loop_count = 2
+                # VBA完全再現: span=3 AND loop_count=2の条件でのみデータ取得
                 if span == 3 and loop_count == 2:
                     data_values, position = self._unpack_data_section(data, position, base_info.grid_num)
-                    # VBA: data(n).ft = ft, data(n).value = value
                     guidance_data.append({
                         'ft': ft,
                         'value': data_values
                     })
                 else:
-                    # 条件に合わない場合はスキップ
-                    position = self._skip_data_section(data, position)
+                    # VBA Else処理: セクション5〜7をスキップ
+                    # VBA: section_size = get_dat(buf, position + 1, 4)
+                    section_size = self.get_dat(data, position, 4)
+                    # VBA: position = position + section_size
+                    position += section_size
+                    # VBA: section_size = get_dat(buf, position + 1, 4)
+                    section_size = self.get_dat(data, position, 4)
+                    # VBA: position = position + section_size
+                    position += section_size
+                    # VBA: section_size = get_dat(buf, position + 1, 4)
+                    section_size = self.get_dat(data, position, 4)
+                    # VBA: position = position + section_size
+                    position += section_size
                 
                 prev_ft = ft
             

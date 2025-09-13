@@ -58,6 +58,8 @@ class Mesh:
     dosyakei_bound: int  # 土砂災害基準値
     swi: List[SwiTimeSeries]
     rain: List[GuidanceTimeSeries]
+    vba_x: Optional[int] = None  # VBA X座標（GRIB2データアクセス用）
+    vba_y: Optional[int] = None  # VBA Y座標（GRIB2データアクセス用）
 
 
 @dataclass

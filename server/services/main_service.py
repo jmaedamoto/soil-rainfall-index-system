@@ -56,12 +56,12 @@ class MainService:
             total_meshes = 0
             for prefecture in prefectures:
                 for area in prefecture.areas:
-                    for mesh in area.meshes:
-                        # 各メッシュの計算処理
-                        self.calculation_service.process_mesh_calculations(
+                    # 個別メッシュごとに計算を実行
+                    for i, mesh in enumerate(area.meshes):
+                        area.meshes[i] = self.calculation_service.process_mesh_calculations(
                             mesh, swi_grib2, guidance_grib2
                         )
-                        total_meshes += 1
+                    total_meshes += len(area.meshes)
             
             calc_time = time.time() - calc_start
             logger.info(f"メッシュ計算完了: {calc_time:.2f}秒 ({total_meshes}メッシュ)")
@@ -72,7 +72,7 @@ class MainService:
             
             for prefecture in prefectures:
                 for area in prefecture.areas:
-                    area.risk_timeline = self.calculation_service.calc_risk_timeline(area)
+                    area.risk_timeline = self.calculation_service.calc_risk_timeline(area.meshes)
             
             risk_time = time.time() - risk_start
             logger.info(f"リスクタイムライン計算完了: {risk_time:.2f}秒")
@@ -81,6 +81,7 @@ class MainService:
             total_time = time.time() - start_time
             
             result = {
+                "status": "success",
                 "calculation_time": datetime.now().isoformat(),
                 "initial_time": base_info.initial_date.isoformat(),
                 "note": "フル版: ローカルbinファイルからの実データ（全メッシュ処理）",
@@ -110,6 +111,8 @@ class MainService:
                             "code": mesh.code,
                             "lat": float(mesh.lat),
                             "lon": float(mesh.lon),
+                            "x": int(mesh.x),
+                            "y": int(mesh.y),
                             "advisary_bound": int(mesh.advisary_bound),
                             "warning_bound": int(mesh.warning_bound),
                             "dosyakei_bound": int(mesh.dosyakei_bound),
@@ -186,7 +189,7 @@ class MainService:
             # リスクタイムライン計算
             for prefecture in prefectures:
                 for area in prefecture.areas:
-                    area.risk_timeline = self.calculation_service.calc_risk_timeline(area)
+                    area.risk_timeline = self.calculation_service.calc_risk_timeline(area.meshes)
             
             # 結果構築
             result = {
@@ -218,6 +221,8 @@ class MainService:
                             "code": mesh.code,
                             "lat": float(mesh.lat),
                             "lon": float(mesh.lon),
+                            "x": int(mesh.x),
+                            "y": int(mesh.y),
                             "advisary_bound": int(mesh.advisary_bound),
                             "warning_bound": int(mesh.warning_bound),
                             "dosyakei_bound": int(mesh.dosyakei_bound),
