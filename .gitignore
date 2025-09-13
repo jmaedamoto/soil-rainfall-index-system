@@ -40,3 +40,4 @@ server/baseline_test_full_response.json
 server/step1_test_response.json
 server/step2_response.json
 server/step3_response.json
+server/archive_debug_files/*.json
