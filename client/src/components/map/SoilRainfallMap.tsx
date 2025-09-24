@@ -133,18 +133,10 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
     return { latInterval, lonInterval };
   }, [meshes]);
 
-  // 選択都道府県のメッシュのみをフィルタリング（最適化）
+  // 全メッシュを常に表示（フィルタリングを無効化）
   const filteredMeshes = useMemo(() => {
-    if (!selectedPrefecture) return meshes;
-    
-    const selectedMeshes: Mesh[] = [];
-    for (const mesh of meshes) {
-      if (meshToPrefecture[mesh.code] === selectedPrefecture) {
-        selectedMeshes.push(mesh);
-      }
-    }
-    return selectedMeshes;
-  }, [meshes, meshToPrefecture, selectedPrefecture]);
+    return meshes;  // 常に全メッシュを返す
+  }, [meshes]);
 
   // 時刻インデックスマップを事前作成（最適化）
   const timeIndexMap = useMemo(() => {
@@ -160,9 +152,9 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
 
   // 各メッシュの表示データを計算（最適化版）
   const meshDisplayData = useMemo(() => {
-    const displayMeshes = selectedPrefecture ? filteredMeshes : meshes;
+    const displayMeshes = meshes;  // 常に全メッシュを表示
     const timeIndex = timeIndexMap.get(`${selectedTime}`);
-    
+
     return displayMeshes.map(mesh => {
       // 時刻インデックスを使用して高速アクセス
       const swiValue = timeIndex !== undefined && mesh.swi_timeline[timeIndex] 
@@ -223,19 +215,16 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
         />
         
         {meshDisplayData.map(({ mesh, swiValue, riskLevel, bounds, color }) => {
-          // 都道府県が選択されている場合、表示されるのは選択都道府県のメッシュのみ
-          const isSelectedPrefecture = selectedPrefecture ? true : false;
-          
           return (
           <Rectangle
             key={mesh.code}
             bounds={bounds}
             pathOptions={{
-              color: isSelectedPrefecture ? '#ff6b35' : 'rgba(255, 255, 255, 0.2)',
+              color: 'rgba(200, 200, 200, 0.3)',  // 統一した薄いグレーの境界線
               fillColor: color,
-              fillOpacity: isSelectedPrefecture ? 0.9 : 0.4,
-              weight: isSelectedPrefecture ? 1 : 0.1,
-              opacity: isSelectedPrefecture ? 1 : 0.6
+              fillOpacity: riskLevel === RiskLevel.NORMAL ? 0 : 0.7,  // 危険度0は完全透明
+              weight: 0.5,  // 統一した境界線の太さ
+              opacity: 0.8   // 統一した境界線の透明度
             }}
             eventHandlers={{
               click: () => onMeshClick?.(mesh)

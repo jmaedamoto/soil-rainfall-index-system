@@ -18,9 +18,9 @@ const SoilRainfallDashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState(0);
   
-  // 時刻入力フィールドの状態
-  const [swiInitialTime, setSwiInitialTime] = useState('2023-06-01T12:00:00Z');
-  const [guidInitialTime, setGuidInitialTime] = useState('2023-06-01T12:00:00Z');
+  // 時刻入力フィールドの状態（テストデータに合わせて2023-06-02T00:00:00Zに修正）
+  const [swiInitialTime, setSwiInitialTime] = useState('2023-06-02T00:00:00Z');
+  const [guidInitialTime, setGuidInitialTime] = useState('2023-06-02T00:00:00Z');
   const [useSeparateTimes, setUseSeparateTimes] = useState(false);
   
   // データソース選択の状態

@@ -1,8 +1,10 @@
 import axios from 'axios';
 import { CalculationParams, CalculationResult, HealthStatus } from '../types/api';
 
-// APIベースURL（開発環境用）
-const API_BASE_URL = 'http://localhost:5000/api';
+// APIベースURL（環境に応じて自動設定）
+const API_BASE_URL = process.env.NODE_ENV === 'production'
+  ? '/api'  // 本番環境：同一オリジンの相対パス
+  : 'http://localhost:5000/api';  // 開発環境：localhost指定
 
 // Axiosインスタンスの作成
 const apiClient = axios.create({
