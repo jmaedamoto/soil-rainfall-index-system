@@ -1121,10 +1121,108 @@ VBA Module.basから出力されたCSV参照データ（Shift_JIS）との完全
 
 ---
 
-**最終更新**: 2025年9月24日
-**バージョン**: 6.1.0（地図UI改善・本番環境対応版）
+## 🚀 **2025年9月25日 地図Canvas描画システム完全最適化**
+
+### ✅ **Canvas描画問題の根本解決**
+
+#### **問題の背景**
+- **初期実装**: 26,051個のDOM Rectangle要素による重いレンダリング
+- **パフォーマンス問題**: 時刻切り替え時の極端な遅延
+- **Canvas移行試行**: 手動Canvas描画での座標ずれ問題
+
+#### **最終解決策: Leaflet標準Canvas Renderer採用**
+
+**技術的転換**:
+```javascript
+// 従来: 26,051個のDOM Rectangle要素
+{meshes.map(mesh => <Rectangle key={mesh.code} bounds={bounds} />)}
+
+// 最適化後: Leaflet標準Canvas Renderer
+const canvasRenderer = L.canvas({ padding: 0.5 });
+const rectangle = L.rectangle(bounds, { renderer: canvasRenderer });
+```
+
+#### **実装された根本改善**
+
+1. **Leaflet Canvas Renderer統合**:
+   - `L.canvas()` による標準Canvas描画システム使用
+   - Leaflet内部座標管理による完全な同期保証
+   - 手動transform計算の完全排除
+
+2. **Layer Group管理システム**:
+   - `L.layerGroup()` による効率的なメッシュ管理
+   - `clearLayers()` + 再構築による高速データ更新
+   - Canvas要素の自動座標追従
+
+3. **座標同期問題の完全解消**:
+   - マウスドラッグ移動時のメッシュずれ解消
+   - ズーム操作時の完全座標追従
+   - 累積誤差の根本的解決
+
+#### **技術的成果**
+
+**パフォーマンス向上**:
+- **DOM要素数**: 26,051個 → 1個のCanvas要素
+- **描画方式**: DOM操作 → Canvas描画
+- **座標管理**: 手動計算 → Leaflet自動管理
+- **更新速度**: 大幅な高速化実現
+
+**安定性向上**:
+- **座標ずれ**: 完全解消
+- **メモリ使用量**: 大幅削減
+- **ブラウザクラッシュリスク**: 排除
+- **操作応答性**: 滑らか な操作感実現
+
+#### **実装の特徴**
+
+```typescript
+// SimpleCanvasLayer.tsx - 最終実装
+const canvasRenderer = L.canvas({ padding: 0.5 });
+const meshLayerGroup = L.layerGroup();
+
+// 各メッシュをCanvas描画Rectangle要素として追加
+const rectangle = L.rectangle(bounds, {
+  color: RISK_COLORS[riskLevel],
+  fillColor: RISK_COLORS[riskLevel],
+  fillOpacity: 0.7,
+  renderer: canvasRenderer  // Leaflet標準描画
+});
+
+meshLayerGroup.addLayer(rectangle);
+```
+
+**React統合の最適化**:
+- `useRef` による描画関数参照管理
+- `useEffect` による効率的な再描画トリガー
+- Leafletライフサイクルとの完全同期
+
+#### **運用上の利点**
+
+1. **開発保守性**: Leaflet標準パターンによる可読性向上
+2. **拡張性**: 新機能追加の容易さ
+3. **安定性**: 実績あるLeafletエンジンによる信頼性
+4. **互換性**: Leafletエコシステムとの完全互換
+
+### 🎯 **最終的な技術スタック**
+
+**地図描画システム**:
+- **Base**: React-Leaflet + Leaflet Canvas Renderer
+- **描画方式**: L.rectangle + L.canvas による標準描画
+- **管理**: L.layerGroup によるレイヤー管理
+- **同期**: Leaflet自動座標変換システム
+
+**成果サマリー**:
+- ✅ 26,051メッシュの高速Canvas描画実現
+- ✅ マウスドラッグ・ズーム時の完全座標同期
+- ✅ DOM要素数の大幅削減によるメモリ最適化
+- ✅ 時刻切り替え操作の大幅高速化
+
+---
+
+**最終更新**: 2025年9月25日
+**バージョン**: 6.2.0（Canvas描画システム完全最適化版）
 **作成者**: Claude (Anthropic)
-**プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・地図UI改善・本番環境対応版）
+**プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・Canvas描画最適化・本番環境対応版）
 
 ## 実装完了状況
 

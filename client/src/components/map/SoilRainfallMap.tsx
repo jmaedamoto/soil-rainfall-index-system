@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, Rectangle, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer } from 'react-leaflet';
 import { LatLngBounds } from 'leaflet';
 import { Mesh, RISK_COLORS, RiskLevel, TimeSeriesPoint } from '../../types/api';
 import MapLegend from './MapLegend';
+import SimpleCanvasLayer from './SimpleCanvasLayer';
 import './LeafletIcons'; // アイコン修正をインポート
 import 'leaflet/dist/leaflet.css';
+
+// Canvas描画に移行したため、MemoizedRectangleは不要
 
 interface SoilRainfallMapProps {
   meshes: Mesh[];
@@ -150,48 +153,7 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
     return map;
   }, [meshes]);
 
-  // 各メッシュの表示データを計算（最適化版）
-  const meshDisplayData = useMemo(() => {
-    const displayMeshes = meshes;  // 常に全メッシュを表示
-    const timeIndex = timeIndexMap.get(`${selectedTime}`);
-
-    return displayMeshes.map(mesh => {
-      // 時刻インデックスを使用して高速アクセス
-      const swiValue = timeIndex !== undefined && mesh.swi_timeline[timeIndex] 
-        ? mesh.swi_timeline[timeIndex].value 
-        : 0;
-
-      // リスクレベルを判定
-      let riskLevel = RiskLevel.NORMAL;
-      if (swiValue >= mesh.dosyakei_bound) {
-        riskLevel = RiskLevel.DISASTER;
-      } else if (swiValue >= mesh.warning_bound) {
-        riskLevel = RiskLevel.WARNING;
-      } else if (swiValue >= mesh.advisary_bound) {
-        riskLevel = RiskLevel.CAUTION;
-      }
-
-
-      // 実際のメッシュ間隔に基づいて格子サイズを計算
-      const latHalfSize = meshIntervals.latInterval / 2;
-      const lonHalfSize = meshIntervals.lonInterval / 2;
-      
-      // 格子の境界を計算（メッシュ中心を基準に四方に拡張）
-      const bounds: [[number, number], [number, number]] = [
-        [mesh.lat - latHalfSize, mesh.lon - lonHalfSize], // 南西角
-        [mesh.lat + latHalfSize, mesh.lon + lonHalfSize]  // 北東角
-      ];
-
-
-      return {
-        mesh,
-        swiValue,
-        riskLevel,
-        bounds,
-        color: RISK_COLORS[riskLevel]
-      };
-    }).filter(item => item !== null); // nullを除外
-  }, [filteredMeshes, meshes, selectedTime, meshIntervals, selectedPrefecture, timeIndexMap]);
+  // Canvas描画では個別計算はCanvasGridLayer内で実行
 
   return (
     <div style={{ height: '600px', width: '100%', position: 'relative' }}>
@@ -214,51 +176,13 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
           opacity={0.8}
         />
         
-        {meshDisplayData.map(({ mesh, swiValue, riskLevel, bounds, color }) => {
-          return (
-          <Rectangle
-            key={mesh.code}
-            bounds={bounds}
-            pathOptions={{
-              color: 'rgba(200, 200, 200, 0.3)',  // 統一した薄いグレーの境界線
-              fillColor: color,
-              fillOpacity: riskLevel === RiskLevel.NORMAL ? 0 : 0.7,  // 危険度0は完全透明
-              weight: 0.5,  // 統一した境界線の太さ
-              opacity: 0.8   // 統一した境界線の透明度
-            }}
-            eventHandlers={{
-              click: () => onMeshClick?.(mesh)
-            }}
-          >
-            <Popup>
-              <div style={{ minWidth: '200px' }}>
-                <h4>メッシュ詳細</h4>
-                <p><strong>コード:</strong> {mesh.code}</p>
-                <p><strong>緯度:</strong> {mesh.lat.toFixed(4)}</p>
-                <p><strong>経度:</strong> {mesh.lon.toFixed(4)}</p>
-                <p><strong>時刻 FT{selectedTime}の土壌雨量指数:</strong> {swiValue.toFixed(1)}</p>
-                <p><strong>リスクレベル:</strong> 
-                  <span style={{ 
-                    color: color, 
-                    fontWeight: 'bold',
-                    marginLeft: '5px'
-                  }}>
-                    {riskLevel === RiskLevel.NORMAL && '正常'}
-                    {riskLevel === RiskLevel.CAUTION && '注意'}
-                    {riskLevel === RiskLevel.WARNING && '警報'}
-                    {riskLevel === RiskLevel.DISASTER && '土砂災害'}
-                  </span>
-                </p>
-                <hr />
-                <p><strong>基準値:</strong></p>
-                <p>注意報: {mesh.advisary_bound}</p>
-                <p>警報: {mesh.warning_bound}</p>
-                <p>土砂災害: {mesh.dosyakei_bound}</p>
-              </div>
-            </Popup>
-          </Rectangle>
-          );
-        })}
+        {/* Canvas描画によるメッシュ表示（高速化・安定版） */}
+        <SimpleCanvasLayer
+          meshes={meshes}
+          selectedTime={selectedTime}
+          meshIntervals={meshIntervals}
+          onMeshClick={onMeshClick}
+        />
 
       </MapContainer>
       

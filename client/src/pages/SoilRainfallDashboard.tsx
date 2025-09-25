@@ -34,15 +34,18 @@ const SoilRainfallDashboard: React.FC = () => {
     return threeHoursAgo.toISOString().slice(0, 19);
   });
   
-  // 時刻変更ハンドラー
+  // 時刻変更ハンドラー（最適化版）
   const handleTimeChange = (newTime: number) => {
+    // 同じ時刻が選択された場合は何もしない
+    if (newTime === selectedTime) return;
+
     setIsTimeChanging(true);
     setSelectedTime(newTime);
-    
-    // 少し遅延を入れて描画完了を待つ
+
+    // 遅延を短縮（描画は既に最適化済み）
     setTimeout(() => {
       setIsTimeChanging(false);
-    }, 100);
+    }, 50);
   };
   const [selectedMesh, setSelectedMesh] = useState<Mesh | null>(null);
   const [selectedArea, setSelectedArea] = useState<Area | null>(null);
