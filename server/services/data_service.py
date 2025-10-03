@@ -232,7 +232,12 @@ class DataService:
                         warning_bound=int(warning_bounds[i]),
                         dosyakei_bound=dosyakei_bounds[i],
                         swi=[],
-                        rain=[],
+                        swi_hourly=[],
+                        rain_1hour=[],
+                        rain_1hour_max=[],
+                        rain_3hour=[],
+                        risk_hourly=[],
+                        risk_3hour_max=[],
                         vba_x=vba_x,
                         vba_y=vba_y
                     )

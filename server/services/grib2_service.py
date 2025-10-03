@@ -436,14 +436,15 @@ class Grib2Service:
             raise
     
     def unpack_guidance_grib2(self, data: bytes) -> Tuple[BaseInfo, Dict[str, Any]]:
-        """降水量予測データ解析（VBA完全再現版 - 全26個データ取得）"""
+        """降水量予測データ解析（1時間雨量・3時間雨量の両方取得）"""
         try:
             base_info, position, total_size = self.unpack_info(data, 0)
-            guidance_data = []
-            
+            guidance_data_1h = []  # 1時間雨量
+            guidance_data_3h = []  # 3時間雨量
+
             loop_count = 1
             prev_ft = 0
-            
+
             # VBA Doループを line-by-line で再現
             while position < total_size - 4:
                 # VBA: section_size = get_dat(buf, position + 1, 4)
@@ -452,21 +453,29 @@ class Grib2Service:
                 span = self.get_dat(data, position + 49, 4)  # 0ベース調整
                 # VBA: ft = get_dat(buf, position + 19, 4) + span
                 ft = self.get_dat(data, position + 18, 4) + span  # 0ベース調整
-                
+
                 # VBA: If prev_ft > ft Then loop_count = loop_count + 1
                 if prev_ft > ft:
                     loop_count += 1
-                
+
                 # VBA: position = position + section_size
                 position += section_size
-                
-                # VBA完全再現: span=3 AND loop_count=2の条件でのみデータ取得
-                if span == 3 and loop_count == 2:
+
+                # span=3 の場合にデータ取得
+                if span == 3:
                     data_values, position = self._unpack_data_section(data, position, base_info.grid_num)
-                    guidance_data.append({
-                        'ft': ft,
-                        'value': data_values
-                    })
+
+                    # loop_count=1: 1時間雨量, loop_count=2: 3時間雨量
+                    if loop_count == 1:
+                        guidance_data_1h.append({
+                            'ft': ft,
+                            'value': data_values
+                        })
+                    elif loop_count == 2:
+                        guidance_data_3h.append({
+                            'ft': ft,
+                            'value': data_values
+                        })
                 else:
                     # VBA Else処理: セクション5〜7をスキップ
                     # VBA: section_size = get_dat(buf, position + 1, 4)
@@ -481,17 +490,21 @@ class Grib2Service:
                     section_size = self.get_dat(data, position, 4)
                     # VBA: position = position + section_size
                     position += section_size
-                
+
                 prev_ft = ft
-            
-            # 元の実装と同じ辞書形式で返却
+
+            # 1時間雨量と3時間雨量を両方返却
             result = {
                 'base_info': base_info,
-                'data': guidance_data
+                'data': guidance_data_3h,      # 後方互換性のため
+                'data_1h': guidance_data_1h,   # 1時間雨量
+                'data_3h': guidance_data_3h    # 3時間雨量
             }
-            
+
+            logger.info(f"Guidance解析完了: 1時間雨量={len(guidance_data_1h)}件, 3時間雨量={len(guidance_data_3h)}件")
+
             return base_info, result
-            
+
         except Exception as e:
             logger.error(f"Guidance GRIB2解析エラー: {e}")
             raise

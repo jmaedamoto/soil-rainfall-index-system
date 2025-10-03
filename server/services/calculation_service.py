@@ -116,9 +116,14 @@ class CalculationService:
         
         return s1_new, s2_new, s3_new
 
-    def calc_rain_timelapse(self, mesh: Mesh, guidance_grib2: Dict[str, Any]) -> List[GuidanceTimeSeries]:
+    def calc_rain_timelapse(self, mesh: Mesh, guidance_grib2: Dict[str, Any], data_key: str = 'data') -> List[GuidanceTimeSeries]:
         """
-        VBA Function calc_rain_timelapse の完全再現
+        降水量時系列計算（1時間雨量・3時間雨量共通）
+
+        Args:
+            mesh: メッシュデータ
+            guidance_grib2: ガイダンスGRIB2データ
+            data_key: 取得するデータのキー ('data', 'data_1h', 'data_3h')
         """
         try:
             # VBA: guidance_index = get_data_num(m.lat, m.lon, guidance_grib2.base_info)
@@ -126,14 +131,19 @@ class CalculationService:
 
             # VBA配列は1-based、Pythonは0-basedなので変換
             python_index = guidance_index - 1
-            
+
+            # 指定されたデータキーのデータを取得
+            if data_key not in guidance_grib2:
+                logger.warning(f"Data key '{data_key}' not found in guidance_grib2")
+                return []
+
             # VBA: ReDim rain_timeseries(UBound(guidance_grib2.data))
             rain_timeseries = []
-            
+
             # VBA: For i = 1 To UBound(guidance_grib2.data)
-            for i in range(len(guidance_grib2['data'])):  # Python 0-based
-                guidance_item = guidance_grib2['data'][i]
-                
+            for i in range(len(guidance_grib2[data_key])):  # Python 0-based
+                guidance_item = guidance_grib2[data_key][i]
+
                 # VBA: rain_timeseries(i).ft = guidance_grib2.data(i).ft
                 # VBA: rain_timeseries(i).value = guidance_grib2.data(i).value(guidance_index)
                 if python_index < len(guidance_item['value']):
@@ -142,11 +152,197 @@ class CalculationService:
                         ft=guidance_item['ft'],
                         value=value
                     ))
-            
+
             return rain_timeseries
-            
+
         except Exception as e:
             logger.error(f"Rain calculation error for mesh {mesh.code}: {e}")
+            return []
+
+    def calc_hourly_rain(self, rain_3h: List[GuidanceTimeSeries], rain_1h_max: List[GuidanceTimeSeries]) -> List[GuidanceTimeSeries]:
+        """
+        1時間ごとの雨量を推定
+
+        前提:
+        - 3時間の中央の1時間に最大1時間雨量が降る
+        - 残りの雨量は前後1時間で半分ずつ分配
+
+        Args:
+            rain_3h: 3時間雨量時系列
+            rain_1h_max: 3時間内の最大1時間雨量時系列
+
+        Returns:
+            1時間ごとの雨量時系列
+        """
+        try:
+            hourly_rain = []
+
+            # 各3時間期間を処理
+            for i in range(len(rain_3h)):
+                if i >= len(rain_1h_max):
+                    break
+
+                r3h = rain_3h[i].value
+                r1h_max = rain_1h_max[i].value
+                ft_base = rain_3h[i].ft
+
+                # 残りの雨量を計算
+                r_rest = max(0, r3h - r1h_max)
+                r_half = r_rest / 2.0
+
+                # FT=3の場合: 0-1時, 1-2時, 2-3時
+                # 前1時間 (ft_base - 3 → ft_base - 2)
+                hourly_rain.append(GuidanceTimeSeries(
+                    ft=ft_base - 2,
+                    value=r_half
+                ))
+
+                # 中央1時間（最大） (ft_base - 2 → ft_base - 1)
+                hourly_rain.append(GuidanceTimeSeries(
+                    ft=ft_base - 1,
+                    value=r1h_max
+                ))
+
+                # 後1時間 (ft_base - 1 → ft_base)
+                hourly_rain.append(GuidanceTimeSeries(
+                    ft=ft_base,
+                    value=r_half
+                ))
+
+            return hourly_rain
+
+        except Exception as e:
+            logger.error(f"Hourly rain calculation error: {e}")
+            return []
+
+    def calc_swi_hourly(self, initial_swi: float, initial_first_tunk: float,
+                        initial_second_tunk: float, initial_third_tunk: float,
+                        hourly_rain: List[GuidanceTimeSeries]) -> List[SwiTimeSeries]:
+        """
+        1時間ごとの土壌雨量指数を計算
+
+        Args:
+            initial_swi: 初期SWI値
+            initial_first_tunk: 初期第1タンク値
+            initial_second_tunk: 初期第2タンク値
+            initial_third_tunk: 初期第3タンク値
+            hourly_rain: 1時間ごとの雨量時系列
+
+        Returns:
+            1時間ごとのSWI時系列
+        """
+        try:
+            swi_hourly = []
+
+            # 初期値（FT=0）
+            swi_hourly.append(SwiTimeSeries(ft=0, value=initial_swi))
+
+            # 現在のタンク状態
+            current_first_tunk = initial_first_tunk
+            current_second_tunk = initial_second_tunk
+            current_third_tunk = initial_third_tunk
+
+            # 1時間ごとに計算（dt=1時間）
+            for rain_item in hourly_rain:
+                # タンクモデル計算（1時間ステップ）
+                tmp_f, tmp_s, tmp_t = self.calc_tunk_model(
+                    current_first_tunk,
+                    current_second_tunk,
+                    current_third_tunk,
+                    1,  # 1時間
+                    rain_item.value
+                )
+
+                # SWI = 3つのタンクの合計
+                swi_value = tmp_f + tmp_s + tmp_t
+                swi_hourly.append(SwiTimeSeries(
+                    ft=rain_item.ft,
+                    value=swi_value
+                ))
+
+                # タンク状態を更新
+                current_first_tunk = tmp_f
+                current_second_tunk = tmp_s
+                current_third_tunk = tmp_t
+
+            return swi_hourly
+
+        except Exception as e:
+            logger.error(f"Hourly SWI calculation error: {e}")
+            return []
+
+    def calc_hourly_risk(self, swi_hourly: List[SwiTimeSeries],
+                         advisary_bound: int, warning_bound: int,
+                         dosyakei_bound: int) -> List[Risk]:
+        """
+        1時間ごとの危険度を判定
+
+        Args:
+            swi_hourly: 1時間ごとのSWI時系列
+            advisary_bound: 注意報基準値
+            warning_bound: 警報基準値
+            dosyakei_bound: 土砂災害基準値
+
+        Returns:
+            1時間ごとのリスク時系列
+        """
+        try:
+            risk_hourly = []
+
+            for swi_item in swi_hourly:
+                swi_value = swi_item.value
+
+                # VBAと同じリスクレベル判定
+                if swi_value >= dosyakei_bound:
+                    risk = 3  # 土砂災害
+                elif swi_value >= warning_bound:
+                    risk = 2  # 警報
+                elif swi_value >= advisary_bound:
+                    risk = 1  # 注意
+                else:
+                    risk = 0  # 正常
+
+                risk_hourly.append(Risk(ft=swi_item.ft, value=risk))
+
+            return risk_hourly
+
+        except Exception as e:
+            logger.error(f"Hourly risk calculation error: {e}")
+            return []
+
+    def calc_3hour_max_risk_from_hourly(self, risk_hourly: List[Risk]) -> List[Risk]:
+        """
+        1時間ごとの危険度から3時間ごとの最大危険度を算出
+
+        Args:
+            risk_hourly: 1時間ごとのリスク時系列
+
+        Returns:
+            3時間ごとの最大リスク時系列
+        """
+        try:
+            risk_3hour_max = []
+
+            # 3時間ごとにグループ化して最大値を取得
+            # FT1,2,3 → FT3, FT4,5,6 → FT6, ...
+            for i in range(0, len(risk_hourly), 3):
+                # 3時間分のリスクを取得
+                group = risk_hourly[i:i+3]
+                if not group:
+                    continue
+
+                # 最大リスクを計算
+                max_risk = max(r.value for r in group)
+
+                # 3時間期間の終了時刻をFTとする
+                ft_end = group[-1].ft
+
+                risk_3hour_max.append(Risk(ft=ft_end, value=max_risk))
+
+            return risk_3hour_max
+
+        except Exception as e:
+            logger.error(f"3-hour max risk calculation error: {e}")
             return []
 
     def calc_swi_timelapse(self, mesh: Mesh, swi_grib2: Dict[str, Any], guidance_grib2: Dict[str, Any]) -> List[SwiTimeSeries]:
@@ -299,14 +495,53 @@ class CalculationService:
     def process_mesh_calculations(self, mesh: Mesh, swi_grib2: Dict[str, Any], guidance_grib2: Dict[str, Any]) -> Mesh:
         """
         VBA calc_data の一部処理
-        単一メッシュの計算を実行
+        単一メッシュの計算を実行（全雨量・SWI・危険度）
         """
         try:
-            # VBA: prefectures(i).areas(j).meshes(k).swi = calc_swi_timelapse(...)
+            # 3時間ごとのSWI計算
             mesh.swi = self.calc_swi_timelapse(mesh, swi_grib2, guidance_grib2)
 
-            # VBA: prefectures(i).areas(j).meshes(k).rain = calc_rain_timelapse(...)
-            mesh.rain = self.calc_rain_timelapse(mesh, guidance_grib2)
+            # 3時間内の最大1時間雨量の計算
+            mesh.rain_1hour_max = self.calc_rain_timelapse(mesh, guidance_grib2, data_key='data_1h')
+
+            # 3時間雨量の計算
+            mesh.rain_3hour = self.calc_rain_timelapse(mesh, guidance_grib2, data_key='data_3h')
+
+            # 1時間ごとの雨量を推定
+            mesh.rain_1hour = self.calc_hourly_rain(mesh.rain_3hour, mesh.rain_1hour_max)
+
+            # 初期タンク値を取得（GRIB2データから）
+            swi_index = self.get_data_num(mesh.lat, mesh.lon, swi_grib2['base_info'])
+            python_swi_index = swi_index - 1
+
+            if (python_swi_index < len(swi_grib2['swi']) and
+                python_swi_index < len(swi_grib2['first_tunk']) and
+                python_swi_index < len(swi_grib2['second_tunk'])):
+
+                initial_swi = swi_grib2['swi'][python_swi_index] / 10
+                initial_first_tunk = swi_grib2['first_tunk'][python_swi_index] / 10
+                initial_second_tunk = swi_grib2['second_tunk'][python_swi_index] / 10
+                initial_third_tunk = initial_swi - initial_first_tunk - initial_second_tunk
+
+                # 1時間ごとのSWI計算
+                mesh.swi_hourly = self.calc_swi_hourly(
+                    initial_swi,
+                    initial_first_tunk,
+                    initial_second_tunk,
+                    initial_third_tunk,
+                    mesh.rain_1hour
+                )
+
+                # 1時間ごとの危険度計算
+                mesh.risk_hourly = self.calc_hourly_risk(
+                    mesh.swi_hourly,
+                    mesh.advisary_bound,
+                    mesh.warning_bound,
+                    mesh.dosyakei_bound
+                )
+
+                # 3時間ごとの最大危険度計算（1時間雨量ベース）
+                mesh.risk_3hour_max = self.calc_3hour_max_risk_from_hourly(mesh.risk_hourly)
 
             return mesh
 

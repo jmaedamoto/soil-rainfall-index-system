@@ -117,12 +117,32 @@ class MainService:
                             "warning_bound": int(mesh.warning_bound),
                             "dosyakei_bound": int(mesh.dosyakei_bound),
                             "swi_timeline": [
-                                {"ft": s.ft, "value": float(s.value)} 
+                                {"ft": s.ft, "value": float(s.value)}
                                 for s in mesh.swi
                             ],
+                            "swi_hourly_timeline": [
+                                {"ft": s.ft, "value": float(s.value)}
+                                for s in mesh.swi_hourly
+                            ],
+                            "rain_1hour_timeline": [
+                                {"ft": r.ft, "value": float(r.value)}
+                                for r in mesh.rain_1hour
+                            ],
+                            "rain_1hour_max_timeline": [
+                                {"ft": r.ft, "value": float(r.value)}
+                                for r in mesh.rain_1hour_max
+                            ],
                             "rain_timeline": [
-                                {"ft": r.ft, "value": float(r.value)} 
-                                for r in mesh.rain
+                                {"ft": r.ft, "value": float(r.value)}
+                                for r in mesh.rain_3hour
+                            ],
+                            "risk_hourly_timeline": [
+                                {"ft": r.ft, "value": r.value}
+                                for r in mesh.risk_hourly
+                            ],
+                            "risk_3hour_max_timeline": [
+                                {"ft": r.ft, "value": r.value}
+                                for r in mesh.risk_3hour_max
                             ]
                         }
                         area_data["meshes"].append(mesh_data)
@@ -233,12 +253,32 @@ class MainService:
                             "warning_bound": int(mesh.warning_bound),
                             "dosyakei_bound": int(mesh.dosyakei_bound),
                             "swi_timeline": [
-                                {"ft": s.ft, "value": float(s.value)} 
+                                {"ft": s.ft, "value": float(s.value)}
                                 for s in mesh.swi
                             ],
+                            "swi_hourly_timeline": [
+                                {"ft": s.ft, "value": float(s.value)}
+                                for s in mesh.swi_hourly
+                            ],
+                            "rain_1hour_timeline": [
+                                {"ft": r.ft, "value": float(r.value)}
+                                for r in mesh.rain_1hour
+                            ],
+                            "rain_1hour_max_timeline": [
+                                {"ft": r.ft, "value": float(r.value)}
+                                for r in mesh.rain_1hour_max
+                            ],
                             "rain_timeline": [
-                                {"ft": r.ft, "value": float(r.value)} 
-                                for r in mesh.rain
+                                {"ft": r.ft, "value": float(r.value)}
+                                for r in mesh.rain_3hour
+                            ],
+                            "risk_hourly_timeline": [
+                                {"ft": r.ft, "value": r.value}
+                                for r in mesh.risk_hourly
+                            ],
+                            "risk_3hour_max_timeline": [
+                                {"ft": r.ft, "value": r.value}
+                                for r in mesh.risk_3hour_max
                             ]
                         }
                         area_data["meshes"].append(mesh_data)

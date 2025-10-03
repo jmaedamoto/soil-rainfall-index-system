@@ -264,14 +264,49 @@ class TestController:
                         except Exception as e:
                             logger.warning(f"Calculation error for mesh {mesh.code}: {e}")
                             # エラー時はダミーデータを設定（元の実装と同じ）
+                            from models import Risk
                             mesh.swi = [
                                 SwiTimeSeries(ft=0, value=85.5),
                                 SwiTimeSeries(ft=3, value=92.1),
                                 SwiTimeSeries(ft=6, value=88.7)
                             ]
-                            mesh.rain = [
+                            mesh.swi_hourly = [
+                                SwiTimeSeries(ft=0, value=85.5),
+                                SwiTimeSeries(ft=1, value=86.0),
+                                SwiTimeSeries(ft=2, value=90.0),
+                                SwiTimeSeries(ft=3, value=92.1),
+                                SwiTimeSeries(ft=4, value=88.0),
+                                SwiTimeSeries(ft=5, value=89.0),
+                                SwiTimeSeries(ft=6, value=88.7)
+                            ]
+                            mesh.rain_1hour = [
+                                GuidanceTimeSeries(ft=1, value=0.75),
+                                GuidanceTimeSeries(ft=2, value=1.0),
+                                GuidanceTimeSeries(ft=3, value=0.75),
+                                GuidanceTimeSeries(ft=4, value=0.5),
+                                GuidanceTimeSeries(ft=5, value=0.8),
+                                GuidanceTimeSeries(ft=6, value=0.5)
+                            ]
+                            mesh.rain_1hour_max = [
+                                GuidanceTimeSeries(ft=3, value=1.0),
+                                GuidanceTimeSeries(ft=6, value=0.8)
+                            ]
+                            mesh.rain_3hour = [
                                 GuidanceTimeSeries(ft=3, value=2.5),
                                 GuidanceTimeSeries(ft=6, value=1.8)
+                            ]
+                            mesh.risk_hourly = [
+                                Risk(ft=0, value=0),
+                                Risk(ft=1, value=0),
+                                Risk(ft=2, value=1),
+                                Risk(ft=3, value=1),
+                                Risk(ft=4, value=0),
+                                Risk(ft=5, value=1),
+                                Risk(ft=6, value=0)
+                            ]
+                            mesh.risk_3hour_max = [
+                                Risk(ft=3, value=1),
+                                Risk(ft=6, value=1)
                             ]
                         
                         # 元の実装と同じ形式でmesh_result作成
@@ -285,8 +320,23 @@ class TestController:
                             "swi_timeline": [
                                 {"ft": int(s.ft), "value": float(s.value)} for s in mesh.swi
                             ],
+                            "swi_hourly_timeline": [
+                                {"ft": int(s.ft), "value": float(s.value)} for s in mesh.swi_hourly
+                            ],
+                            "rain_1hour_timeline": [
+                                {"ft": int(r.ft), "value": float(r.value)} for r in mesh.rain_1hour
+                            ],
+                            "rain_1hour_max_timeline": [
+                                {"ft": int(r.ft), "value": float(r.value)} for r in mesh.rain_1hour_max
+                            ],
                             "rain_timeline": [
-                                {"ft": int(r.ft), "value": float(r.value)} for r in mesh.rain
+                                {"ft": int(r.ft), "value": float(r.value)} for r in mesh.rain_3hour
+                            ],
+                            "risk_hourly_timeline": [
+                                {"ft": int(r.ft), "value": int(r.value)} for r in mesh.risk_hourly
+                            ],
+                            "risk_3hour_max_timeline": [
+                                {"ft": int(r.ft), "value": int(r.value)} for r in mesh.risk_3hour_max
                             ]
                         }
                         area_result["meshes"].append(mesh_result)

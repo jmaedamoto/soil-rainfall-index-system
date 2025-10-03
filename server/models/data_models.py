@@ -56,8 +56,13 @@ class Mesh:
     advisary_bound: int  # 注意報基準値
     warning_bound: int   # 警報基準値
     dosyakei_bound: int  # 土砂災害基準値
-    swi: List[SwiTimeSeries]
-    rain: List[GuidanceTimeSeries]
+    swi: List[SwiTimeSeries]  # 3時間ごとのSWI
+    swi_hourly: List[SwiTimeSeries]  # 1時間ごとのSWI
+    rain_1hour: List[GuidanceTimeSeries]  # 1時間ごとの雨量（推定）
+    rain_1hour_max: List[GuidanceTimeSeries]  # 3時間内の最大1時間雨量
+    rain_3hour: List[GuidanceTimeSeries]  # 3時間ごとの合計雨量
+    risk_hourly: List[Risk]  # 1時間ごとの危険度
+    risk_3hour_max: List[Risk]  # 3時間ごとの最大危険度（1時間雨量ベース）
     vba_x: Optional[int] = None  # VBA X座標（GRIB2データアクセス用）
     vba_y: Optional[int] = None  # VBA Y座標（GRIB2データアクセス用）
 
