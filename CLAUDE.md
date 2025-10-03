@@ -49,16 +49,23 @@ ExcelのVBA（Visual Basic for Applications）で実装されていた土壌雨�
 - **フォーマット**: GRIB2バイナリ形式
 - **境界データ**: `dosha_*.csv`（市区町村別警報基準値）
 
-#### **GRIB2 URL構築パターン（2025年9月5日修正済み）**
+#### **GRIB2 URL構築パターン（2025年10月3日修正済み）**
 ```python
 # 土壌雨量指数データ URL
 swi_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/swi10/{initial_time.strftime('%Y/%m/%d')}/Z__C_RJTD_{initial_time.strftime('%Y%m%d%H%M%S')}_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin"
 
-# 降水量予測データ URL（修正済み：二重スラッシュ除去）
-guidance_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc/{initial_time.strftime('%Y/%m/%d')}/guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax00.bin"
+# 降水量予測データ URL（修正済み：時刻対応ファイル名）
+hour = initial_time.hour
+if hour % 6 == 0:  # 0,6,12,18時
+    rmax_hour = "00"
+else:  # 3,9,15,21時
+    rmax_hour = "03"
+guidance_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc/{initial_time.strftime('%Y/%m/%d')}/guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax{rmax_hour}.bin"
 ```
 
-**修正点**: guidance_url の構築で `/gdc//` となっていた二重スラッシュを `/gdc/` に修正
+**修正点**:
+- 2025年9月5日: guidance_url の構築で `/gdc//` となっていた二重スラッシュを `/gdc/` に修正
+- 2025年10月3日: ファイル名の時刻部分を修正（0,6,12,18時→"00", 3,9,15,21時→"03"）
 - **土砂災害データ**: `dosyakei_*.csv`（メッシュ別危険度レベル）
 
 ## プロジェクト構造

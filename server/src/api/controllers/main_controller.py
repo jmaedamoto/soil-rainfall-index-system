@@ -168,7 +168,13 @@ class MainController:
             
             # 使用したURLも返却（デバッグ用）
             swi_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/swi10/{initial_time.strftime('%Y/%m/%d')}/Z__C_RJTD_{initial_time.strftime('%Y%m%d%H%M%S')}_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin"
-            guidance_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc/{initial_time.strftime('%Y/%m/%d')}/guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax{initial_time.strftime('%H')}.bin"
+            # ガイダンスファイル名の時刻変換（0,6,12,18時 → "00"、3,9,15,21時 → "03"）
+            hour = initial_time.hour
+            if hour % 6 == 0:  # 0,6,12,18時
+                rmax_hour = "00"
+            else:  # 3,9,15,21時
+                rmax_hour = "03"
+            guidance_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc/{initial_time.strftime('%Y/%m/%d')}/guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax{rmax_hour}.bin"
             
             result["used_urls"] = {
                 "swi_url": swi_url,
