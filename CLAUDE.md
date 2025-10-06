@@ -1334,10 +1334,67 @@ meshLayerGroup.addLayer(rectangle);
 
 ---
 
-**最終更新**: 2025年10月3日
-**バージョン**: 6.3.0（1時間雨量ベース危険度評価機能追加版）
+## 🎉 **2025年10月6日 時刻表示UTC→JST変換・時間帯別表示修正**
+
+### ✅ **エリア別リスクレベル時系列の表示改善完了**
+
+#### **UTC→JST変換実装**
+- **タイムゾーン変換**: APIから受け取るUTC時刻をJST（UTC+9時間）に変換
+- **正確な日本時刻表示**: ユーザーインターフェースで正しい日本時刻を表示
+
+#### **時間帯別表示の修正**
+- **3時間期間の正確な表現**: FTは期間の終了時刻を表すことを明確化
+  - FT0 (0時) → 前日21-24時の危険度
+  - FT3 (3時) → 当日0-3時の危険度
+  - FT6 (6時) → 当日3-6時の危険度
+- **日付グルーピング修正**: 期間の開始時刻の日付でグループ化
+
+#### **実装内容**
+
+**AreaRiskBarChart.tsx**:
+- UTC時刻を受け取る`initialTime`プロップ追加
+- JST変換ロジック実装（+9時間）
+- 期間開始時刻による日付判定ロジック修正
+- 2段階ヘッダー（日付→時刻）の正確な表示
+
+**SoilRainfallDashboard.tsx**:
+- AreaRiskBarChartコンポーネントに`initialTime`プロップを渡す
+- データソースから`swi_initial_time`または`initial_time`を使用
+
+#### **技術的改善**
+
+**タイムゾーン処理**:
+```typescript
+// UTC時刻をJST時刻に変換（+9時間）
+const initialTimeUTC = new Date(initialTime);
+const JST_OFFSET = 9 * 60 * 60 * 1000;
+const initialTimeJST = new Date(initialTimeUTC.getTime() + JST_OFFSET);
+```
+
+**期間マッピング修正**:
+```typescript
+// FT時刻（期間の終了時刻）をJSTで計算
+const ftTimeJST = new Date(initialTimeJST.getTime() + ft * 60 * 60 * 1000);
+const ftHour = ftTimeJST.getHours();
+
+// FTが表す3時間期間の開始時刻を計算（FT - 3時間）
+const periodStartTime = new Date(ftTimeJST.getTime() - 3 * 60 * 60 * 1000);
+
+// 期間の日付は開始時刻の日付を使用
+const dateStr = `${periodStartTime.getMonth() + 1}月${periodStartTime.getDate()}日`;
+```
+
+#### **ユーザー体験の向上**
+- ✅ 日本時刻での直感的な時系列表示
+- ✅ 正確な日付・時刻区分
+- ✅ 3時間期間の物理的意味の正確な表現
+
+---
+
+**最終更新**: 2025年10月6日
+**バージョン**: 6.3.1（UTC→JST変換・時間帯別表示修正版）
 **作成者**: Claude (Anthropic)
-**プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・Canvas描画最適化・1時間危険度評価対応版）
+**プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・Canvas描画最適化・1時間危険度評価・JST表示対応版）
 
 ## 実装完了状況
 

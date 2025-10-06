@@ -6,6 +6,7 @@ interface AreaRiskBarChartProps {
   selectedTime: number;
   selectedPrefecture: string;
   onPrefectureChange: (prefectureCode: string) => void;
+  initialTime: string; // UTC時刻（ISO8601形式）
   title?: string;
   height?: number;
 }
@@ -15,10 +16,11 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
   selectedTime,
   selectedPrefecture,
   onPrefectureChange,
+  initialTime,
   title = 'エリア別リスクレベル時系列',
   height = 800
 }) => {
-  const [hoveredCell, setHoveredCell] = useState<{area: string, time: string, risk: number} | null>(null);
+  const [hoveredCell, setHoveredCell] = useState<{area: string, time: number, risk: number} | null>(null);
 
   // 選択された都道府県のエリアを取得
   const areas = useMemo(() => {
@@ -26,9 +28,14 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
     return selectedPref ? selectedPref.areas : [];
   }, [prefectures, selectedPrefecture]);
 
-  // ヒートマップ用データを準備
-  const { timeLabels, allAreas, heatmapMatrix, requiredHeight } = useMemo(() => {
-    if (areas.length === 0) return { timeLabels: [], allAreas: [], heatmapMatrix: [], requiredHeight: 0 };
+  // タイムライン構造を準備（日付と時刻のグループ化）
+  const { dateGroups, allAreas } = useMemo(() => {
+    if (areas.length === 0) return { dateGroups: [], allAreas: [] };
+
+    // UTC時刻をJST時刻に変換（+9時間）
+    const initialTimeUTC = new Date(initialTime);
+    const JST_OFFSET = 9 * 60 * 60 * 1000; // 9時間をミリ秒に変換
+    const initialTimeJST = new Date(initialTimeUTC.getTime() + JST_OFFSET);
 
     // 全ての利用可能な時刻を取得
     const timeSet = new Set<number>();
@@ -39,10 +46,33 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
     });
     const sortedTimes = Array.from(timeSet).sort((a, b) => a - b);
 
-    // 時刻ラベルを作成（FT0h, FT3h...FT78h）
-    const timeLabels = sortedTimes.map(t => t === 0 ? '現在' : `FT${t}h`);
+    // 時刻を日付ごとにグループ化
+    // FTは3時間期間の終了時刻を表す（FT0=21-24時、FT3=0-3時、FT6=3-6時...）
+    const dateGroups: Array<{
+      date: string;
+      hours: Array<{ ft: number; hour: number }>;
+    }> = [];
 
-    // 全エリアを表示（制限なし）
+    sortedTimes.forEach(ft => {
+      // FT時刻（期間の終了時刻）をJSTで計算
+      const ftTimeJST = new Date(initialTimeJST.getTime() + ft * 60 * 60 * 1000);
+      const ftHour = ftTimeJST.getHours();
+
+      // FTが表す3時間期間の開始時刻を計算（FT - 3時間）
+      const periodStartTime = new Date(ftTimeJST.getTime() - 3 * 60 * 60 * 1000);
+
+      // 期間の日付は開始時刻の日付を使用
+      const dateStr = `${periodStartTime.getMonth() + 1}月${periodStartTime.getDate()}日`;
+
+      let dateGroup = dateGroups.find(g => g.date === dateStr);
+      if (!dateGroup) {
+        dateGroup = { date: dateStr, hours: [] };
+        dateGroups.push(dateGroup);
+      }
+      dateGroup.hours.push({ ft, hour: ftHour });
+    });
+
+    // 全エリアを現在のリスクレベル順にソート
     const allAreas = areas
       .map(area => {
         const currentRisk = area.risk_timeline.find(r => r.ft === selectedTime)?.value || 0;
@@ -51,46 +81,25 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
       .sort((a, b) => b.currentRisk - a.currentRisk)
       .map(item => item.area);
 
-    // 必要な高さを計算（全エリアを表示するため）
-    const rowHeight = 12; // 1行あたりの高さを縮小
-    const headerHeight = 40; // ヘッダー高さを縮小
-    const requiredHeight = headerHeight + (allAreas.length * rowHeight);
-
-    // ヒートマップマトリックスを作成
-    const heatmapMatrix = allAreas.map(area => {
-      return timeLabels.map(timeLabel => {
-        const timeValue = timeLabel === '現在' ? 0 : 
-          parseInt(timeLabel.replace('FT', '').replace('h', ''));
-        const riskPoint = area.risk_timeline.find(r => r.ft === timeValue);
-        return {
-          areaName: area.name,
-          timeLabel: timeLabel,
-          timeValue: timeValue,
-          riskLevel: riskPoint ? riskPoint.value : 0,
-          color: RISK_COLORS[riskPoint ? riskPoint.value as RiskLevel : 0]
-        };
-      });
-    });
-
-    return { timeLabels, allAreas, heatmapMatrix, requiredHeight };
-  }, [areas, selectedTime]);
+    return { dateGroups, allAreas };
+  }, [areas, selectedTime, initialTime]);
 
   return (
     <div style={{ marginBottom: '30px' }}>
       {/* タイトル */}
-      <h3 style={{ 
-        textAlign: 'center', 
+      <h3 style={{
+        textAlign: 'center',
         marginBottom: '20px',
-        fontSize: '16px',
+        fontSize: '18px',
         fontWeight: 'bold'
       }}>
         {title}
       </h3>
 
       {/* 都道府県選択 */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
         marginBottom: '20px',
         gap: '10px',
         alignItems: 'center'
@@ -116,140 +125,133 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
         </select>
       </div>
 
-      {/* ヒートマップ表 */}
-      <div style={{ 
-        overflowX: 'auto', 
-        overflowY: 'hidden', // 縦スクロール完全無効
-        height: `${requiredHeight}px`, // 必要な高さを動的設定
-        width: '100%',
-        border: '1px solid #ddd',
-        borderRadius: '8px',
-        backgroundColor: '#fff'
+      {/* タイムライン表 */}
+      <div style={{
+        border: '2px solid #000',
+        backgroundColor: '#fff',
+        width: '100%'
       }}>
-        <table style={{ 
+        <table style={{
           borderCollapse: 'collapse',
-          minWidth: `${timeLabels.length * 28 + 100}px`, // セル幅を拡大
-          fontSize: '8px',
-          tableLayout: 'fixed',
-          height: '100%'
+          width: '100%',
+          fontSize: '12px',
+          tableLayout: 'fixed'
         }}>
-          {/* ヘッダー行（時刻） */}
+          {/* ヘッダー: 日付行 */}
           <thead>
-            <tr>
+            <tr style={{ borderBottom: '2px solid #000' }}>
               <th style={{
-                position: 'sticky',
-                left: 0,
-                top: 0,
-                backgroundColor: '#f8f9fa',
-                border: '1px solid #ddd',
-                padding: '1px 2px',
-                minWidth: '100px',
+                backgroundColor: '#fff',
+                border: '2px solid #000',
+                borderRight: '2px solid #000',
+                padding: '4px',
                 width: '100px',
                 textAlign: 'left',
-                fontWeight: 'bold',
-                fontSize: '9px',
-                zIndex: 3
+                fontWeight: 'bold'
               }}>
-                エリア名
+                {/* 空欄 */}
               </th>
-              {timeLabels.map((timeLabel, index) => {
-                const timeValue = timeLabel === '現在' ? 0 : parseInt(timeLabel.replace('FT', '').replace('h', ''));
-                const isSelectedTime = timeValue === selectedTime;
-                return (
-                  <th key={index} style={{
-                    position: 'sticky',
-                    top: 0,
-                    backgroundColor: isSelectedTime ? '#ffd700' : '#f8f9fa',
-                    border: isSelectedTime ? '2px solid #ff6b35' : '1px solid #ddd',
-                    padding: '2px',
-                    width: '28px',
-                    minWidth: '28px',
-                    maxWidth: '28px',
+              {dateGroups.map((dateGroup, index) => (
+                <th
+                  key={index}
+                  colSpan={dateGroup.hours.length}
+                  style={{
+                    backgroundColor: '#fff',
+                    border: '2px solid #000',
+                    padding: '4px',
                     textAlign: 'center',
                     fontWeight: 'bold',
-                    fontSize: '7px',
-                    writingMode: 'vertical-rl',
-                    textOrientation: 'mixed',
-                    height: '40px',
-                    zIndex: 2,
-                    boxShadow: isSelectedTime ? '0 0 4px rgba(255, 107, 53, 0.5)' : 'none'
-                  }}>
-                    <div style={{ 
-                      transform: 'rotate(180deg)',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {timeLabel}
-                    </div>
+                    fontSize: '14px'
+                  }}
+                >
+                  {dateGroup.date}
+                </th>
+              ))}
+            </tr>
+
+            {/* ヘッダー: 時刻行 */}
+            <tr style={{ borderBottom: '2px solid #000' }}>
+              <th style={{
+                backgroundColor: '#fff',
+                border: '2px solid #000',
+                borderRight: '2px solid #000',
+                padding: '4px',
+                textAlign: 'left',
+                fontWeight: 'bold'
+              }}>
+                {/* 空欄 */}
+              </th>
+              {dateGroups.map(dateGroup =>
+                dateGroup.hours.map((hourInfo, hourIndex) => (
+                  <th
+                    key={`${dateGroup.date}-${hourIndex}`}
+                    style={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #000',
+                      borderTop: '2px solid #000',
+                      padding: '2px',
+                      textAlign: 'center',
+                      fontWeight: 'normal',
+                      fontSize: '11px'
+                    }}
+                  >
+                    {hourInfo.hour}
                   </th>
-                );
-              })}
+                ))
+              )}
             </tr>
           </thead>
-          
+
           {/* データ行（各エリア） */}
           <tbody>
-            {heatmapMatrix.map((areaRow, areaIndex) => (
-              <tr key={areaIndex}>
+            {allAreas.map((area, areaIndex) => (
+              <tr key={areaIndex} style={{ borderBottom: '1px solid #000' }}>
                 {/* エリア名（左側固定列） */}
                 <td style={{
-                  position: 'sticky',
-                  left: 0,
-                  backgroundColor: '#f8f9fa',
-                  border: '1px solid #ddd',
-                  padding: '1px 2px',
+                  backgroundColor: '#fff',
+                  border: '2px solid #000',
+                  borderRight: '2px solid #000',
+                  padding: '4px',
                   fontWeight: 'bold',
-                  fontSize: '8px',
+                  fontSize: '12px',
                   width: '100px',
-                  maxWidth: '100px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
-                  height: '12px', // 固定行高さを縮小
-                  lineHeight: '12px',
-                  zIndex: 1
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
                 }}>
-                  {allAreas[areaIndex].name}
+                  {area.name}
                 </td>
-                
+
                 {/* 各時刻のセル */}
-                {areaRow.map((cell, timeIndex) => {
-                  const isSelectedTime = cell.timeValue === selectedTime;
-                  return (
-                  <td 
-                    key={timeIndex}
-                    style={{
-                      backgroundColor: cell.color,
-                      border: isSelectedTime ? '2px solid #ff6b35' : '1px solid #fff',
-                      padding: '0',
-                      width: '28px',
-                      minWidth: '28px',
-                      maxWidth: '28px',
-                      height: '12px', // 固定行高さを縮小
-                      textAlign: 'center',
-                      verticalAlign: 'middle',
-                      cursor: 'pointer',
-                      position: 'relative',
-                      boxShadow: isSelectedTime ? '0 0 4px rgba(255, 107, 53, 0.7)' : 'none'
-                    }}
-                    onMouseEnter={() => setHoveredCell({
-                      area: cell.areaName,
-                      time: cell.timeLabel,
-                      risk: cell.riskLevel
-                    })}
-                    onMouseLeave={() => setHoveredCell(null)}
-                  >
-                    {/* リスクレベルを小さく表示 */}
-                    <span style={{ 
-                      fontSize: '8px', 
-                      color: cell.riskLevel >= 2 ? 'white' : '#333',
-                      fontWeight: 'bold',
-                      lineHeight: '1'
-                    }}>
-                      {cell.riskLevel || ''}
-                    </span>
-                  </td>
-                  );
-                })}
+                {dateGroups.map(dateGroup =>
+                  dateGroup.hours.map((hourInfo, hourIndex) => {
+                    const riskPoint = area.risk_timeline.find(r => r.ft === hourInfo.ft);
+                    const riskLevel = riskPoint ? riskPoint.value : 0;
+                    const color = RISK_COLORS[riskLevel as RiskLevel];
+
+                    return (
+                      <td
+                        key={`${dateGroup.date}-${hourIndex}`}
+                        style={{
+                          backgroundColor: color,
+                          border: '1px solid #000',
+                          padding: '0',
+                          height: '24px',
+                          cursor: 'pointer',
+                          position: 'relative'
+                        }}
+                        onMouseEnter={() => setHoveredCell({
+                          area: area.name,
+                          time: hourInfo.ft,
+                          risk: riskLevel
+                        })}
+                        onMouseLeave={() => setHoveredCell(null)}
+                      >
+                        {/* 空セル（色のみで表現） */}
+                      </td>
+                    );
+                  })
+                )}
               </tr>
             ))}
           </tbody>
@@ -262,62 +264,56 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
           position: 'fixed',
           top: '10px',
           right: '10px',
-          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          backgroundColor: 'rgba(0, 0, 0, 0.9)',
           color: 'white',
-          padding: '8px 12px',
-          borderRadius: '4px',
-          fontSize: '12px',
+          padding: '12px 16px',
+          borderRadius: '6px',
+          fontSize: '14px',
           zIndex: 1000,
-          pointerEvents: 'none'
+          pointerEvents: 'none',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.3)'
         }}>
-          <div>エリア: {hoveredCell.area}</div>
-          <div>時刻: {hoveredCell.time}</div>
-          <div>リスク: {hoveredCell.risk} ({RISK_LABELS[hoveredCell.risk as RiskLevel]})</div>
+          <div><strong>エリア:</strong> {hoveredCell.area}</div>
+          <div><strong>予測時刻:</strong> FT{hoveredCell.time}h</div>
+          <div><strong>リスクレベル:</strong> {hoveredCell.risk} ({RISK_LABELS[hoveredCell.risk as RiskLevel]})</div>
         </div>
       )}
 
-      {/* 統計情報と凡例 */}
-      <div style={{ 
-        marginTop: '15px',
+      {/* 凡例 */}
+      <div style={{
+        marginTop: '20px',
         padding: '15px',
         backgroundColor: '#f5f5f5',
         borderRadius: '8px',
-        fontSize: '14px'
+        border: '1px solid #ddd'
       }}>
-        <div style={{ marginBottom: '15px', fontWeight: 'bold' }}>
-          表示中のエリア: {prefectures.find(p => p.code === selectedPrefecture)?.name || '選択中の都道府県'} - 全{allAreas.length}エリア（現在のリスクレベル順）
+        <div style={{ marginBottom: '15px', fontWeight: 'bold', fontSize: '16px' }}>
+          リスクレベル凡例
+        </div>
+        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+          {Object.entries(RISK_LABELS).map(([level, label]) => {
+            const color = RISK_COLORS[parseInt(level) as RiskLevel];
+            return (
+              <div key={level} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div
+                  style={{
+                    width: '40px',
+                    height: '24px',
+                    backgroundColor: color,
+                    border: '1px solid #000',
+                    borderRadius: '3px'
+                  }}
+                />
+                <span style={{ fontSize: '14px' }}>
+                  レベル{level}: {label}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
-        {/* リスクレベル凡例 */}
-        <div>
-          <div style={{ fontWeight: 'bold', marginBottom: '10px' }}>リスクレベル凡例:</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px' }}>
-            {Object.entries(RISK_LABELS).map(([level, label]) => {
-              const color = RISK_COLORS[parseInt(level) as RiskLevel];
-              return (
-                <div key={level} style={{ display: 'flex', alignItems: 'center' }}>
-                  <div 
-                    style={{
-                      width: '20px',
-                      height: '20px',
-                      backgroundColor: color,
-                      marginRight: '8px',
-                      borderRadius: '3px',
-                      border: '1px solid #ddd'
-                    }}
-                  />
-                  <span>{label} (レベル{level})</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        
-        <div style={{ marginTop: '15px', fontSize: '12px', color: '#666' }}>
-          ※ 縦軸: エリア名、横軸: 時刻（現在からFT78hまで）、各セルの色: リスクレベル
-        </div>
-        <div style={{ fontSize: '12px', color: '#666' }}>
-          ※ 表形式で各エリア・各時刻でのリスクレベルを色で表現
+        <div style={{ marginTop: '15px', fontSize: '13px', color: '#666' }}>
+          ※ 表示中: {prefectures.find(p => p.code === selectedPrefecture)?.name || ''} - 全{allAreas.length}エリア
         </div>
       </div>
     </div>

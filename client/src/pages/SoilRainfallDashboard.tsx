@@ -707,11 +707,12 @@ const SoilRainfallDashboard: React.FC = () => {
       {allAreas.length > 0 && (
         <div style={{ marginBottom: '30px' }}>
           <h2>エリア別リスクレベル分析</h2>
-          <AreaRiskBarChart 
+          <AreaRiskBarChart
             prefectures={Object.values(data.prefectures)}
             selectedTime={selectedTime}
             selectedPrefecture={selectedPrefecture}
             onPrefectureChange={setSelectedPrefecture}
+            initialTime={data.swi_initial_time || data.initial_time}
           />
         </div>
       )}
