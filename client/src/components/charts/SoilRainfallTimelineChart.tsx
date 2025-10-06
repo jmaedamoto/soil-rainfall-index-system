@@ -65,7 +65,7 @@ const SoilRainfallTimelineChart: React.FC<SoilRainfallTimelineChartProps> = ({
         yAxisID: 'y'
       },
       {
-        label: '降水量',
+        label: '降水量（3時間合計）',
         data: allTimes.map(ft => {
           const point = sortedRainData.find(d => d.ft === ft);
           return point ? point.value : null;
@@ -149,7 +149,7 @@ const SoilRainfallTimelineChart: React.FC<SoilRainfallTimelineChartProps> = ({
         position: 'right',
         title: {
           display: true,
-          text: '降水量 (mm/h)'
+          text: '降水量 (mm/3h)'
         },
         grid: {
           drawOnChartArea: false,

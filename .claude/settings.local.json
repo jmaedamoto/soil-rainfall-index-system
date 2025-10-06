@@ -41,7 +41,9 @@
       "Read(//d/**)",
       "Bash(cd:*)",
       "Bash(iconv:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": []
   }
