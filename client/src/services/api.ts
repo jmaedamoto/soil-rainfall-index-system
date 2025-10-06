@@ -77,17 +77,7 @@ export class SoilRainfallAPIClient {
     // テスト用エンドポイントでは時刻指定は無視し、固定データを返す
     console.log('テスト環境での時刻指定パラメータ:', params);
     const response = await apiClient.get<CalculationResult>('/test-full-soil-rainfall-index');
-    
-    // レスポンスに時刻情報を追加
-    const result = response.data;
-    if (params.swi_initial) {
-      result.swi_initial_time = params.swi_initial;
-    }
-    if (params.guid_initial) {
-      result.guid_initial_time = params.guid_initial;
-    }
-    
-    return result;
+    return response.data;
   }
 
   /**

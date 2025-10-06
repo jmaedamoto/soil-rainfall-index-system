@@ -18,11 +18,11 @@ export interface Mesh {
   warning_bound: number;    // 警報基準値
   dosyakei_bound: number;   // 土砂災害基準値
   swi_timeline: TimeSeriesPoint[];  // 土壌雨量指数時系列（3時間ごと）
-  swi_hourly_timeline: TimeSeriesPoint[];  // 土壌雨量指数時系列（1時間ごと）
-  rain_1hour_timeline: TimeSeriesPoint[]; // 1時間ごとの雨量時系列（推定）
-  rain_1hour_max_timeline: TimeSeriesPoint[]; // 3時間内の最大1時間雨量時系列
+  swi_hourly_timeline?: TimeSeriesPoint[];  // 土壌雨量指数時系列（1時間ごと）※レスポンスサイズ削減のため除外
+  rain_1hour_timeline?: TimeSeriesPoint[]; // 1時間ごとの雨量時系列（推定）※レスポンスサイズ削減のため除外
+  rain_1hour_max_timeline?: TimeSeriesPoint[]; // 3時間内の最大1時間雨量時系列※レスポンスサイズ削減のため除外
   rain_timeline: TimeSeriesPoint[]; // 3時間ごとの合計雨量時系列
-  risk_hourly_timeline: RiskTimePoint[]; // 1時間ごとの危険度時系列
+  risk_hourly_timeline?: RiskTimePoint[]; // 1時間ごとの危険度時系列※レスポンスサイズ削減のため除外
   risk_3hour_max_timeline: RiskTimePoint[]; // 3時間ごとの最大危険度時系列（1時間雨量ベース）
 }
 

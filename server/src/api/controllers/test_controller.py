@@ -309,7 +309,7 @@ class TestController:
                                 Risk(ft=6, value=1)
                             ]
                         
-                        # 元の実装と同じ形式でmesh_result作成
+                        # 元の実装と同じ形式でmesh_result作成（サイズ削減のため一部フィールドを除外）
                         mesh_result = {
                             "code": mesh.code,
                             "lat": float(mesh.lat),
@@ -320,21 +320,13 @@ class TestController:
                             "swi_timeline": [
                                 {"ft": int(s.ft), "value": float(s.value)} for s in mesh.swi
                             ],
-                            "swi_hourly_timeline": [
-                                {"ft": int(s.ft), "value": float(s.value)} for s in mesh.swi_hourly
-                            ],
-                            "rain_1hour_timeline": [
-                                {"ft": int(r.ft), "value": float(r.value)} for r in mesh.rain_1hour
-                            ],
-                            "rain_1hour_max_timeline": [
-                                {"ft": int(r.ft), "value": float(r.value)} for r in mesh.rain_1hour_max
-                            ],
+                            # swi_hourly_timeline: 除外（レスポンスサイズ削減）
+                            # rain_1hour_timeline: 除外（レスポンスサイズ削減）
+                            # rain_1hour_max_timeline: 除外（レスポンスサイズ削減）
                             "rain_timeline": [
                                 {"ft": int(r.ft), "value": float(r.value)} for r in mesh.rain_3hour
                             ],
-                            "risk_hourly_timeline": [
-                                {"ft": int(r.ft), "value": int(r.value)} for r in mesh.risk_hourly
-                            ],
+                            # risk_hourly_timeline: 除外（レスポンスサイズ削減）
                             "risk_3hour_max_timeline": [
                                 {"ft": int(r.ft), "value": int(r.value)} for r in mesh.risk_3hour_max
                             ]
@@ -374,6 +366,8 @@ class TestController:
                 "status": "success",
                 "calculation_time": datetime.now().isoformat(),
                 "initial_time": base_info.initial_date.isoformat(),
+                "swi_initial_time": base_info.initial_date.isoformat(),
+                "guid_initial_time": base_info.initial_date.isoformat(),
                 "prefectures": results,
                 "statistics": {
                     "total_meshes": total_meshes,
