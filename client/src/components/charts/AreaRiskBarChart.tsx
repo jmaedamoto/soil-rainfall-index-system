@@ -72,17 +72,17 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
       dateGroup.hours.push({ ft, hour: ftHour });
     });
 
-    // 全エリアを現在のリスクレベル順にソート
+    // 全エリアを初期時刻（FT0）のリスクレベル順にソート（固定順序）
     const allAreas = areas
       .map(area => {
-        const currentRisk = area.risk_timeline.find(r => r.ft === selectedTime)?.value || 0;
-        return { area, currentRisk };
+        const initialRisk = area.risk_timeline.find(r => r.ft === 0)?.value || 0;
+        return { area, initialRisk };
       })
-      .sort((a, b) => b.currentRisk - a.currentRisk)
+      .sort((a, b) => b.initialRisk - a.initialRisk)
       .map(item => item.area);
 
     return { dateGroups, allAreas };
-  }, [areas, selectedTime, initialTime]);
+  }, [areas, initialTime]);
 
   return (
     <div style={{ marginBottom: '30px' }}>
@@ -182,22 +182,27 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                 {/* 空欄 */}
               </th>
               {dateGroups.map(dateGroup =>
-                dateGroup.hours.map((hourInfo, hourIndex) => (
-                  <th
-                    key={`${dateGroup.date}-${hourIndex}`}
-                    style={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #000',
-                      borderTop: '2px solid #000',
-                      padding: '2px',
-                      textAlign: 'center',
-                      fontWeight: 'normal',
-                      fontSize: '11px'
-                    }}
-                  >
-                    {hourInfo.hour}
-                  </th>
-                ))
+                dateGroup.hours.map((hourInfo, hourIndex) => {
+                  const isSelected = hourInfo.ft === selectedTime;
+                  return (
+                    <th
+                      key={`${dateGroup.date}-${hourIndex}`}
+                      style={{
+                        backgroundColor: '#fff',
+                        borderTop: isSelected ? '3px solid #FF0000' : '2px solid #000',
+                        borderLeft: isSelected ? '3px solid #FF0000' : '1px solid #000',
+                        borderRight: isSelected ? '3px solid #FF0000' : '1px solid #000',
+                        borderBottom: '1px solid #000',
+                        padding: '2px',
+                        textAlign: 'center',
+                        fontWeight: 'normal',
+                        fontSize: '11px'
+                      }}
+                    >
+                      {hourInfo.hour}
+                    </th>
+                  );
+                })
               )}
             </tr>
           </thead>
@@ -228,13 +233,18 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                     const riskPoint = area.risk_timeline.find(r => r.ft === hourInfo.ft);
                     const riskLevel = riskPoint ? riskPoint.value : 0;
                     const color = RISK_COLORS[riskLevel as RiskLevel];
+                    const isSelected = hourInfo.ft === selectedTime;
+                    const isLastRow = areaIndex === allAreas.length - 1;
 
                     return (
                       <td
                         key={`${dateGroup.date}-${hourIndex}`}
                         style={{
                           backgroundColor: color,
-                          border: '1px solid #000',
+                          borderTop: '1px solid #000',
+                          borderLeft: isSelected ? '3px solid #FF0000' : '1px solid #000',
+                          borderRight: isSelected ? '3px solid #FF0000' : '1px solid #000',
+                          borderBottom: isSelected && isLastRow ? '3px solid #FF0000' : '1px solid #000',
                           padding: '0',
                           height: '24px',
                           cursor: 'pointer',

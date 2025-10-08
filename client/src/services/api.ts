@@ -9,7 +9,7 @@ const API_BASE_URL = process.env.NODE_ENV === 'production'
 // Axiosインスタンスの作成
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 120000, // 120秒（2分）タイムアウト
+  timeout: 300000, // 300秒（5分）タイムアウト
   headers: {
     'Content-Type': 'application/json',
   },

@@ -27,6 +27,11 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
   isLoading = false
 }) => {
   const [bounds, setBounds] = useState<LatLngBounds | null>(null);
+  const [showLandCondition, setShowLandCondition] = useState(false);
+  const [showStandard, setShowStandard] = useState(false);
+  const [showRelief, setShowRelief] = useState(false);
+  const [showSlope, setShowSlope] = useState(false);
+  const [showFlood, setShowFlood] = useState(false);
 
   // メッシュから都道府県のマッピングを作成（prefectureDataを使用）
   const meshToPrefecture = useMemo(() => {
@@ -162,6 +167,9 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
         zoom={defaultZoom}
         style={{ height: '100%', width: '100%' }}
         bounds={bounds || undefined}
+        keyboard={false}
+        minZoom={6}
+        maxZoom={14}
       >
         {/* 純白地図ベース */}
         <TileLayer
@@ -175,7 +183,7 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
           attribution='&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
           opacity={0.8}
         />
-        
+
         {/* Canvas描画によるメッシュ表示（高速化・安定版） */}
         <SimpleCanvasLayer
           meshes={meshes}
@@ -184,8 +192,119 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
           onMeshClick={onMeshClick}
         />
 
+        {/* 土地条件図レイヤー */}
+        {showLandCondition && (
+          <TileLayer
+            url="https://cyberjapandata.gsi.go.jp/xyz/lcmfc2/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
+            opacity={0.6}
+            zIndex={600}
+          />
+        )}
+
+        {/* 標準地図レイヤー */}
+        {showStandard && (
+          <TileLayer
+            url="https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
+            opacity={0.5}
+            zIndex={500}
+          />
+        )}
+
+        {/* 色別標高図レイヤー */}
+        {showRelief && (
+          <TileLayer
+            url="https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
+            opacity={0.6}
+            zIndex={400}
+          />
+        )}
+
+        {/* 傾斜量図レイヤー */}
+        {showSlope && (
+          <TileLayer
+            url="https://cyberjapandata.gsi.go.jp/xyz/slopemap/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
+            opacity={0.6}
+            zIndex={450}
+          />
+        )}
+
+        {/* 洪水浸水想定区域レイヤー */}
+        {showFlood && (
+          <TileLayer
+            url="https://disaportaldata.gsi.go.jp/raster/01_flood_l2_shinsuishin_data/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://disaportal.gsi.go.jp/">ハザードマップポータルサイト</a>'
+            opacity={0.6}
+            zIndex={550}
+          />
+        )}
+
       </MapContainer>
-      
+
+      {/* レイヤー切り替えコントロール */}
+      <div style={{
+        position: 'absolute',
+        top: '10px',
+        right: '10px',
+        backgroundColor: 'white',
+        padding: '12px',
+        borderRadius: '8px',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+        zIndex: 1000,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px'
+      }}>
+        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '14px' }}>
+          <input
+            type="checkbox"
+            checked={showLandCondition}
+            onChange={(e) => setShowLandCondition(e.target.checked)}
+            style={{ marginRight: '8px', cursor: 'pointer' }}
+          />
+          土地条件図
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '14px' }}>
+          <input
+            type="checkbox"
+            checked={showStandard}
+            onChange={(e) => setShowStandard(e.target.checked)}
+            style={{ marginRight: '8px', cursor: 'pointer' }}
+          />
+          標準地図
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '14px' }}>
+          <input
+            type="checkbox"
+            checked={showRelief}
+            onChange={(e) => setShowRelief(e.target.checked)}
+            style={{ marginRight: '8px', cursor: 'pointer' }}
+          />
+          色別標高図
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '14px' }}>
+          <input
+            type="checkbox"
+            checked={showSlope}
+            onChange={(e) => setShowSlope(e.target.checked)}
+            style={{ marginRight: '8px', cursor: 'pointer' }}
+          />
+          傾斜量図
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '14px' }}>
+          <input
+            type="checkbox"
+            checked={showFlood}
+            onChange={(e) => setShowFlood(e.target.checked)}
+            style={{ marginRight: '8px', cursor: 'pointer' }}
+          />
+          洪水浸水想定区域
+        </label>
+      </div>
+
       {/* 凡例を地図の右下に表示 */}
       <MapLegend position="bottom-right" />
       

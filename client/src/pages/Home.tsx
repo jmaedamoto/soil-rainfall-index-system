@@ -58,24 +58,45 @@ const Home: React.FC = () => {
         </div>
       </div>
 
-      <Link 
-        to="/dashboard" 
-        style={{
-          display: 'inline-block',
-          padding: '15px 30px',
-          backgroundColor: '#1976D2',
-          color: 'white',
-          textDecoration: 'none',
-          borderRadius: '8px',
-          fontSize: '18px',
-          fontWeight: 'bold',
-          transition: 'background-color 0.3s'
-        }}
-        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#1565C0'}
-        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#1976D2'}
-      >
-        ダッシュボードを開く
-      </Link>
+      <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+        <Link
+          to="/production"
+          style={{
+            display: 'inline-block',
+            padding: '15px 30px',
+            backgroundColor: '#2E7D32',
+            color: 'white',
+            textDecoration: 'none',
+            borderRadius: '8px',
+            fontSize: '18px',
+            fontWeight: 'bold',
+            transition: 'background-color 0.3s'
+          }}
+          onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#1B5E20'}
+          onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#2E7D32'}
+        >
+          本番運用画面
+        </Link>
+
+        <Link
+          to="/dashboard"
+          style={{
+            display: 'inline-block',
+            padding: '15px 30px',
+            backgroundColor: '#1976D2',
+            color: 'white',
+            textDecoration: 'none',
+            borderRadius: '8px',
+            fontSize: '18px',
+            fontWeight: 'bold',
+            transition: 'background-color 0.3s'
+          }}
+          onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#1565C0'}
+          onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#1976D2'}
+        >
+          開発ダッシュボード
+        </Link>
+      </div>
       
       <div style={{ 
         marginTop: '40px',
