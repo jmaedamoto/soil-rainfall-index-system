@@ -102,19 +102,30 @@ class Grib2Service:
         return None
     
     def get_dat(self, bin_data: bytes, i: int, j: int) -> int:
-        """Big-Endianバイナリデータ読み取り（VBA版完全対応）"""
+        """Big-Endianバイナリデータ読み取り（最適化版）"""
         if i + j > len(bin_data):
             return 0
-        
-        # VBAのget_dat関数と同じロジック
-        # VBA: get_dat = get_dat + dat * (256 ^ (e - i))
-        result = 0
-        for k in range(j):
-            if i + k < len(bin_data):
-                byte_val = bin_data[i + k]
-                result = result + byte_val * (256 ** (j - 1 - k))
-        
-        return result
+
+        # 最適化: struct.unpackを使用した高速Big-Endian変換
+        try:
+            if j == 1:
+                return struct.unpack('>B', bin_data[i:i+1])[0]
+            elif j == 2:
+                return struct.unpack('>H', bin_data[i:i+2])[0]
+            elif j == 4:
+                return struct.unpack('>I', bin_data[i:i+4])[0]
+            elif j == 8:
+                return struct.unpack('>Q', bin_data[i:i+8])[0]
+            else:
+                # フォールバック: 元のループロジック
+                result = 0
+                for k in range(j):
+                    if i + k < len(bin_data):
+                        byte_val = bin_data[i + k]
+                        result = result + byte_val * (256 ** (j - 1 - k))
+                return result
+        except struct.error:
+            return 0
     
     def unpack_info(self, data: bytes, position: int) -> Tuple[BaseInfo, int, int]:
         """GRIB2ファイルのヘッダー情報を解析"""
@@ -171,43 +182,42 @@ class Grib2Service:
     def unpack_runlength(self, data: bytes, bit_num: int, level_num: int, level_max: int,
                          grid_num: int, level: List[int], s_position: int,
                          e_position: int) -> List[float]:
-        """ランレングス圧縮データの展開（VBA line-by-line完全対応）"""
+        """ランレングス圧縮データの展開（VBA完全準拠 + 軽微な最適化）"""
         try:
             # VBA: lngu = 2 ^ bit_num - 1 - level_max
-            lngu = 2 ** bit_num - 1 - level_max  # VBAの^は累乗演算子
-            
-            # VBA: ReDim data(grid_num)
-            data_result = [0.0] * (grid_num + 1)  # VBAの1ベース配列に対応
-            
+            lngu = 2 ** bit_num - 1 - level_max
+            byte_size = bit_num // 8  # 事前計算で最適化
+
+            # VBA: ReDim data(grid_num) - 1ベース配列
+            data_result = [0.0] * (grid_num + 1)
+
             # VBA: d_index = 1
-            d_index = 1  # VBAは1ベース
-            
+            d_index = 1
+
             # VBA: p = s_position
             p = s_position
-            
+
             # VBA: Do While p < e_position
             while p < e_position:
                 # VBA: d = get_dat(buf, p, bit_num / 8)
-                d = self.get_dat(data, p, bit_num // 8)
+                d = self.get_dat(data, p, byte_size)
                 # VBA: p = p + bit_num / 8
-                p = p + bit_num // 8
-                
-                # VBA: If d > level_num Then MsgBox... Stop
+                p = p + byte_size
+
+                # VBA: If d > level_num Then
                 if d > level_num:
                     logger.error(f"VBA停止条件: d({d}) > level_num({level_num})")
                     break
-                
+
                 # VBA: dd = get_dat(buf, p, bit_num / 8)
-                dd = self.get_dat(data, p, bit_num // 8)
-                
+                dd = self.get_dat(data, p, byte_size)
+
                 # VBA: If dd <= level_max Then
                 if dd <= level_max:
                     # VBA: data(d_index) = level(d)
-                    # VBAではlevel(d)が未設定（d > level_max）の場合は0を返す
                     if 1 <= d < len(level):
-                        data_result[d_index] = float(level[d])  # VBAの1ベース配列アクセス
+                        data_result[d_index] = float(level[d])
                     else:
-                        # VBA配列の未設定要素は0（VBAのデフォルト動作）
                         data_result[d_index] = 0.0
                     # VBA: d_index = d_index + 1
                     d_index = d_index + 1
@@ -216,41 +226,40 @@ class Grib2Service:
                     nlength = 0
                     # VBA: p2 = 1
                     p2 = 1
-                    
+
                     # VBA: Do While p <= e_position And dd > level_max
                     while p <= e_position and dd > level_max:
                         # VBA: nlength = nlength + ((lngu ^ (p2 - 1)) * (dd - level_max - 1))
                         nlength = nlength + ((lngu ** (p2 - 1)) * (dd - level_max - 1))
                         # VBA: p = p + bit_num / 8
-                        p = p + bit_num // 8
+                        p = p + byte_size
                         # VBA: dd = get_dat(buf, p, bit_num / 8)
-                        if p < len(data) and p + (bit_num // 8) <= len(data):
-                            dd = self.get_dat(data, p, bit_num // 8)
+                        if p < len(data) and p + byte_size <= len(data):
+                            dd = self.get_dat(data, p, byte_size)
                         else:
                             break
                         # VBA: p2 = p2 + 1
                         p2 = p2 + 1
-                    
+
                     # VBA: For i = 1 To nlength + 1
-                    for i in range(1, nlength + 2):  # 1 To nlength + 1
+                    for i in range(1, nlength + 2):
                         # VBA: data(d_index) = level(d)
                         if d_index < len(data_result):
                             if 1 <= d < len(level):
-                                data_result[d_index] = float(level[d])  # VBAの1ベース配列アクセス
+                                data_result[d_index] = float(level[d])
                             else:
-                                # VBA配列の未設定要素は0（VBAのデフォルト動作）
                                 data_result[d_index] = 0.0
                         # VBA: d_index = d_index + 1
                         d_index = d_index + 1
                         if d_index > grid_num:
                             break
-                
+
                 if d_index > grid_num:
                     break
 
-            # VBAの1ベース配列から0ベースに変換して返す
+            # VBAの1ベース配列から0ベースに変換
             return data_result[1:grid_num + 1]
-            
+
         except Exception as e:
             logger.error(f"ランレングス展開エラー: {e}")
             return [0.0] * grid_num

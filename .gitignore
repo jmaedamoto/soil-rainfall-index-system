@@ -56,3 +56,7 @@ server/optimized_test_result.json
 # Parallel processing test data (large files)
 server/baseline_parallel_test.json
 server/parallel_test_result.json
+
+# GRIB2 optimization test data (large files)
+server/baseline_grib2_test.json
+server/optimized_grib2_test.json

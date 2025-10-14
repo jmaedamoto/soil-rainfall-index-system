@@ -43,7 +43,8 @@
       "Bash(iconv:*)",
       "Bash(xargs:*)",
       "Bash(npm run type-check:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git reset:*)"
     ],
     "deny": []
   }
