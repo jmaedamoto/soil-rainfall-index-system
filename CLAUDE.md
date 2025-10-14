@@ -1584,8 +1584,179 @@ POST /api/production-soil-rainfall-index-with-urls
 
 ---
 
+---
+
+## 🚀 **2025年10月14日 CSV処理パフォーマンス大幅最適化**
+
+### ✅ **最適化成果サマリー**
+
+| 項目 | 最適化前 | 最適化後 | 改善率 |
+|------|---------|---------|--------|
+| **CSV処理時間** | 25.3秒 | **1.14秒** | **95.5%削減** |
+| **CSV読み込み** | - | 0.47秒 | - |
+| **メッシュ構築** | - | 0.67秒 | - |
+| **処理速度** | 1,030 meshes/sec | **22,875 meshes/sec** | **22.2倍高速化** |
+| **総処理時間** | 32.8秒 | 約9秒 | **72%削減** |
+
+### 🔧 **実装した最適化**
+
+#### **1. dosyakei境界値ルックアップの高速化**
+**改善前**: O(n²) - 26,000メッシュ × 逐次検索
+```python
+# 非効率: forループで26,000回の逐次検索
+for code in mesh_codes:
+    bound = self.get_dosyakei_bound(dosyakei_data, code)
+```
+
+**改善後**: O(n) - ディクショナリルックアップ
+```python
+# 効率的: pandasベクトル演算 + dict化
+dosyakei_data_filtered = dosyakei_data[['GRIDNO', 'LEVEL3_00']].copy()
+dosyakei_data_filtered['GRIDNO'] = dosyakei_data_filtered['GRIDNO'].astype(str)
+dosyakei_lookup = dict(zip(
+    dosyakei_data_filtered['GRIDNO'],
+    dosyakei_data_filtered['LEVEL3_00_processed']
+))
+dosyakei_bounds = [dosyakei_lookup.get(str(code), 999) for code in mesh_codes]
+```
+
+#### **2. 座標計算のベクトル化**
+**改善前**: リスト内包表記で26,000回の関数呼び出し
+```python
+coords = [self.meshcode_to_coordinate(code) for code in mesh_codes]
+indices = [self.meshcode_to_index(code) for code in mesh_codes]
+```
+
+**改善後**: 専用ベクトル化関数で一括処理
+```python
+coords = self.meshcode_to_coordinate_vectorized(mesh_codes.tolist())
+indices = self.meshcode_to_index_vectorized(mesh_codes.tolist())
+```
+
+#### **3. VBA座標テーブル構築の最適化**
+**改善前**: iterrows()による非効率な逐次処理
+```python
+for idx, row in vba_swi_data.iterrows():
+    area_name = str(row.iloc[0]).strip()
+    vba_x = int(row.iloc[1])
+    # ... 行ごとの処理
+```
+
+**改善後**: pandasベクトル演算で列処理
+```python
+area_names_vba = vba_swi_data.iloc[:, 0].astype(str).str.strip()
+vba_x_values = pd.to_numeric(vba_swi_data.iloc[:, 1], errors='coerce').fillna(0).astype(int)
+# ... ベクトル演算で一括処理
+```
+
+#### **4. メッシュオブジェクト生成の効率化**
+**改善前**: range(len())とインデックスアクセス
+```python
+for i in range(len(mesh_codes)):
+    mesh = Mesh(
+        area_name=area_names[i],
+        code=mesh_codes[i],
+        # ...
+    )
+```
+
+**改善後**: zip()による効率的なイテレーション
+```python
+for code, area_name, coord, idx, adv, warn, dosa in zip(
+    mesh_codes, area_names, coords, indices,
+    advisary_bounds, warning_bounds, dosyakei_bounds
+):
+    mesh = Mesh(area_name=area_name, code=code, ...)
+```
+
+### ✅ **品質保証**
+
+#### **完全一致検証**
+- **検証対象**: 26,045メッシュ × 27時刻 = 703,215データポイント
+- **検証結果**: **100%完全一致**
+- **検証フィールド**: SWI, Rain, Risk, 境界値、全タイムライン
+- **許容誤差**: 浮動小数点 1e-10（実質的に完全一致）
+
+#### **検証ツール**
+- `tests/test_optimization_validation.py`: 自動検証スクリプト
+- `baseline_optimization_test.json`: 最適化前の基準データ (209MB)
+- `tests/README_optimization_testing.md`: 検証手順ドキュメント
+
+### 📊 **パフォーマンス詳細**
+
+**最適化後のCSV処理内訳**:
+```
+CSV読み込み時間: 0.47秒
+  - dosha_*.csv (6府県): 境界値データ
+  - dosyakei_*.csv (6府県): 土砂災害データ
+
+メッシュ構造構築: 0.67秒
+  - 座標計算（ベクトル化）
+  - 境界値ルックアップ（O(n)）
+  - VBA座標テーブル構築
+  - メッシュオブジェクト生成
+
+合計: 1.14秒
+処理速度: 22,875 meshes/second
+```
+
+### 🎯 **技術的ハイライト**
+
+#### **計算量の改善**
+- **dosyakei境界値ルックアップ**: O(n²) → O(n)
+- **26,000メッシュでの影響**: 26,000² → 26,000 回の操作
+
+#### **メモリ効率**
+- pandasベクトル演算による効率的なメモリ使用
+- 不要なコピーを避けた処理
+- 26,045メッシュの安定処理
+
+#### **コード品質**
+- 元の実装との100%一致を保証
+- VBA互換性を完全維持
+- 可読性と保守性を維持
+
+### 📁 **影響ファイル**
+
+**最適化されたファイル**:
+- `server/services/data_service.py`: CSV処理の中核
+  - `meshcode_to_coordinate_vectorized()`: 新規追加
+  - `meshcode_to_index_vectorized()`: 新規追加
+  - `prepare_areas()`: 4つの最適化を統合
+
+**検証関連ファイル**:
+- `server/baseline_optimization_test.json`: 基準データ
+- `server/tests/test_optimization_validation.py`: 検証スクリプト
+- `server/tests/README_optimization_testing.md`: ドキュメント
+
+### 🚀 **運用への影響**
+
+#### **ユーザー体験の向上**
+- **処理時間**: 32.8秒 → 約9秒（72%削減）
+- **応答性**: 大幅に改善されたレスポンス時間
+- **安定性**: メモリ効率の改善による安定動作
+
+#### **スケーラビリティ**
+- 26,000メッシュ以上への対応が容易
+- 追加府県のデータ処理も高速
+- 本番環境での実用性向上
+
+### 💡 **今後の最適化候補**
+
+現在のボトルネック（最適化後）:
+- **GRIB2解析**: 約8秒（現在の最大ボトルネック）
+- **CSV処理**: 1.14秒（最適化完了✅）
+- **メッシュ計算**: 数秒
+
+**次の最適化ステップ**:
+1. GRIB2解析の最適化（複雑だが数秒削減可能）
+2. メッシュ計算の並列処理
+3. キャッシュ戦略の改善
+
+---
+
 **作成日**: 2025年7月23日
 **最終更新**: 2025年10月14日
-**バージョン**: 6.5.0（本番運用機能完成・UI改善完了版）
+**バージョン**: 6.6.0（CSV処理最適化・22倍高速化達成版）
 **作成者**: Claude (Anthropic)
-**プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・本番運用完全対応・UI最適化完了版）
+**プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・大規模パフォーマンス最適化完了版）

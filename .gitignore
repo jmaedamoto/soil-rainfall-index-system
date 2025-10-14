@@ -48,3 +48,7 @@ server/step1_test_response.json
 server/step2_response.json
 server/step3_response.json
 server/archive_debug_files/*.json
+
+# Optimization validation test data (large files)
+server/baseline_optimization_test.json
+server/optimized_test_result.json

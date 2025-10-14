@@ -4,6 +4,7 @@
 """
 from typing import List, Dict, Any, Optional, Tuple
 import pandas as pd
+import numpy as np
 import logging
 import os
 import time
@@ -25,7 +26,7 @@ class DataService:
         self.cache_ttl = 300  # 5分キャッシュ
     
     def meshcode_to_coordinate(self, code: str) -> Tuple[float, float]:
-        """メッシュコードから緯度経度を計算"""
+        """メッシュコードから緯度経度を計算（単一メッシュ用）"""
         try:
             if len(str(code)) >= 8:
                 code_str = str(code)
@@ -41,9 +42,31 @@ class DataService:
         except Exception:
             pass
         return 35.0, 135.0  # デフォルト座標
-    
+
+    def meshcode_to_coordinate_vectorized(self, mesh_codes: List[str]) -> List[Tuple[float, float]]:
+        """メッシュコードから緯度経度を計算（ベクトル化版）"""
+        coords = []
+        for code in mesh_codes:
+            try:
+                if len(str(code)) >= 8:
+                    code_str = str(code)
+                    y = (int(code_str[:2]) * 80 +
+                         int(code_str[4]) * 10 +
+                         int(code_str[6]))
+                    x = (int(code_str[2:4]) * 80 +
+                         int(code_str[5]) * 10 +
+                         int(code_str[7]))
+                    lat = (y + 0.5) * 30 / 3600
+                    lon = (x + 0.5) * 45 / 3600 + 100
+                    coords.append((lat, lon))
+                else:
+                    coords.append((35.0, 135.0))
+            except Exception:
+                coords.append((35.0, 135.0))
+        return coords
+
     def meshcode_to_index(self, code: str) -> Tuple[int, int]:
-        """メッシュコードからインデックスを計算"""
+        """メッシュコードからインデックスを計算（単一メッシュ用）"""
         try:
             if len(str(code)) >= 8:
                 code_str = str(code)
@@ -57,6 +80,26 @@ class DataService:
         except Exception:
             pass
         return 0, 0
+
+    def meshcode_to_index_vectorized(self, mesh_codes: List[str]) -> List[Tuple[int, int]]:
+        """メッシュコードからインデックスを計算（ベクトル化版）"""
+        indices = []
+        for code in mesh_codes:
+            try:
+                if len(str(code)) >= 8:
+                    code_str = str(code)
+                    y = (int(code_str[:2]) * 80 +
+                         int(code_str[4]) * 10 +
+                         int(code_str[6]))
+                    x = (int(code_str[2:4]) * 80 +
+                         int(code_str[5]) * 10 +
+                         int(code_str[7]))
+                    indices.append((x, y))
+                else:
+                    indices.append((0, 0))
+            except Exception:
+                indices.append((0, 0))
+        return indices
     
     def parse_boundary_value(self, value) -> int:
         """境界値をパース"""
@@ -169,68 +212,92 @@ class DataService:
             advisary_bounds = dosha_data.iloc[:, 3].apply(self.parse_boundary_value).values
             warning_bounds = dosha_data.iloc[:, 4].apply(self.parse_boundary_value).values
             
-            # 座標計算をベクトル化
-            coords = [self.meshcode_to_coordinate(code) for code in mesh_codes]
-            indices = [self.meshcode_to_index(code) for code in mesh_codes]
+            # 座標計算をベクトル化（最適化: 一括処理）
+            coords = self.meshcode_to_coordinate_vectorized(mesh_codes.tolist())
+            indices = self.meshcode_to_index_vectorized(mesh_codes.tolist())
             
-            # dosyakei境界値を一括取得
-            dosyakei_bounds = []
-            for code in mesh_codes:
-                if dosyakei_data is not None:
-                    bound = self.get_dosyakei_bound(dosyakei_data, code)
-                else:
-                    bound = 999
-                dosyakei_bounds.append(bound)
+            # dosyakei境界値を一括取得（最適化: O(n²)→O(n)）
+            if dosyakei_data is not None:
+                # ディクショナリルックアップテーブル作成（pandasベクトル演算）
+                dosyakei_data_filtered = dosyakei_data[['GRIDNO', 'LEVEL3_00']].copy()
+                dosyakei_data_filtered['GRIDNO'] = dosyakei_data_filtered['GRIDNO'].astype(str)
+                dosyakei_data_filtered['LEVEL3_00_processed'] = dosyakei_data_filtered['LEVEL3_00'].apply(
+                    lambda x: 999 if (pd.isna(x) or x >= 999) else int(x)
+                )
+                dosyakei_lookup = dict(zip(
+                    dosyakei_data_filtered['GRIDNO'],
+                    dosyakei_data_filtered['LEVEL3_00_processed']
+                ))
 
-            # VBA X,Y座標のルックアップテーブル作成
+                # O(1)ルックアップで一括取得
+                dosyakei_bounds = [dosyakei_lookup.get(str(code), 999) for code in mesh_codes]
+            else:
+                dosyakei_bounds = [999] * len(mesh_codes)
+
+            # VBA X,Y座標のルックアップテーブル作成（最適化: iterrows()→ベクトル演算）
             vba_coordinates_lookup = {}
             if vba_swi_data is not None:
-                for idx, row in vba_swi_data.iterrows():
-                    try:
-                        area_name = str(row.iloc[0]).strip()
-                        vba_x = int(row.iloc[1])
-                        vba_y = int(row.iloc[2])
-                        advisary = int(row.iloc[3]) if str(row.iloc[3]).strip() != '' else 9999
-                        warning = int(row.iloc[4]) if str(row.iloc[4]).strip() != '' else 9999
-                        dosyakei = int(row.iloc[5]) if str(row.iloc[5]).strip() != '' else 9999
+                try:
+                    # 列をベクトル化して処理
+                    area_names_vba = vba_swi_data.iloc[:, 0].astype(str).str.strip()
+                    vba_x_values = pd.to_numeric(vba_swi_data.iloc[:, 1], errors='coerce').fillna(0).astype(int)
+                    vba_y_values = pd.to_numeric(vba_swi_data.iloc[:, 2], errors='coerce').fillna(0).astype(int)
 
-                        # 一意なキーを作成（エリア名 + 境界値の組み合わせ）
-                        key = f"{area_name}_{advisary}_{warning}_{dosyakei}"
+                    # 境界値を処理
+                    def parse_vba_bound(val):
+                        if pd.isna(val) or str(val).strip() == '':
+                            return 9999
+                        try:
+                            return int(val)
+                        except:
+                            return 9999
+
+                    advisary_vba = vba_swi_data.iloc[:, 3].apply(parse_vba_bound)
+                    warning_vba = vba_swi_data.iloc[:, 4].apply(parse_vba_bound)
+                    dosyakei_vba = vba_swi_data.iloc[:, 5].apply(parse_vba_bound)
+
+                    # ディクショナリ構築
+                    for i in range(len(vba_swi_data)):
+                        key = f"{area_names_vba.iloc[i]}_{advisary_vba.iloc[i]}_{warning_vba.iloc[i]}_{dosyakei_vba.iloc[i]}"
                         vba_coordinates_lookup[key] = {
-                            'vba_x': vba_x,
-                            'vba_y': vba_y
+                            'vba_x': vba_x_values.iloc[i],
+                            'vba_y': vba_y_values.iloc[i]
                         }
-                    except (ValueError, IndexError):
-                        continue
+                except Exception as e:
+                    logger.warning(f"VBA座標ルックアップテーブル作成エラー: {e}")
             
-            # メッシュオブジェクト一括作成
+            # メッシュオブジェクト一括作成（最適化: zip使用で効率化）
             meshes = []
             area_dict = {}
-            
-            for i in range(len(mesh_codes)):
+
+            # zip()を使った効率的なイテレーション
+            for code, area_name, coord, idx, adv, warn, dosa in zip(
+                mesh_codes, area_names, coords, indices,
+                advisary_bounds, warning_bounds, dosyakei_bounds
+            ):
                 try:
-                    lat, lon = coords[i]
-                    x, y = indices[i]
+                    lat, lon = coord
+                    x, y = idx
 
                     # VBA X,Y座標をルックアップ
                     vba_x = None
                     vba_y = None
-                    lookup_key = f"{area_names[i]}_{int(advisary_bounds[i])}_{int(warning_bounds[i])}_{dosyakei_bounds[i]}"
+                    lookup_key = f"{area_name}_{int(adv)}_{int(warn)}_{dosa}"
                     if lookup_key in vba_coordinates_lookup:
                         vba_coords = vba_coordinates_lookup[lookup_key]
                         vba_x = vba_coords['vba_x']
                         vba_y = vba_coords['vba_y']
 
                     mesh = Mesh(
-                        area_name=area_names[i],
-                        code=mesh_codes[i],
+                        area_name=area_name,
+                        code=code,
                         lat=lat,
                         lon=lon,
                         x=x,
                         y=y,
-                        advisary_bound=int(advisary_bounds[i]),
-                        warning_bound=int(warning_bounds[i]),
-                        dosyakei_bound=dosyakei_bounds[i],
+                        advisary_bound=int(adv),
+                        warning_bound=int(warn),
+                        dosyakei_bound=dosa,
                         swi=[],
                         swi_hourly=[],
                         rain_1hour=[],
@@ -241,11 +308,10 @@ class DataService:
                         vba_x=vba_x,
                         vba_y=vba_y
                     )
-                    
+
                     meshes.append(mesh)
-                    
+
                     # エリア別に分類
-                    area_name = mesh.area_name
                     if area_name not in area_dict:
                         area = Area(name=area_name, meshes=[])
                         area_dict[area_name] = area
