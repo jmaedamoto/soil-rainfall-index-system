@@ -1750,8 +1750,63 @@ CSV読み込み時間: 0.47秒
 
 **次の最適化ステップ**:
 1. GRIB2解析の最適化（複雑だが数秒削減可能）
-2. メッシュ計算の並列処理
+2. メッシュ計算の並列処理（調査済み - 以下参照）
 3. キャッシュ戦略の改善
+
+### ⚠️ **並列処理最適化の調査と判断**
+
+#### **実施内容**
+CSV処理最適化後、さらなる高速化を目指して並列処理の導入を試みました。
+
+**試行1: ProcessPoolExecutor（プロセスベース並列処理）**
+```python
+from concurrent.futures import ProcessPoolExecutor
+
+def _process_prefecture_meshes(prefecture_data, swi_grib2, guidance_grib2):
+    """府県単位のメッシュ計算を並列実行"""
+    # メッシュ計算処理
+    return processed_prefecture
+
+# メイン処理で並列実行
+with ProcessPoolExecutor() as executor:
+    futures = [executor.submit(_process_prefecture_meshes, pref, swi, guidance)
+               for pref in prefectures]
+```
+
+**問題点**:
+- Windows環境でのmultiprocessing互換性問題
+- Flask開発モードでのプロセスフォーク制約
+- 実行時にプロセスが正常に起動しない
+
+**試行2: ThreadPoolExecutor（スレッドベース並列処理）**
+```python
+from concurrent.futures import ThreadPoolExecutor
+
+with ThreadPoolExecutor(max_workers=4) as executor:
+    # スレッドで並列実行
+```
+
+**問題点**:
+- Python GIL（Global Interpreter Lock）の制約
+- CPU密度の高い計算処理には不向き
+- 実際の高速化効果が限定的
+
+#### **最終判断: 並列処理を見送り**
+
+**理由**:
+1. **すでに十分な最適化達成**: CSV最適化で95.5%削減（25.3秒→1.14秒）
+2. **追加の複雑性**: Windows互換性、プロセス管理の複雑化
+3. **費用対効果**: 追加実装コストに対する高速化メリットが小さい
+4. **保守性優先**: シンプルで安定したコードを維持
+
+**現在の処理時間内訳**:
+- GRIB2解析: 約8秒（最大ボトルネック）
+- CSV処理: 1.14秒（最適化完了✅）
+- メッシュ計算: 数秒
+- 合計: 約9秒
+
+**結論**:
+CSV最適化により実用的な性能を達成。並列処理は追加の複雑性とリスクに見合わないため、現時点では実装を見送り。将来的にさらなる高速化が必要な場合、GRIB2解析の最適化やキャッシュ戦略の改善を優先する。
 
 ---
 

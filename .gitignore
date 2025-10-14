@@ -52,3 +52,7 @@ server/archive_debug_files/*.json
 # Optimization validation test data (large files)
 server/baseline_optimization_test.json
 server/optimized_test_result.json
+
+# Parallel processing test data (large files)
+server/baseline_parallel_test.json
+server/parallel_test_result.json

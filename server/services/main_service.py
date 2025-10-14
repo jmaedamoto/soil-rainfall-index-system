@@ -52,7 +52,7 @@ class MainService:
             # メッシュ計算処理
             logger.info("メッシュ計算処理開始")
             calc_start = time.time()
-            
+
             total_meshes = 0
             for prefecture in prefectures:
                 for area in prefecture.areas:
@@ -62,18 +62,18 @@ class MainService:
                             mesh, swi_grib2, guidance_grib2
                         )
                     total_meshes += len(area.meshes)
-            
+
             calc_time = time.time() - calc_start
             logger.info(f"メッシュ計算完了: {calc_time:.2f}秒 ({total_meshes}メッシュ)")
-            
+
             # リスクタイムライン計算
             logger.info("リスクタイムライン計算開始")
             risk_start = time.time()
-            
+
             for prefecture in prefectures:
                 for area in prefecture.areas:
                     area.risk_timeline = self.calculation_service.calc_risk_timeline(area.meshes)
-            
+
             risk_time = time.time() - risk_start
             logger.info(f"リスクタイムライン計算完了: {risk_time:.2f}秒")
             
