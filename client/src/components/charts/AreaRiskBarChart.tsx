@@ -6,6 +6,7 @@ interface AreaRiskBarChartProps {
   selectedTime: number;
   selectedPrefecture: string;
   onPrefectureChange: (prefectureCode: string) => void;
+  onTimeSelect?: (ft: number) => void; // 時刻選択コールバック
   initialTime: string; // UTC時刻（ISO8601形式）
   title?: string;
   height?: number;
@@ -16,6 +17,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
   selectedTime,
   selectedPrefecture,
   onPrefectureChange,
+  onTimeSelect,
   initialTime,
   title = 'エリア別リスクレベル時系列',
   height = 800
@@ -249,6 +251,11 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                           height: '24px',
                           cursor: 'pointer',
                           position: 'relative'
+                        }}
+                        onClick={() => {
+                          if (onTimeSelect) {
+                            onTimeSelect(hourInfo.ft);
+                          }
                         }}
                         onMouseEnter={() => setHoveredCell({
                           area: area.name,

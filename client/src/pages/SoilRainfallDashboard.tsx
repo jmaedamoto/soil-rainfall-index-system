@@ -39,13 +39,17 @@ const SoilRainfallDashboard: React.FC = () => {
     // 同じ時刻が選択された場合は何もしない
     if (newTime === selectedTime) return;
 
+    // ローディング状態を即座に設定
     setIsTimeChanging(true);
-    setSelectedTime(newTime);
 
-    // 遅延を短縮（描画は既に最適化済み）
-    setTimeout(() => {
-      setIsTimeChanging(false);
-    }, 50);
+    // 状態更新を次のフレームで実行
+    requestAnimationFrame(() => {
+      setSelectedTime(newTime);
+      // 短い遅延の後、ローディング解除
+      requestAnimationFrame(() => {
+        setTimeout(() => setIsTimeChanging(false), 50);
+      });
+    });
   };
   const [selectedMesh, setSelectedMesh] = useState<Mesh | null>(null);
   const [selectedArea, setSelectedArea] = useState<Area | null>(null);
@@ -700,6 +704,8 @@ const SoilRainfallDashboard: React.FC = () => {
           prefectureData={data.prefectures}
           onMeshClick={handleMeshClick}
           isLoading={isTimeChanging}
+          swiInitialTime={useSeparateTimes ? swiInitialTime : (dataSource === 'production' ? productionDateTime : swiInitialTime)}
+          guidanceInitialTime={useSeparateTimes ? guidInitialTime : (dataSource === 'production' ? productionDateTime : guidInitialTime)}
         />
       </div>
 
@@ -712,6 +718,7 @@ const SoilRainfallDashboard: React.FC = () => {
             selectedTime={selectedTime}
             selectedPrefecture={selectedPrefecture}
             onPrefectureChange={setSelectedPrefecture}
+            onTimeSelect={handleTimeChange}
             initialTime={data.swi_initial_time || data.initial_time}
           />
         </div>

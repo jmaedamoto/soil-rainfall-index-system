@@ -40,3 +40,8 @@ def soil_rainfall_index():
 def production_soil_rainfall_index():
     """本番テスト用エンドポイント（GET メソッド）"""
     return main_controller.production_soil_rainfall_index()
+
+@main_bp.route('/api/production-soil-rainfall-index-with-urls', methods=['POST'])
+def production_soil_rainfall_index_with_urls():
+    """本番テスト用エンドポイント（SWIとガイダンスの初期時刻を個別指定）"""
+    return main_controller.production_soil_rainfall_index_with_urls()

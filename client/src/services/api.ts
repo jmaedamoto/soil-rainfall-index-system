@@ -90,6 +90,17 @@ export class SoilRainfallAPIClient {
   }
 
   /**
+   * 本番用土壌雨量指数計算（SWIとガイダンスの初期時刻を個別指定）
+   */
+  async calculateProductionSoilRainfallIndexWithUrls(params: {
+    swi_initial: string;
+    guidance_initial: string;
+  }): Promise<CalculationResult> {
+    const response = await apiClient.post<CalculationResult>('/production-soil-rainfall-index-with-urls', params);
+    return response.data;
+  }
+
+  /**
    * パフォーマンス分析（デバッグ用）
    */
   async getPerformanceAnalysis(): Promise<any> {

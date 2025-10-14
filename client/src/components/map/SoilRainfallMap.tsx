@@ -16,6 +16,8 @@ interface SoilRainfallMapProps {
   prefectureData?: { [prefCode: string]: { areas: { meshes: Mesh[] }[] } }; // 都道府県データ
   onMeshClick?: (mesh: Mesh) => void;
   isLoading?: boolean; // ローディング状態
+  swiInitialTime?: string; // SWI初期時刻（ISO8601形式）
+  guidanceInitialTime?: string; // ガイダンス初期時刻（ISO8601形式）
 }
 
 const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
@@ -24,7 +26,9 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
   selectedPrefecture,
   prefectureData,
   onMeshClick,
-  isLoading = false
+  isLoading = false,
+  swiInitialTime,
+  guidanceInitialTime
 }) => {
   const [bounds, setBounds] = useState<LatLngBounds | null>(null);
   const [showLandCondition, setShowLandCondition] = useState(false);
@@ -160,8 +164,64 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
 
   // Canvas描画では個別計算はCanvasGridLayer内で実行
 
+  // 日時フォーマット関数（JST表示）
+  const formatDateTime = (isoString?: string) => {
+    if (!isoString) return 'N/A';
+    const date = new Date(isoString);
+    const jstDate = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+    return `${jstDate.getUTCFullYear()}/${jstDate.getUTCMonth() + 1}/${jstDate.getUTCDate()} ${String(jstDate.getUTCHours()).padStart(2, '0')}:${String(jstDate.getUTCMinutes()).padStart(2, '0')}`;
+  };
+
+  // 現在選択されている時刻を計算
+  const getCurrentTime = () => {
+    if (!swiInitialTime) return 'N/A';
+    const swiDate = new Date(swiInitialTime);
+    const jstDate = new Date(swiDate.getTime() + 9 * 60 * 60 * 1000);
+    const currentDate = new Date(jstDate.getTime() + selectedTime * 60 * 60 * 1000);
+    return `${currentDate.getUTCFullYear()}/${currentDate.getUTCMonth() + 1}/${currentDate.getUTCDate()} ${String(currentDate.getUTCHours()).padStart(2, '0')}:${String(currentDate.getUTCMinutes()).padStart(2, '0')}`;
+  };
+
   return (
     <div style={{ height: '600px', width: '100%', position: 'relative' }}>
+      {/* 時刻情報表示（地図の左上） */}
+      {(swiInitialTime || guidanceInitialTime) && (
+        <div style={{
+          position: 'absolute',
+          top: '10px',
+          left: '10px',
+          zIndex: 1000,
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          padding: '12px 16px',
+          borderRadius: '8px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+          fontSize: '13px',
+          lineHeight: '1.6',
+          fontFamily: 'monospace',
+          border: '2px solid #1976D2'
+        }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#1976D2', fontSize: '14px' }}>
+            📅 時刻情報
+          </div>
+          <div style={{ marginBottom: '4px' }}>
+            <span style={{ color: '#666', fontWeight: 'bold' }}>SWI初期時刻:</span>{' '}
+            <span style={{ color: '#000' }}>{formatDateTime(swiInitialTime)}</span>
+          </div>
+          <div style={{ marginBottom: '4px' }}>
+            <span style={{ color: '#666', fontWeight: 'bold' }}>ガイダンス初期時刻:</span>{' '}
+            <span style={{ color: '#000' }}>{formatDateTime(guidanceInitialTime)}</span>
+          </div>
+          <div style={{
+            marginTop: '8px',
+            paddingTop: '8px',
+            borderTop: '1px solid #ddd'
+          }}>
+            <span style={{ color: '#666', fontWeight: 'bold' }}>現在表示時刻:</span>{' '}
+            <span style={{ color: '#D32F2F', fontWeight: 'bold' }}>{getCurrentTime()}</span>
+            <span style={{ color: '#666', marginLeft: '8px' }}>(FT+{selectedTime}h)</span>
+          </div>
+        </div>
+      )}
+
       <MapContainer
         center={kansaiCenter}
         zoom={defaultZoom}
