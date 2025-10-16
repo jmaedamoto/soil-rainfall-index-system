@@ -38,6 +38,23 @@ export interface Prefecture {
   areas: Area[];  // 地域データ
 }
 
+export interface CacheMetadata {
+  cache_key: string;
+  created_at: string;           // ISO8601形式
+  swi_initial: string;
+  guidance_initial: string;
+  mesh_count: number;
+  file_size_mb: number;
+  compressed: boolean;
+  compression_format: string;
+}
+
+export interface CacheInfo {
+  cache_key: string;
+  cache_hit: boolean;           // キャッシュヒットフラグ
+  cache_metadata: CacheMetadata | null;
+}
+
 export interface CalculationResult {
   status: 'success' | 'error';
   calculation_time: string;     // 計算時刻（ISO8601）
@@ -48,7 +65,10 @@ export interface CalculationResult {
   used_urls?: {                 // 本番API使用時のGRIB2 URL（デバッグ用）
     swi_url: string;
     guidance_url: string;
+    swi_initial_time?: string;
+    guidance_initial_time?: string;
   };
+  cache_info?: CacheInfo;       // キャッシュ情報
   statistics?: {                // テストAPI使用時の統計情報
     total_meshes: number;
     processed_meshes: number;

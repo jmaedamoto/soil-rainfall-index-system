@@ -2,15 +2,16 @@
 """
 メイン処理サービス
 """
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 
 from models import Prefecture
 from .grib2_service import Grib2Service
 from .data_service import DataService
 from .calculation_service import CalculationService
+from .cache_service import get_cache_service
 
 
 logger = logging.getLogger(__name__)
@@ -18,11 +19,12 @@ logger = logging.getLogger(__name__)
 
 class MainService:
     """メイン処理サービス"""
-    
+
     def __init__(self, data_dir: str = "data"):
         self.grib2_service = Grib2Service()
         self.data_service = DataService(data_dir)
         self.calculation_service = CalculationService()
+        self.cache_service = get_cache_service()
     
     def main_process_from_files(self, swi_file: str, guidance_file: str) -> Dict[str, Any]:
         """ファイルベースのメイン処理（テスト用）"""
@@ -196,8 +198,23 @@ class MainService:
             logger.error(f"URL ベースメイン処理エラー: {e}")
             raise
 
-    def main_process_from_separate_urls(self, swi_url: str, guidance_url: str) -> Dict[str, Any]:
-        """個別URLベースのメイン処理（SWIとガイダンスのURLを個別指定）"""
+    def main_process_from_separate_urls(
+        self,
+        swi_url: str,
+        guidance_url: str,
+        use_cache: bool = True
+    ) -> Dict[str, Any]:
+        """
+        個別URLベースのメイン処理（SWIとガイダンスのURLを個別指定）
+
+        Args:
+            swi_url: SWI GRIB2データURL
+            guidance_url: ガイダンスGRIB2データURL
+            use_cache: キャッシュ使用フラグ（デフォルト: True）
+
+        Returns:
+            処理結果JSON
+        """
         try:
             logger.info(f"SWI URL: {swi_url}")
             logger.info(f"Guidance URL: {guidance_url}")
@@ -212,8 +229,10 @@ class MainService:
                 raise Exception(f"ガイダンスファイルダウンロード失敗: {guidance_url}")
 
             # データ解析
-            base_info, swi_grib2 = self.grib2_service.unpack_swi_grib2(swi_data_bytes)
-            guidance_base_info, guidance_grib2 = self.grib2_service.unpack_guidance_grib2(guidance_data_bytes)
+            base_info, swi_grib2 = self.grib2_service.unpack_swi_grib2(
+                swi_data_bytes)
+            guidance_base_info, guidance_grib2 = \
+                self.grib2_service.unpack_guidance_grib2(guidance_data_bytes)
 
             # SWI初期時刻を使用
             swi_initial_time = base_info.initial_date
@@ -222,13 +241,40 @@ class MainService:
             logger.info(f"SWI初期時刻: {swi_initial_time}")
             logger.info(f"ガイダンス初期時刻: {guidance_initial_time}")
 
+            # キャッシュキー生成
+            cache_key = self.cache_service.generate_cache_key(
+                swi_initial_time.isoformat(),
+                guidance_initial_time.isoformat()
+            )
+
+            # キャッシュチェック
+            if use_cache:
+                cached_result = self.cache_service.get_cached_result(cache_key)
+                if cached_result:
+                    logger.info(f"キャッシュヒット: {cache_key}")
+                    return cached_result
+
+            logger.info(f"キャッシュミス: {cache_key} - 計算を実行")
+
             # SWI初期時刻以降のガイダンスデータのみを使用
             guidance_grib2_filtered = self._filter_guidance_data(
                 guidance_grib2, swi_initial_time, guidance_initial_time
             )
 
-            # 残りの処理はファイル版と同じ
-            return self._process_data(base_info, swi_grib2, guidance_grib2_filtered, swi_initial_time)
+            # 計算処理実行
+            result = self._process_data(
+                base_info, swi_grib2, guidance_grib2_filtered, swi_initial_time)
+
+            # キャッシュに保存
+            if use_cache:
+                self.cache_service.set_cached_result(
+                    cache_key,
+                    result,
+                    swi_initial_time.isoformat(),
+                    guidance_initial_time.isoformat()
+                )
+
+            return result
 
         except Exception as e:
             logger.error(f"個別URLベースメイン処理エラー: {e}")

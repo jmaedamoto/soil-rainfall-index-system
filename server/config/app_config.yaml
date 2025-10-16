@@ -22,7 +22,23 @@ grib2:
 # データディレクトリ設定
 data:
   directory: "data"
-  
+
+# キャッシュ設定
+cache:
+  # キャッシュディレクトリ
+  directory: "cache"
+
+  # TTL（有効期限）: 日数
+  ttl_days: 7
+
+  # gzip圧縮レベル（1-9）
+  # 1: 最速・低圧縮率, 6: バランス（推奨）, 9: 最高圧縮率・低速
+  compression_level: 6
+
+  # 自動クリーンアップ設定
+  auto_cleanup: true
+  cleanup_interval_hours: 24
+
 # ログ設定
 logging:
   level: "INFO"

@@ -13,6 +13,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.append(project_root)
 
 from services.main_service import MainService
+from services.cache_service import get_cache_service
 
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ class MainController:
     
     def __init__(self, data_dir: str = "data"):
         self.main_service = MainService(data_dir)
+        self.cache_service = get_cache_service()
         self.data_dir = data_dir
     
     def root(self):
@@ -252,16 +254,35 @@ class MainController:
                 rmax_hour = "03"
             guidance_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc/{guidance_initial.strftime('%Y/%m/%d')}/guid_msm_grib2_{guidance_initial.strftime('%Y%m%d%H%M%S')}_rmax{rmax_hour}.bin"
 
-            # メイン処理実行（個別URLを使用）
-            result = self.main_service.main_process_from_separate_urls(swi_url, guidance_url)
+            # キャッシュキー生成
+            cache_key = self.cache_service.generate_cache_key(
+                swi_initial.isoformat(),
+                guidance_initial.isoformat()
+            )
+
+            # キャッシュ存在確認
+            cache_exists = self.cache_service.exists(cache_key)
+            cache_metadata = None
+            if cache_exists:
+                cache_metadata = self.cache_service.get_metadata(cache_key)
+
+            # メイン処理実行（個別URLを使用、use_cache=True でキャッシュ有効）
+            result = self.main_service.main_process_from_separate_urls(
+                swi_url, guidance_url, use_cache=True)
             result["status"] = "success"
 
-            # 使用したURLも返却（デバッグ用）
+            # 使用したURLとキャッシュ情報も返却
             result["used_urls"] = {
                 "swi_url": swi_url,
                 "swi_initial_time": swi_initial.isoformat(),
                 "guidance_url": guidance_url,
                 "guidance_initial_time": guidance_initial.isoformat()
+            }
+
+            result["cache_info"] = {
+                "cache_key": cache_key,
+                "cache_hit": cache_exists,
+                "cache_metadata": cache_metadata
             }
 
             return jsonify(result)

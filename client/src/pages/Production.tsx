@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { apiClient_ } from '../services/api';
 import SoilRainfallMap from '../components/map/SoilRainfallMap';
 import AreaRiskBarChart from '../components/charts/AreaRiskBarChart';
-import { SoilRainfallData, Mesh } from '../types/api';
+import CacheInfo from '../components/CacheInfo';
+import { CalculationResult, Mesh } from '../types/api';
 
 const Production: React.FC = () => {
-  const [data, setData] = useState<SoilRainfallData | null>(null);
+  const [data, setData] = useState<CalculationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState(0);
@@ -117,12 +118,7 @@ const Production: React.FC = () => {
     ? allMeshes[0].swi_timeline.map(t => t.ft)
     : [];
 
-  const prefectureOptions = data ? Object.entries(data.prefectures).map(([code, pref]) => ({
-    value: code,
-    label: pref.name
-  })) : [];
-
-  const initialTime = data ? (data.initial_time || data.prefectures[Object.keys(data.prefectures)[0]]?.areas[0]?.meshes[0]?.swi_timeline[0]?.initial_time) : null;
+  const initialTime = data ? data.initial_time : null;
 
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
@@ -241,6 +237,11 @@ const Production: React.FC = () => {
       {/* データ表示部分 */}
       {data && (
         <>
+          {/* キャッシュ情報表示 */}
+          {data.cache_info && (
+            <CacheInfo cacheInfo={data.cache_info} />
+          )}
+
           {/* データ再取得ボタン */}
           <div style={{ marginBottom: '20px' }}>
             <button

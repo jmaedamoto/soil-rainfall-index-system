@@ -60,3 +60,8 @@ server/parallel_test_result.json
 # GRIB2 optimization test data (large files)
 server/baseline_grib2_test.json
 server/optimized_grib2_test.json
+
+# Cache files (gzip compressed JSON)
+server/cache/*.json.gz
+server/cache/*.meta.json
+!server/cache/.gitkeep

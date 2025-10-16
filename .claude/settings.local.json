@@ -44,7 +44,9 @@
       "Bash(xargs:*)",
       "Bash(npm run type-check:*)",
       "Bash(npx tsc:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(timeout:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": []
   }

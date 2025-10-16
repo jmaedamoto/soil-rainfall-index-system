@@ -16,24 +16,26 @@ sys.path.append(os.path.join(project_root, 'src'))
 
 # Blueprintルートのインポート
 from api.routes.main_routes import main_bp, init_main_routes
-from api.routes.test_routes import test_bp, init_test_routes  
+from api.routes.test_routes import test_bp, init_test_routes
 from api.routes.performance_routes import performance_bp, init_performance_routes
+from api.routes.cache_routes import cache_bp
 
 def create_app(data_dir: str = "data"):
     """Flaskアプリケーション作成ファクトリー"""
     app = Flask(__name__)
     CORS(app)
-    
+
     # ルート初期化
     init_main_routes(data_dir)
     init_test_routes(data_dir)
     init_performance_routes(data_dir)
-    
+
     # Blueprint登録
     app.register_blueprint(main_bp)
     app.register_blueprint(test_bp)
     app.register_blueprint(performance_bp)
-    
+    app.register_blueprint(cache_bp)
+
     return app
 
 # アプリケーション作成
@@ -66,5 +68,12 @@ if __name__ == '__main__':
     logger.info("    GET  /api/test-csv-optimization")
     logger.info("    GET  /api/test-parallel-processing")
     logger.info("    GET  /api/test-optimization-analysis")
-    
+    logger.info("  キャッシュAPI (cache_bp):")
+    logger.info("    GET    /api/cache/list")
+    logger.info("    GET    /api/cache/stats")
+    logger.info("    GET    /api/cache/<cache_key>")
+    logger.info("    GET    /api/cache/<cache_key>/exists")
+    logger.info("    DELETE /api/cache/<cache_key>")
+    logger.info("    POST   /api/cache/cleanup")
+
     app.run(debug=True, host='0.0.0.0', port=5000)
