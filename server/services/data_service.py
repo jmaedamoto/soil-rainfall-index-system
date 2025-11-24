@@ -8,7 +8,7 @@ import numpy as np
 import logging
 import os
 import time
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 from models import Prefecture, Area, Mesh, PREFECTURES_MASTER
 
@@ -267,8 +267,9 @@ class DataService:
                     logger.warning(f"VBA座標ルックアップテーブル作成エラー: {e}")
             
             # メッシュオブジェクト一括作成（最適化: zip使用で効率化）
+            # OrderedDictを使用してCSV出現順を保持
             meshes = []
-            area_dict = {}
+            area_dict = OrderedDict()
 
             # zip()を使った効率的なイテレーション
             for code, area_name, coord, idx, adv, warn, dosa in zip(
@@ -311,11 +312,11 @@ class DataService:
 
                     meshes.append(mesh)
 
-                    # エリア別に分類
+                    # エリア別に分類（CSV出現順を保持）
                     if area_name not in area_dict:
                         area = Area(name=area_name, meshes=[])
                         area_dict[area_name] = area
-                    
+
                     area_dict[area_name].meshes.append(mesh)
                     
                 except Exception as e:

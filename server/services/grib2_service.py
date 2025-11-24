@@ -182,87 +182,128 @@ class Grib2Service:
     def unpack_runlength(self, data: bytes, bit_num: int, level_num: int, level_max: int,
                          grid_num: int, level: List[int], s_position: int,
                          e_position: int) -> List[float]:
-        """ランレングス圧縮データの展開（VBA完全準拠 + 軽微な最適化）"""
+        """
+        ランレングス圧縮データの展開（気象庁GRIB2テンプレート7.200準拠）
+
+        仕様:
+        - NBIT: 1格子点値当たりのビット数
+        - MAXV: 格子点値の最大値（0 ≤ 値 ≤ MAXV）
+        - LNGU: ランレングス進数基数 = 2^NBIT - 1 - MAXV
+        - データ ≤ MAXV: 格子点の値
+        - データ > MAXV: ランレングス情報（LNGU進数）
+
+        圧縮フォーマット:
+        {値} または {値, RL1, RL2, ...}
+        - 値が連続しない場合: {値}のみ
+        - 値がRL回連続する場合: {値, ランレングスデータ...}
+          RL = Σ(LNGU^(i-1) × (RLi - (MAXV+1))) + 1
+        """
         try:
-            # VBA: lngu = 2 ^ bit_num - 1 - level_max
-            lngu = 2 ** bit_num - 1 - level_max
-            byte_size = bit_num // 8  # 事前計算で最適化
+            # GRIB2テンプレート7.200パラメータ
+            NBIT = bit_num
+            MAXV = level_max
+            LNGU = 2 ** NBIT - 1 - MAXV
+            byte_size = NBIT // 8
 
-            # VBA: ReDim data(grid_num) - 1ベース配列
-            data_result = [0.0] * (grid_num + 1)
+            # 結果格納用配列（0-indexed、grid_num個の値を格納）
+            result = []
 
-            # VBA: d_index = 1
-            d_index = 1
+            # 圧縮データストリーム位置
+            position = s_position
 
-            # VBA: p = s_position
-            p = s_position
+            # メインループ: 圧縮データを順次読み取り
+            while position < e_position and len(result) < grid_num:
+                # 値インデックス（level配列の添字）を読み取り
+                value_index = self.get_dat(data, position, byte_size)
+                position += byte_size
 
-            # VBA: Do While p < e_position
-            while p < e_position:
-                # VBA: d = get_dat(buf, p, bit_num / 8)
-                d = self.get_dat(data, p, byte_size)
-                # VBA: p = p + bit_num / 8
-                p = p + byte_size
-
-                # VBA: If d > level_num Then
-                if d > level_num:
-                    logger.error(f"VBA停止条件: d({d}) > level_num({level_num})")
+                # 値インデックスの妥当性チェック
+                if value_index > level_num:
+                    logger.warning(f"無効な値インデックス: {value_index} > {level_num}")
                     break
 
-                # VBA: dd = get_dat(buf, p, bit_num / 8)
-                dd = self.get_dat(data, p, byte_size)
+                # 実際の格子点値を取得
+                grid_value = self._get_level_value(level, value_index)
 
-                # VBA: If dd <= level_max Then
-                if dd <= level_max:
-                    # VBA: data(d_index) = level(d)
-                    if 1 <= d < len(level):
-                        data_result[d_index] = float(level[d])
-                    else:
-                        data_result[d_index] = 0.0
-                    # VBA: d_index = d_index + 1
-                    d_index = d_index + 1
+                # 次のデータを先読み（値 or ランレングス判定用）
+                if position >= e_position:
+                    # データ終端: 値を1つだけ出力
+                    result.append(grid_value)
+                    break
+
+                next_data = self.get_dat(data, position, byte_size)
+
+                if next_data <= MAXV:
+                    # ケース1: 次も値 → 現在の値は連続なし（1回のみ出力）
+                    result.append(grid_value)
                 else:
-                    # VBA: nlength = 0
-                    nlength = 0
-                    # VBA: p2 = 1
-                    p2 = 1
+                    # ケース2: 次はランレングス → LNGU進数で連続回数を解析
+                    run_length = self._decode_runlength(
+                        data, position, e_position, byte_size, MAXV, LNGU
+                    )
+                    position = self._runlength_end_position  # デコード後の位置を更新
 
-                    # VBA: Do While p <= e_position And dd > level_max
-                    while p <= e_position and dd > level_max:
-                        # VBA: nlength = nlength + ((lngu ^ (p2 - 1)) * (dd - level_max - 1))
-                        nlength = nlength + ((lngu ** (p2 - 1)) * (dd - level_max - 1))
-                        # VBA: p = p + bit_num / 8
-                        p = p + byte_size
-                        # VBA: dd = get_dat(buf, p, bit_num / 8)
-                        if p < len(data) and p + byte_size <= len(data):
-                            dd = self.get_dat(data, p, byte_size)
-                        else:
+                    # 値をrun_length回出力
+                    for _ in range(run_length):
+                        if len(result) >= grid_num:
                             break
-                        # VBA: p2 = p2 + 1
-                        p2 = p2 + 1
+                        result.append(grid_value)
 
-                    # VBA: For i = 1 To nlength + 1
-                    for i in range(1, nlength + 2):
-                        # VBA: data(d_index) = level(d)
-                        if d_index < len(data_result):
-                            if 1 <= d < len(level):
-                                data_result[d_index] = float(level[d])
-                            else:
-                                data_result[d_index] = 0.0
-                        # VBA: d_index = d_index + 1
-                        d_index = d_index + 1
-                        if d_index > grid_num:
-                            break
+            # 不足分を0.0で埋める
+            while len(result) < grid_num:
+                result.append(0.0)
 
-                if d_index > grid_num:
-                    break
-
-            # VBAの1ベース配列から0ベースに変換
-            return data_result[1:grid_num + 1]
+            return result[:grid_num]
 
         except Exception as e:
             logger.error(f"ランレングス展開エラー: {e}")
             return [0.0] * grid_num
+
+    def _get_level_value(self, level: List[int], index: int) -> float:
+        """level配列から値を安全に取得"""
+        if 1 <= index < len(level):
+            return float(level[index])
+        else:
+            return 0.0
+
+    def _decode_runlength(self, data: bytes, start_pos: int, end_pos: int,
+                          byte_size: int, MAXV: int, LNGU: int) -> int:
+        """
+        LNGU進数によるランレングスのデコード
+
+        ランレングス = Σ(LNGU^(i-1) × (RLi - (MAXV+1))) + 1
+
+        例: LNGU=5, データ列={13, 12}
+        RL = 5^0×(13-11) + 5^1×(12-11) + 1 = 2 + 5 + 1 = 8
+        → 値を8回繰り返し
+        """
+        position = start_pos
+        run_length = 0
+        digit = 0  # LNGU進数の桁位置（0から開始）
+
+        # ランレングスデータを連続して読み取り
+        while position < end_pos:
+            rl_data = self.get_dat(data, position, byte_size)
+            position += byte_size
+
+            if rl_data <= MAXV:
+                # MAXV以下のデータが現れた → ランレングス終了
+                # このデータは次のセットの値なので、位置を戻す
+                position -= byte_size
+                break
+
+            # LNGU進数のdigit桁目の値を加算
+            # RLdigit = LNGU^digit × (rl_data - (MAXV + 1))
+            run_length += (LNGU ** digit) * (rl_data - (MAXV + 1))
+            digit += 1
+
+        # 仕様: 最終的なランレングスは Σ + 1
+        run_length += 1
+
+        # デコード後の位置をインスタンス変数に保存（呼び出し側で使用）
+        self._runlength_end_position = position
+
+        return run_length
     
     def unpack_data(self, data: bytes, position: int, grid_num: int,
                     data_type: int, level: List[int], ref_val: float) -> List[float]:

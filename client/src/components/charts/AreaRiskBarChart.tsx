@@ -74,14 +74,8 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
       dateGroup.hours.push({ ft, hour: ftHour });
     });
 
-    // 全エリアを初期時刻（FT0）のリスクレベル順にソート（固定順序）
-    const allAreas = areas
-      .map(area => {
-        const initialRisk = area.risk_timeline.find(r => r.ft === 0)?.value || 0;
-        return { area, initialRisk };
-      })
-      .sort((a, b) => b.initialRisk - a.initialRisk)
-      .map(item => item.area);
+    // 全エリアをCSV出現順（APIから返される順序）で維持
+    const allAreas = areas;
 
     return { dateGroups, allAreas };
   }, [areas, initialTime]);
