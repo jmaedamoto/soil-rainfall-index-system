@@ -113,3 +113,18 @@ export const RISK_LABELS = {
   [RiskLevel.WARNING]: '警報',
   [RiskLevel.DISASTER]: '土砂災害'
 } as const;
+
+// 雨量調整機能用の型定義
+
+export interface AreaRainfallForecast {
+  status: 'success' | 'error';
+  swi_initial_time: string;         // SWI初期時刻（ISO8601）
+  guidance_initial_time: string;    // ガイダンス初期時刻（ISO8601）
+  area_rainfall: Record<string, TimeSeriesPoint[]>;  // 市町村別雨量時系列
+}
+
+export interface RainfallAdjustmentRequest {
+  swi_initial: string;              // SWI初期時刻（ISO8601）
+  guidance_initial: string;         // ガイダンス初期時刻（ISO8601）
+  area_adjustments: Record<string, Record<number, number>>;  // 市町村別調整後雨量
+}

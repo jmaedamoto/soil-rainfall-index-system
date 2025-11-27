@@ -19,6 +19,7 @@ from api.routes.main_routes import main_bp, init_main_routes
 from api.routes.test_routes import test_bp, init_test_routes
 from api.routes.performance_routes import performance_bp, init_performance_routes
 from api.routes.cache_routes import cache_bp
+from api.routes.rainfall_routes import rainfall_bp
 
 def create_app(data_dir: str = "data"):
     """Flaskアプリケーション作成ファクトリー"""
@@ -35,6 +36,7 @@ def create_app(data_dir: str = "data"):
     app.register_blueprint(test_bp)
     app.register_blueprint(performance_bp)
     app.register_blueprint(cache_bp)
+    app.register_blueprint(rainfall_bp)
 
     return app
 
@@ -75,5 +77,8 @@ if __name__ == '__main__':
     logger.info("    GET    /api/cache/<cache_key>/exists")
     logger.info("    DELETE /api/cache/<cache_key>")
     logger.info("    POST   /api/cache/cleanup")
+    logger.info("  雨量調整API (rainfall_bp):")
+    logger.info("    GET    /api/rainfall-forecast")
+    logger.info("    POST   /api/rainfall-adjustment")
 
     app.run(debug=True, host='0.0.0.0', port=5000)

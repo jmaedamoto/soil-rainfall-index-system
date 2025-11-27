@@ -549,6 +549,79 @@ class CalculationService:
             logger.error(f"Mesh calculations error: {e}")
             return mesh
 
+    def recalculate_swi_and_risk(self, mesh: Mesh) -> Mesh:
+        """
+        雨量データは既に調整済みという前提で、SWIと危険度のみ再計算
+
+        Args:
+            mesh: 調整済み雨量データを持つメッシュ
+
+        Returns:
+            再計算されたメッシュ
+        """
+        try:
+            # 既存のSWI初期値を使用（最初のSWI値から逆算）
+            if mesh.swi and len(mesh.swi) > 0:
+                initial_swi = mesh.swi[0].value
+
+                # タンク値の推定（簡易版：均等分割）
+                # より正確にはSWIデータから取得すべきだが、
+                # 調整後の再計算では元の初期値を保持していると仮定
+                initial_first_tunk = initial_swi * 0.4
+                initial_second_tunk = initial_swi * 0.3
+                initial_third_tunk = initial_swi * 0.3
+
+                # 1時間ごとのSWI再計算
+                mesh.swi_hourly = self.calc_swi_hourly(
+                    initial_swi,
+                    initial_first_tunk,
+                    initial_second_tunk,
+                    initial_third_tunk,
+                    mesh.rain_1hour
+                )
+
+                # 1時間ごとの危険度再計算
+                mesh.risk_hourly = self.calc_hourly_risk(
+                    mesh.swi_hourly,
+                    mesh.advisary_bound,
+                    mesh.warning_bound,
+                    mesh.dosyakei_bound
+                )
+
+                # 3時間ごとの最大危険度再計算
+                mesh.risk_3hour_max = self.calc_3hour_max_risk_from_hourly(mesh.risk_hourly)
+
+                # 3時間ごとのSWI再計算（rain_3hourを使用）
+                # この場合はタンクモデルを3時間ステップで計算
+                swi_3hour = []
+                swi_3hour.append(SwiTimeSeries(ft=0, value=initial_swi))
+
+                current_first = initial_first_tunk
+                current_second = initial_second_tunk
+                current_third = initial_third_tunk
+
+                for rain_point in mesh.rain_3hour:
+                    new_first, new_second, new_third = self.calc_tunk_model(
+                        current_first, current_second, current_third,
+                        3.0,  # 3時間
+                        rain_point.value
+                    )
+
+                    new_swi = new_first + new_second + new_third
+                    swi_3hour.append(SwiTimeSeries(ft=rain_point.ft, value=new_swi))
+
+                    current_first = new_first
+                    current_second = new_second
+                    current_third = new_third
+
+                mesh.swi = swi_3hour
+
+            return mesh
+
+        except Exception as e:
+            logger.error(f"SWI recalculation error: {e}")
+            return mesh
+
     def process_area_calculations(self, areas: List[Area]) -> None:
         """
         VBA calc_data の一部処理
