@@ -12,9 +12,18 @@ proxy:
 
 # GRIB2データ取得設定
 grib2:
+  # データ取得元ベースURL
+  base_url: "http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn"
+
+  # SWI（土壌雨量指数）データパス
+  swi_path: "/swi10"
+
+  # ガイダンス（降水量予測）データパス
+  guidance_path: "/gdc"
+
   # タイムアウト設定（秒）
   download_timeout: 300
-  
+
   # 接続リトライ設定
   retry_count: 3
   retry_delay: 5

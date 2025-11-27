@@ -47,6 +47,9 @@ class ConfigService:
                 "https": None
             },
             "grib2": {
+                "base_url": "http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn",
+                "swi_path": "/swi10",
+                "guidance_path": "/gdc",
                 "download_timeout": 300,
                 "retry_count": 3,
                 "retry_delay": 5
@@ -56,7 +59,7 @@ class ConfigService:
             },
             "logging": {
                 "level": "INFO",
-                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                "format": "%(asctime)s - %(levelname)s - %(message)s"
             }
         }
     
@@ -82,11 +85,34 @@ class ConfigService:
     def get_grib2_config(self) -> Dict[str, Any]:
         """GRIB2設定を取得"""
         return {
+            "base_url": self.get("grib2.base_url", "http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn"),
+            "swi_path": self.get("grib2.swi_path", "/swi10"),
+            "guidance_path": self.get("grib2.guidance_path", "/gdc"),
             "download_timeout": self.get("grib2.download_timeout", 300),
             "retry_count": self.get("grib2.retry_count", 3),
             "retry_delay": self.get("grib2.retry_delay", 5)
         }
-    
+
     def get_data_directory(self) -> str:
         """データディレクトリを取得"""
         return self.get("data.directory", "data")
+
+    def build_swi_url(self, initial_time) -> str:
+        """SWI GRIB2 URL構築"""
+        base_url = self.get("grib2.base_url", "http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn")
+        swi_path = self.get("grib2.swi_path", "/swi10")
+        return f"{base_url}{swi_path}/{initial_time.strftime('%Y/%m/%d')}/Z__C_RJTD_{initial_time.strftime('%Y%m%d%H%M%S')}_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin"
+
+    def build_guidance_url(self, initial_time) -> str:
+        """ガイダンス GRIB2 URL構築"""
+        base_url = self.get("grib2.base_url", "http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn")
+        guidance_path = self.get("grib2.guidance_path", "/gdc")
+
+        # ガイダンスファイル名の時刻変換（0,6,12,18時 → "00"、3,9,15,21時 → "03"）
+        hour = initial_time.hour
+        if hour % 6 == 0:
+            rmax_hour = "00"
+        else:
+            rmax_hour = "03"
+
+        return f"{base_url}{guidance_path}/{initial_time.strftime('%Y/%m/%d')}/guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax{rmax_hour}.bin"

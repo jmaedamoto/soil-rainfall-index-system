@@ -12,6 +12,7 @@ from .grib2_service import Grib2Service
 from .data_service import DataService
 from .calculation_service import CalculationService
 from .cache_service import get_cache_service
+from src.config.config_service import ConfigService
 
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ class MainService:
         self.data_service = DataService(data_dir)
         self.calculation_service = CalculationService()
         self.cache_service = get_cache_service()
+        self.config_service = ConfigService()
     
     def main_process_from_files(self, swi_file: str, guidance_file: str) -> Dict[str, Any]:
         """ファイルベースのメイン処理（テスト用）"""
@@ -165,15 +167,9 @@ class MainService:
     def main_process_from_urls(self, initial_time: datetime) -> Dict[str, Any]:
         """URL ベースのメイン処理"""
         try:
-            # URL 構築
-            swi_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/swi10/{initial_time.strftime('%Y/%m/%d')}/Z__C_RJTD_{initial_time.strftime('%Y%m%d%H%M%S')}_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin"
-            # ガイダンスファイル名の時刻変換（0,6,12,18時 → "00"、3,9,15,21時 → "03"）
-            hour = initial_time.hour
-            if hour % 6 == 0:  # 0,6,12,18時
-                rmax_hour = "00"
-            else:  # 3,9,15,21時
-                rmax_hour = "03"
-            guidance_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc/{initial_time.strftime('%Y/%m/%d')}/guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax{rmax_hour}.bin"
+            # 設定ファイルからURL構築
+            swi_url = self.config_service.build_swi_url(initial_time)
+            guidance_url = self.config_service.build_guidance_url(initial_time)
 
             logger.info(f"SWI URL: {swi_url}")
             logger.info(f"Guidance URL: {guidance_url}")

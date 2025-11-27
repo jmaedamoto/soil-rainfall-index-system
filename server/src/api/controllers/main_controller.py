@@ -14,6 +14,7 @@ sys.path.append(project_root)
 
 from services.main_service import MainService
 from services.cache_service import get_cache_service
+from src.config.config_service import ConfigService
 
 
 logger = logging.getLogger(__name__)
@@ -21,10 +22,11 @@ logger = logging.getLogger(__name__)
 
 class MainController:
     """メインAPIコントローラー"""
-    
+
     def __init__(self, data_dir: str = "data"):
         self.main_service = MainService(data_dir)
         self.cache_service = get_cache_service()
+        self.config_service = ConfigService()
         self.data_dir = data_dir
     
     def root(self):
@@ -167,17 +169,11 @@ class MainController:
             # メイン処理実行
             result = self.main_service.main_process_from_urls(initial_time)
             result["status"] = "success"
-            
+
             # 使用したURLも返却（デバッグ用）
-            swi_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/swi10/{initial_time.strftime('%Y/%m/%d')}/Z__C_RJTD_{initial_time.strftime('%Y%m%d%H%M%S')}_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin"
-            # ガイダンスファイル名の時刻変換（0,6,12,18時 → "00"、3,9,15,21時 → "03"）
-            hour = initial_time.hour
-            if hour % 6 == 0:  # 0,6,12,18時
-                rmax_hour = "00"
-            else:  # 3,9,15,21時
-                rmax_hour = "03"
-            guidance_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc/{initial_time.strftime('%Y/%m/%d')}/guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax{rmax_hour}.bin"
-            
+            swi_url = self.config_service.build_swi_url(initial_time)
+            guidance_url = self.config_service.build_guidance_url(initial_time)
+
             result["used_urls"] = {
                 "swi_url": swi_url,
                 "guidance_url": guidance_url
@@ -187,13 +183,16 @@ class MainController:
             
         except Exception as e:
             logger.error(f"本番テスト処理エラー: {e}")
+            error_urls = {}
+            if 'initial_time' in locals():
+                error_urls = {
+                    "swi_url": self.config_service.build_swi_url(initial_time),
+                    "guidance_url": self.config_service.build_guidance_url(initial_time)
+                }
             return jsonify({
                 "status": "error",
                 "message": str(e),
-                "used_urls": {
-                    "swi_url": f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/swi10/Z__C_RJTD_{initial_time.strftime('%Y%m%d%H%M%S')}_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin" if 'initial_time' in locals() else "N/A",
-                    "guidance_url": f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc/guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax00.bin" if 'initial_time' in locals() else "N/A"
-                }
+                "used_urls": error_urls if error_urls else {"swi_url": "N/A", "guidance_url": "N/A"}
             }), 500
 
     def production_soil_rainfall_index_with_urls(self):
@@ -243,16 +242,9 @@ class MainController:
 
             logger.info(f"本番テスト実行: SWI初期時刻={swi_initial}, ガイダンス初期時刻={guidance_initial}")
 
-            # URL構築
-            swi_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/swi10/{swi_initial.strftime('%Y/%m/%d')}/Z__C_RJTD_{swi_initial.strftime('%Y%m%d%H%M%S')}_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin"
-
-            # ガイダンスファイル名の時刻変換（0,6,12,18時 → "00"、3,9,15,21時 → "03"）
-            hour = guidance_initial.hour
-            if hour % 6 == 0:  # 0,6,12,18時
-                rmax_hour = "00"
-            else:  # 3,9,15,21時
-                rmax_hour = "03"
-            guidance_url = f"http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn/gdc/{guidance_initial.strftime('%Y/%m/%d')}/guid_msm_grib2_{guidance_initial.strftime('%Y%m%d%H%M%S')}_rmax{rmax_hour}.bin"
+            # 設定ファイルからURL構築
+            swi_url = self.config_service.build_swi_url(swi_initial)
+            guidance_url = self.config_service.build_guidance_url(guidance_initial)
 
             # キャッシュキー生成
             cache_key = self.cache_service.generate_cache_key(
