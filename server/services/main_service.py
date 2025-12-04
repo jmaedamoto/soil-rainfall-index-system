@@ -75,18 +75,26 @@ class MainService:
             risk_start = time.time()
 
             for prefecture in prefectures:
+                # エリアごとのリスクタイムライン計算
                 for area in prefecture.areas:
                     area.risk_timeline = self.calculation_service.calc_risk_timeline(area.meshes)
 
+                # 二次細分ごとの集約計算
+                for subdivision in prefecture.secondary_subdivisions:
+                    self.calculation_service.calc_secondary_subdivision_aggregates(subdivision)
+
+                # 府県全体の集約計算
+                self.calculation_service.calc_prefecture_aggregates(prefecture)
+
             risk_time = time.time() - risk_start
-            logger.info(f"リスクタイムライン計算完了: {risk_time:.2f}秒")
+            logger.info(f"リスクタイムライン・集約計算完了: {risk_time:.2f}秒")
             
             # 結果構築
             total_time = time.time() - start_time
             
             result = {
                 "status": "success",
-                "calculation_time": datetime.now().isoformat(),
+                "calculation_time": datetime.utcnow().isoformat(),
                 "initial_time": base_info.initial_date.isoformat(),
                 "note": "フル版: ローカルbinファイルからの実データ（全メッシュ処理）",
                 "prefectures": {}
@@ -97,19 +105,54 @@ class MainService:
                 pref_data = {
                     "name": prefecture.name,
                     "code": prefecture.code,
-                    "areas": []
+                    "areas": [],
+                    "secondary_subdivisions": [],
+                    "prefecture_rain_1hour_max_timeline": [
+                        {"ft": r.ft, "value": float(r.value)}
+                        for r in prefecture.prefecture_rain_1hour_max_timeline
+                    ],
+                    "prefecture_rain_3hour_timeline": [
+                        {"ft": r.ft, "value": float(r.value)}
+                        for r in prefecture.prefecture_rain_3hour_timeline
+                    ],
+                    "prefecture_risk_timeline": [
+                        {"ft": r.ft, "value": r.value}
+                        for r in prefecture.prefecture_risk_timeline
+                    ]
                 }
-                
+
+                # 二次細分データ
+                for subdivision in prefecture.secondary_subdivisions:
+                    subdiv_data = {
+                        "name": subdivision.name,
+                        "area_names": [area.name for area in subdivision.areas],
+                        "rain_1hour_max_timeline": [
+                            {"ft": r.ft, "value": float(r.value)}
+                            for r in subdivision.rain_1hour_max_timeline
+                        ],
+                        "rain_3hour_timeline": [
+                            {"ft": r.ft, "value": float(r.value)}
+                            for r in subdivision.rain_3hour_timeline
+                        ],
+                        "risk_timeline": [
+                            {"ft": r.ft, "value": r.value}
+                            for r in subdivision.risk_timeline
+                        ]
+                    }
+                    pref_data["secondary_subdivisions"].append(subdiv_data)
+
+                # エリア（市町村）データ
                 for area in prefecture.areas:
                     area_data = {
                         "name": area.name,
+                        "secondary_subdivision_name": area.secondary_subdivision_name,
                         "meshes": [],
                         "risk_timeline": [
-                            {"ft": risk.ft, "value": risk.value} 
+                            {"ft": risk.ft, "value": risk.value}
                             for risk in area.risk_timeline
                         ]
                     }
-                    
+
                     for mesh in area.meshes:
                         mesh_data = {
                             "code": mesh.code,
@@ -150,9 +193,9 @@ class MainService:
                             ]
                         }
                         area_data["meshes"].append(mesh_data)
-                    
+
                     pref_data["areas"].append(area_data)
-                
+
                 result["prefectures"][prefecture.code] = pref_data
             
             logger.info(f"総処理時間: {total_time:.2f}秒")
@@ -350,14 +393,22 @@ class MainService:
                         )
                         total_meshes += 1
             
-            # リスクタイムライン計算
+            # リスクタイムライン・集約計算
             for prefecture in prefectures:
+                # エリアごとのリスクタイムライン計算
                 for area in prefecture.areas:
                     area.risk_timeline = self.calculation_service.calc_risk_timeline(area.meshes)
+
+                # 二次細分ごとの集約計算
+                for subdivision in prefecture.secondary_subdivisions:
+                    self.calculation_service.calc_secondary_subdivision_aggregates(subdivision)
+
+                # 府県全体の集約計算
+                self.calculation_service.calc_prefecture_aggregates(prefecture)
             
             # 結果構築
             result = {
-                "calculation_time": datetime.now().isoformat(),
+                "calculation_time": datetime.utcnow().isoformat(),
                 "initial_time": initial_time.isoformat(),
                 "prefectures": {}
             }
@@ -367,19 +418,54 @@ class MainService:
                 pref_data = {
                     "name": prefecture.name,
                     "code": prefecture.code,
-                    "areas": []
+                    "areas": [],
+                    "secondary_subdivisions": [],
+                    "prefecture_rain_1hour_max_timeline": [
+                        {"ft": r.ft, "value": float(r.value)}
+                        for r in prefecture.prefecture_rain_1hour_max_timeline
+                    ],
+                    "prefecture_rain_3hour_timeline": [
+                        {"ft": r.ft, "value": float(r.value)}
+                        for r in prefecture.prefecture_rain_3hour_timeline
+                    ],
+                    "prefecture_risk_timeline": [
+                        {"ft": r.ft, "value": r.value}
+                        for r in prefecture.prefecture_risk_timeline
+                    ]
                 }
-                
+
+                # 二次細分データ
+                for subdivision in prefecture.secondary_subdivisions:
+                    subdiv_data = {
+                        "name": subdivision.name,
+                        "area_names": [area.name for area in subdivision.areas],
+                        "rain_1hour_max_timeline": [
+                            {"ft": r.ft, "value": float(r.value)}
+                            for r in subdivision.rain_1hour_max_timeline
+                        ],
+                        "rain_3hour_timeline": [
+                            {"ft": r.ft, "value": float(r.value)}
+                            for r in subdivision.rain_3hour_timeline
+                        ],
+                        "risk_timeline": [
+                            {"ft": r.ft, "value": r.value}
+                            for r in subdivision.risk_timeline
+                        ]
+                    }
+                    pref_data["secondary_subdivisions"].append(subdiv_data)
+
+                # エリア（市町村）データ
                 for area in prefecture.areas:
                     area_data = {
                         "name": area.name,
+                        "secondary_subdivision_name": area.secondary_subdivision_name,
                         "meshes": [],
                         "risk_timeline": [
-                            {"ft": risk.ft, "value": risk.value} 
+                            {"ft": risk.ft, "value": risk.value}
                             for risk in area.risk_timeline
                         ]
                     }
-                    
+
                     for mesh in area.meshes:
                         mesh_data = {
                             "code": mesh.code,
@@ -420,9 +506,9 @@ class MainService:
                             ]
                         }
                         area_data["meshes"].append(mesh_data)
-                    
+
                     pref_data["areas"].append(area_data)
-                
+
                 result["prefectures"][prefecture.code] = pref_data
             
             return result

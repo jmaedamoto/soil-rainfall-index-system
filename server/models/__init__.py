@@ -4,17 +4,18 @@
 """
 
 from .data_models import (
-    BaseInfo, SwiTimeSeries, GuidanceTimeSeries, Risk, 
-    Mesh, Area, Prefecture, PREFECTURES_MASTER
+    BaseInfo, SwiTimeSeries, GuidanceTimeSeries, Risk,
+    Mesh, Area, SecondarySubdivision, Prefecture, PREFECTURES_MASTER
 )
 
 __all__ = [
     'BaseInfo',
-    'SwiTimeSeries', 
+    'SwiTimeSeries',
     'GuidanceTimeSeries',
     'Risk',
     'Mesh',
-    'Area', 
+    'Area',
+    'SecondarySubdivision',
     'Prefecture',
     'PREFECTURES_MASTER'
 ]

@@ -90,24 +90,56 @@ class RainfallController:
 
             logger.info(f"雨量予想取得: SWI={swi_initial}, ガイダンス={guidance_initial}")
 
-            # GRIB2データ取得
-            from src.config.config_service import ConfigService
-            config_service = ConfigService()
+            # テストデータ判定（2023-06-02はテストデータ）
+            is_test_data = (
+                swi_initial.year == 2023 and
+                swi_initial.month == 6 and
+                swi_initial.day == 2 and
+                swi_initial.hour == 0
+            )
 
-            swi_url = config_service.build_swi_url(swi_initial)
-            guidance_url = config_service.build_guidance_url(guidance_initial)
+            if is_test_data:
+                # ローカルテストデータを使用
+                logger.info("テストデータモード: ローカルbinファイルを使用します")
+                import os
 
-            logger.info(f"SWI URL: {swi_url}")
-            logger.info(f"Guidance URL: {guidance_url}")
+                swi_filename = "Z__C_RJTD_20230602000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin"
+                guidance_filename = "guid_msm_grib2_20230602000000_rmax00.bin"
 
-            # データダウンロード
-            swi_data_bytes = self.grib2_service.download_file(swi_url)
-            if not swi_data_bytes:
-                raise Exception(f"SWIファイルダウンロード失敗: {swi_url}")
+                swi_path = os.path.join("data", swi_filename)
+                guidance_path = os.path.join("data", guidance_filename)
 
-            guidance_data_bytes = self.grib2_service.download_file(guidance_url)
-            if not guidance_data_bytes:
-                raise Exception(f"ガイダンスファイルダウンロード失敗: {guidance_url}")
+                if not os.path.exists(swi_path):
+                    raise Exception(f"テストデータファイルが見つかりません: {swi_path}")
+                if not os.path.exists(guidance_path):
+                    raise Exception(f"テストデータファイルが見つかりません: {guidance_path}")
+
+                with open(swi_path, 'rb') as f:
+                    swi_data_bytes = f.read()
+                with open(guidance_path, 'rb') as f:
+                    guidance_data_bytes = f.read()
+
+                logger.info(f"ローカルファイル読み込み完了: {swi_filename}, {guidance_filename}")
+            else:
+                # 本番データをダウンロード
+                logger.info("本番データモード: 気象庁サーバーからダウンロードします")
+                from src.config.config_service import ConfigService
+                config_service = ConfigService()
+
+                swi_url = config_service.build_swi_url(swi_initial)
+                guidance_url = config_service.build_guidance_url(guidance_initial)
+
+                logger.info(f"SWI URL: {swi_url}")
+                logger.info(f"Guidance URL: {guidance_url}")
+
+                # データダウンロード
+                swi_data_bytes = self.grib2_service.download_file(swi_url)
+                if not swi_data_bytes:
+                    raise Exception(f"SWIファイルダウンロード失敗: {swi_url}")
+
+                guidance_data_bytes = self.grib2_service.download_file(guidance_url)
+                if not guidance_data_bytes:
+                    raise Exception(f"ガイダンスファイルダウンロード失敗: {guidance_url}")
 
             # GRIB2解析
             base_info, swi_grib2 = self.grib2_service.unpack_swi_grib2(swi_data_bytes)
@@ -218,21 +250,56 @@ class RainfallController:
             logger.info(f"雨量調整再計算: SWI={swi_initial}, ガイダンス={guidance_initial}")
             logger.info(f"調整対象市町村数: {len(converted_adjustments)}")
 
-            # GRIB2データ取得
-            from src.config.config_service import ConfigService
-            config_service = ConfigService()
+            # テストデータ判定（2023-06-02はテストデータ）
+            is_test_data = (
+                swi_initial.year == 2023 and
+                swi_initial.month == 6 and
+                swi_initial.day == 2 and
+                swi_initial.hour == 0
+            )
 
-            swi_url = config_service.build_swi_url(swi_initial)
-            guidance_url = config_service.build_guidance_url(guidance_initial)
+            if is_test_data:
+                # ローカルテストデータを使用
+                logger.info("テストデータモード: ローカルbinファイルを使用します")
+                import os
 
-            # データダウンロード
-            swi_data_bytes = self.grib2_service.download_file(swi_url)
-            if not swi_data_bytes:
-                raise Exception(f"SWIファイルダウンロード失敗: {swi_url}")
+                swi_filename = "Z__C_RJTD_20230602000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin"
+                guidance_filename = "guid_msm_grib2_20230602000000_rmax00.bin"
 
-            guidance_data_bytes = self.grib2_service.download_file(guidance_url)
-            if not guidance_data_bytes:
-                raise Exception(f"ガイダンスファイルダウンロード失敗: {guidance_url}")
+                swi_path = os.path.join("data", swi_filename)
+                guidance_path = os.path.join("data", guidance_filename)
+
+                if not os.path.exists(swi_path):
+                    raise Exception(f"テストデータファイルが見つかりません: {swi_path}")
+                if not os.path.exists(guidance_path):
+                    raise Exception(f"テストデータファイルが見つかりません: {guidance_path}")
+
+                with open(swi_path, 'rb') as f:
+                    swi_data_bytes = f.read()
+                with open(guidance_path, 'rb') as f:
+                    guidance_data_bytes = f.read()
+
+                logger.info(f"ローカルファイル読み込み完了: {swi_filename}, {guidance_filename}")
+            else:
+                # 本番データをダウンロード
+                logger.info("本番データモード: 気象庁サーバーからダウンロードします")
+                from src.config.config_service import ConfigService
+                config_service = ConfigService()
+
+                swi_url = config_service.build_swi_url(swi_initial)
+                guidance_url = config_service.build_guidance_url(guidance_initial)
+
+                logger.info(f"SWI URL: {swi_url}")
+                logger.info(f"Guidance URL: {guidance_url}")
+
+                # データダウンロード
+                swi_data_bytes = self.grib2_service.download_file(swi_url)
+                if not swi_data_bytes:
+                    raise Exception(f"SWIファイルダウンロード失敗: {swi_url}")
+
+                guidance_data_bytes = self.grib2_service.download_file(guidance_url)
+                if not guidance_data_bytes:
+                    raise Exception(f"ガイダンスファイルダウンロード失敗: {guidance_url}")
 
             # GRIB2解析
             base_info, swi_grib2 = self.grib2_service.unpack_swi_grib2(swi_data_bytes)
@@ -284,7 +351,7 @@ class RainfallController:
             # 結果構築（既存のmain_serviceと同じ形式）
             result = {
                 "status": "success",
-                "calculation_time": datetime.now().isoformat(),
+                "calculation_time": datetime.utcnow().isoformat(),
                 "initial_time": swi_initial.isoformat(),
                 "swi_initial_time": swi_initial.isoformat(),
                 "guid_initial_time": guidance_initial.isoformat(),

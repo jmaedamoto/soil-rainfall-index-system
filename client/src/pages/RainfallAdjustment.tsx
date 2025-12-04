@@ -1,12 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { getRainfallForecast, calculateWithAdjustedRainfall } from '../services/rainfallApi';
 import type { AreaRainfallForecast, TimeSeriesPoint, CalculationResult } from '../types/api';
 import '../styles/RainfallAdjustment.css';
 
+interface LocationState {
+  swiInitial?: string;
+  guidanceInitial?: string;
+  dataSource?: 'test' | 'production';
+}
+
 const RainfallAdjustment: React.FC = () => {
-  // 状態管理
-  const [swiInitial, setSwiInitial] = useState<string>('');
-  const [guidanceInitial, setGuidanceInitial] = useState<string>('');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const state = location.state as LocationState;
+
+  // 状態管理（ダッシュボードから渡された値またはデフォルト）
+  const [swiInitial, setSwiInitial] = useState<string>(state?.swiInitial || '');
+  const [guidanceInitial, setGuidanceInitial] = useState<string>(state?.guidanceInitial || '');
+  const [dataSource] = useState(state?.dataSource || 'test');
   const [originalRainfall, setOriginalRainfall] = useState<Record<string, TimeSeriesPoint[]>>({});
   const [adjustedRainfall, setAdjustedRainfall] = useState<Record<string, TimeSeriesPoint[]>>({});
   const [calculationResult, setCalculationResult] = useState<CalculationResult | null>(null);
@@ -127,14 +139,64 @@ const RainfallAdjustment: React.FC = () => {
     setAdjustedRainfall(JSON.parse(JSON.stringify(originalRainfall)));
   };
 
-  // 初回マウント時にデフォルト時刻を設定
-  React.useEffect(() => {
-    setDefaultTimes();
+  // 初回マウント時の処理
+  useEffect(() => {
+    // ダッシュボードから時刻が渡された場合、自動的にデータ取得
+    if (state?.swiInitial && state?.guidanceInitial) {
+      fetchRainfallForecast();
+    } else {
+      setDefaultTimes();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * ダッシュボードに戻る（調整結果を渡す）
+   */
+  const returnToDashboard = () => {
+    if (calculationResult) {
+      navigate('/dashboard', {
+        state: {
+          adjustedResult: calculationResult,
+          swiInitial,
+          guidanceInitial,
+          dataSource
+        }
+      });
+    }
+  };
 
   return (
     <div className="rainfall-adjustment-container">
-      <h1>雨量予想調整</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h1>雨量予想調整</h1>
+        <button
+          onClick={() => navigate('/dashboard')}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#6c757d',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          ダッシュボードに戻る
+        </button>
+      </div>
+
+      {/* データソース表示 */}
+      {dataSource && (
+        <div style={{
+          backgroundColor: '#e3f2fd',
+          padding: '10px 15px',
+          borderRadius: '6px',
+          marginBottom: '20px',
+          fontSize: '14px'
+        }}>
+          <strong>データソース:</strong> {dataSource === 'test' ? 'テストデータ' : '本番データ（気象庁GRIB2）'}
+        </div>
+      )}
 
       {/* 時刻入力セクション */}
       <div className="time-input-section">
@@ -254,13 +316,27 @@ const RainfallAdjustment: React.FC = () => {
         <div className="calculation-result-section">
           <h2>再計算結果</h2>
           <p>計算完了時刻: {new Date(calculationResult.calculation_time).toLocaleString('ja-JP')}</p>
-          <p>
-            <a href="/dashboard" target="_blank" rel="noopener noreferrer">
-              ダッシュボードで表示
-            </a>
-          </p>
-          <p className="info-text">
-            ※ 再計算結果はダッシュボードで危険度として確認できます
+
+          <div style={{ marginTop: '15px' }}>
+            <button
+              onClick={returnToDashboard}
+              style={{
+                padding: '12px 24px',
+                backgroundColor: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '16px',
+                fontWeight: 'bold'
+              }}
+            >
+              調整結果をダッシュボードで表示
+            </button>
+          </div>
+
+          <p className="info-text" style={{ marginTop: '10px' }}>
+            ※ 調整後の危険度を地図・グラフで確認できます
           </p>
         </div>
       )}

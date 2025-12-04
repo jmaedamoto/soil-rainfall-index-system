@@ -1,0 +1,232 @@
+SWI処理: data_type=200 土壌雨量指数処理
+レベル配列構築: level_max=28, len(level)=28
+level[13]=680 level[14]=700 (期待値680,700)
+level配列例: [0, 100, 200, 300, 400] ... [900, 920, 940, 960, 980]
+SWI処理: data_type=201, sub_type=1 第1タンク値
+レベル配列構築: level_max=3, len(level)=3
+level配列例: [0, 100, 200] ... [0, 100, 200]
+SWI処理: data_type=201, sub_type=2 第2タンク値
+レベル配列構築: level_max=73, len(level)=73
+level[13]=300 level[14]=320 (期待値680,700)
+level配列例: [0, 50, 100, 120, 140] ... [-32608, -32588, -32568, -32548, -32528]
+レベル配列構築: level_max=7, len(level)=7
+level配列例: [0, 1, 2, 3, 4] ... [2, 3, 4, 5, 6]
+レベル配列構築: level_max=6, len(level)=6
+level配列例: [0, 1, 2, 3, 4] ... [1, 2, 3, 4, 5]
+レベル配列構築: level_max=13, len(level)=13
+level配列例: [0, 1, 2, 3, 4] ... [8, 9, 10, 11, 12]
+レベル配列構築: level_max=15, len(level)=15
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [10, 11, 12, 13, 14]
+レベル配列構築: level_max=12, len(level)=12
+level配列例: [0, 1, 2, 3, 4] ... [7, 8, 9, 10, 11]
+レベル配列構築: level_max=13, len(level)=13
+level配列例: [0, 1, 2, 3, 4] ... [8, 9, 10, 11, 12]
+レベル配列構築: level_max=17, len(level)=17
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [12, 13, 14, 15, 17]
+レベル配列構築: level_max=16, len(level)=16
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [11, 12, 13, 14, 15]
+レベル配列構築: level_max=14, len(level)=14
+level配列例: [0, 1, 2, 3, 4] ... [9, 10, 11, 12, 13]
+レベル配列構築: level_max=11, len(level)=11
+level配列例: [0, 1, 2, 3, 4] ... [6, 7, 8, 9, 10]
+レベル配列構築: level_max=11, len(level)=11
+level配列例: [0, 1, 2, 3, 4] ... [6, 7, 8, 9, 10]
+レベル配列構築: level_max=11, len(level)=11
+level配列例: [0, 1, 2, 3, 4] ... [6, 7, 8, 9, 10]
+レベル配列構築: level_max=12, len(level)=12
+level配列例: [0, 1, 2, 3, 4] ... [7, 8, 9, 10, 11]
+レベル配列構築: level_max=20, len(level)=20
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [15, 17, 19, 20, 22]
+レベル配列構築: level_max=13, len(level)=13
+level配列例: [0, 1, 2, 3, 4] ... [8, 9, 10, 12, 15]
+レベル配列構築: level_max=12, len(level)=12
+level配列例: [0, 1, 2, 3, 4] ... [7, 8, 9, 11, 13]
+レベル配列構築: level_max=16, len(level)=16
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [11, 12, 13, 14, 15]
+レベル配列構築: level_max=11, len(level)=11
+level配列例: [0, 1, 2, 3, 4] ... [6, 7, 8, 9, 10]
+レベル配列構築: level_max=10, len(level)=10
+level配列例: [0, 1, 2, 3, 4] ... [5, 6, 7, 8, 9]
+レベル配列構築: level_max=9, len(level)=9
+level配列例: [0, 1, 2, 3, 4] ... [4, 5, 6, 7, 8]
+レベル配列構築: level_max=10, len(level)=10
+level配列例: [0, 1, 2, 3, 4] ... [5, 6, 7, 8, 9]
+レベル配列構築: level_max=12, len(level)=12
+level配列例: [0, 1, 2, 3, 4] ... [7, 8, 9, 10, 11]
+レベル配列構築: level_max=17, len(level)=17
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [12, 13, 14, 15, 16]
+レベル配列構築: level_max=8, len(level)=8
+level配列例: [0, 1, 2, 3, 4] ... [3, 4, 5, 6, 7]
+レベル配列構築: level_max=8, len(level)=8
+level配列例: [0, 1, 2, 3, 4] ... [3, 4, 5, 6, 7]
+レベル配列構築: level_max=8, len(level)=8
+level配列例: [0, 1, 2, 3, 4] ... [3, 4, 5, 6, 7]
+レベル配列構築: level_max=9, len(level)=9
+level配列例: [0, 1, 2, 3, 4] ... [4, 5, 6, 7, 8]
+レベル配列構築: level_max=9, len(level)=9
+level配列例: [0, 1, 2, 3, 4] ... [4, 5, 6, 7, 8]
+レベル配列構築: level_max=16, len(level)=16
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [11, 12, 13, 14, 15]
+レベル配列構築: level_max=20, len(level)=20
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [15, 16, 17, 18, 19]
+レベル配列構築: level_max=15, len(level)=15
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [10, 11, 12, 13, 14]
+レベル配列構築: level_max=15, len(level)=15
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [10, 11, 12, 13, 15]
+レベル配列構築: level_max=21, len(level)=21
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [16, 17, 18, 19, 20]
+レベル配列構築: level_max=19, len(level)=19
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [14, 15, 16, 17, 18]
+レベル配列構築: level_max=15, len(level)=15
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [10, 11, 12, 13, 14]
+レベル配列構築: level_max=13, len(level)=13
+level配列例: [0, 1, 2, 3, 4] ... [8, 9, 10, 11, 12]
+レベル配列構築: level_max=11, len(level)=11
+level配列例: [0, 1, 2, 3, 4] ... [6, 7, 8, 9, 10]
+レベル配列構築: level_max=11, len(level)=11
+level配列例: [0, 1, 2, 3, 4] ... [6, 7, 8, 9, 10]
+レベル配列構築: level_max=17, len(level)=17
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [12, 13, 14, 15, 17]
+レベル配列構築: level_max=25, len(level)=25
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [20, 22, 25, 26, 29]
+レベル配列構築: level_max=17, len(level)=17
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [12, 13, 14, 16, 17]
+レベル配列構築: level_max=13, len(level)=13
+level配列例: [0, 1, 2, 3, 4] ... [8, 9, 10, 12, 14]
+レベル配列構築: level_max=20, len(level)=20
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [16, 17, 18, 19, 22]
+レベル配列構築: level_max=15, len(level)=15
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [10, 11, 12, 13, 14]
+レベル配列構築: level_max=14, len(level)=14
+level配列例: [0, 1, 2, 3, 4] ... [9, 10, 11, 12, 13]
+レベル配列構築: level_max=14, len(level)=14
+level配列例: [0, 1, 2, 3, 4] ... [9, 10, 11, 12, 13]
+レベル配列構築: level_max=14, len(level)=14
+level配列例: [0, 1, 2, 3, 4] ... [9, 10, 11, 12, 13]
+レベル配列構築: level_max=16, len(level)=16
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [11, 12, 13, 14, 15]
+レベル配列構築: level_max=28, len(level)=28
+level[13]=12 level[14]=13 (期待値680,700)
+level配列例: [0, 1, 2, 3, 4] ... [23, 24, 25, 26, 27]
+レベル配列構築: level_max=11, len(level)=11
+level配列例: [0, 1, 2, 3, 4] ... [6, 7, 8, 9, 10]
+レベル配列構築: level_max=9, len(level)=9
+level配列例: [0, 1, 2, 3, 4] ... [4, 5, 6, 7, 8]
+レベル配列構築: level_max=9, len(level)=9
+level配列例: [0, 1, 2, 3, 4] ... [4, 5, 6, 7, 8]
+================================================================================
+メッシュ計算処理プロファイリング
+================================================================================
+
+プロファイリング開始...
+処理完了: 36.09秒
+
+メッシュ数: 26,045
+
+================================================================================
+上位20関数（累積時間順）
+================================================================================
+         105860094 function calls (105858341 primitive calls) in 33.453 seconds
+
+   Ordered by: cumulative time
+   List reduced from 751 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.135    0.135   36.055   36.055 main_service.py:29(main_process_from_files)
+       55    0.038    0.001   15.966    0.290 grib2_service.py:440(_unpack_data_section)
+       55    0.038    0.001   15.917    0.289 grib2_service.py:308(unpack_data)
+    26045    0.119    0.000   15.615    0.001 calculation_service.py:495(process_mesh_calculations)
+       55    8.167    0.148   12.989    0.236 grib2_service.py:182(unpack_runlength)
+        1    0.000    0.000   10.151   10.151 grib2_service.py:357(unpack_swi_grib2_from_file)
+        1    0.000    0.000   10.150   10.150 grib2_service.py:367(unpack_swi_grib2)
+        1    0.000    0.000    5.817    5.817 grib2_service.py:478(unpack_guidance_grib2_from_file)
+        1    0.000    0.000    5.817    5.817 grib2_service.py:488(unpack_guidance_grib2)
+    26045    1.747    0.000    4.496    0.000 calculation_service.py:218(calc_swi_hourly)
+ 49761027    2.895    0.000    2.895    0.000 {method 'append' of 'list' objects}
+       55    2.889    0.053    2.889    0.053 grib2_service.py:349(<listcomp>)
+    26045    1.890    0.000    2.759    0.000 calculation_service.py:162(calc_hourly_rain)
+    26045    1.583    0.000    2.321    0.000 calculation_service.py:313(calc_3hour_max_risk_from_hourly)
+45333364/45331767    2.305    0.000    2.305    0.000 {built-in method builtins.len}
+  2708680    2.304    0.000    2.304    0.000 calculation_service.py:73(calc_tunk_model)
+    26045    1.546    0.000    2.229    0.000 calculation_service.py:274(calc_hourly_risk)
+    52090    1.502    0.000    1.974    0.000 calculation_service.py:119(calc_rain_timelapse)
+    26045    0.814    0.000    1.690    0.000 calculation_service.py:348(calc_swi_timelapse)
+    26045    1.198    0.000    1.198    0.000 main_service.py:141(<listcomp>)
+
+
+
+================================================================================
+上位20関数（自己時間順）
+================================================================================
+         105860094 function calls (105858341 primitive calls) in 33.453 seconds
+
+   Ordered by: internal time
+   List reduced from 751 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+       55    8.167    0.148   12.989    0.236 grib2_service.py:182(unpack_runlength)
+ 49761027    2.895    0.000    2.895    0.000 {method 'append' of 'list' objects}
+       55    2.889    0.053    2.889    0.053 grib2_service.py:349(<listcomp>)
+45333364/45331767    2.305    0.000    2.305    0.000 {built-in method builtins.len}
+  2708680    2.304    0.000    2.304    0.000 calculation_service.py:73(calc_tunk_model)
+    26045    1.890    0.000    2.759    0.000 calculation_service.py:162(calc_hourly_rain)
+    26045    1.747    0.000    4.496    0.000 calculation_service.py:218(calc_swi_hourly)
+    26045    1.583    0.000    2.321    0.000 calculation_service.py:313(calc_3hour_max_risk_from_hourly)
+    26045    1.546    0.000    2.229    0.000 calculation_service.py:274(calc_hourly_risk)
+    52090    1.502    0.000    1.974    0.000 calculation_service.py:119(calc_rain_timelapse)
+    26045    1.198    0.000    1.198    0.000 main_service.py:141(<listcomp>)
+    26045    0.814    0.000    1.690    0.000 calculation_service.py:348(calc_swi_timelapse)
+      208    0.553    0.003    0.736    0.004 calculation_service.py:421(calc_risk_timeline)
+  2083751    0.509    0.000    0.747    0.000 {built-in method builtins.max}
+    26045    0.410    0.000    0.410    0.000 main_service.py:125(<listcomp>)
+    26045    0.394    0.000    0.394    0.000 main_service.py:129(<listcomp>)
+        1    0.330    0.330    1.071    1.071 data_service.py:165(prepare_areas)
+       12    0.283    0.024    0.360    0.030 c_parser_wrapper.py:222(read)
+   591508    0.253    0.000    0.341    0.000 grib2_service.py:104(get_dat)
+  2760770    0.237    0.000    0.237    0.000 calculation_service.py:335(<genexpr>)
+
+
+
+================================================================================
+calculation_service関連の詳細
+================================================================================
+         105860094 function calls (105858341 primitive calls) in 33.453 seconds
+
+   Ordered by: cumulative time
+   List reduced from 751 to 13 due to restriction <'calculation_service'>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    26045    0.119    0.000   15.615    0.001 calculation_service.py:495(process_mesh_calculations)
+    26045    1.747    0.000    4.496    0.000 calculation_service.py:218(calc_swi_hourly)
+    26045    1.890    0.000    2.759    0.000 calculation_service.py:162(calc_hourly_rain)
+    26045    1.583    0.000    2.321    0.000 calculation_service.py:313(calc_3hour_max_risk_from_hourly)
+  2708680    2.304    0.000    2.304    0.000 calculation_service.py:73(calc_tunk_model)
+    26045    1.546    0.000    2.229    0.000 calculation_service.py:274(calc_hourly_risk)
+    52090    1.502    0.000    1.974    0.000 calculation_service.py:119(calc_rain_timelapse)
+    26045    0.814    0.000    1.690    0.000 calculation_service.py:348(calc_swi_timelapse)
+      208    0.553    0.003    0.736    0.004 calculation_service.py:421(calc_risk_timeline)
+  2760770    0.237    0.000    0.237    0.000 calculation_service.py:335(<genexpr>)
+   130225    0.093    0.000    0.093    0.000 calculation_service.py:27(get_data_num)
+      208    0.000    0.000    0.000    0.000 calculation_service.py:451(<listcomp>)
+      208    0.000    0.000    0.000    0.000 calculation_service.py:482(<listcomp>)
+
+

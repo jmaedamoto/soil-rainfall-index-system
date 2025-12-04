@@ -157,8 +157,8 @@ class MainController:
                         "message": f"日時形式エラー: {e}"
                     }), 400
             else:
-                # 自動時刻設定（現在時刻の3時間前、6時間区切り）
-                now = datetime.now()
+                # 自動時刻設定（UTC現在時刻の3時間前、6時間区切り）
+                now = datetime.utcnow()
                 hours_ago = now - timedelta(hours=3)
                 # 6時間区切りに調整（0, 6, 12, 18時）
                 hour = (hours_ago.hour // 6) * 6

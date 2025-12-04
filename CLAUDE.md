@@ -2136,8 +2136,300 @@ const allAreas = areas;  // CSV出現順を維持
 
 ---
 
+## 🎉 **2025年12月4日 二次細分・府県一括処理機能完成**
+
+### ✅ **リスクタイムライン表示の3モード実装完了**
+
+リスクタイムライン表示に、市町村別・二次細分別・全府県一覧の3つの表示モードを実装しました。
+
+#### **実装の背景**
+
+`dosha_*.csv`の第1列は「二次細分」と呼ばれる、複数の市町村をまとめた気象警報区分です（例：兵庫県の「阪神」「播磨北西部」など）。リスクタイムラインの表示や雨量調整では、市町村ごとの操作に加えて、以下の機能が必要でした：
+
+1. **二次細分別表示**: 二次細分内の最大値を一括表示
+2. **全府県一覧**: 6府県すべてを1画面で同時表示（府県内最大値）
+
+### 📊 **サーバー側実装**
+
+#### **1. データモデル拡張**
+
+**新規追加クラス**:
+```python
+@dataclass
+class SecondarySubdivision:
+    """二次細分（市町村をまとめた地域）"""
+    name: str  # 二次細分名（例：「阪神」）
+    areas: List[Area]  # 所属市町村リスト
+    rain_1hour_max_timeline: List[GuidanceTimeSeries]  # 二次細分内の最大1時間雨量
+    rain_3hour_timeline: List[GuidanceTimeSeries]  # 二次細分内の最大3時間雨量
+    risk_timeline: List[Risk]  # 二次細分内の最大リスク
+```
+
+**Prefecture拡張**:
+```python
+@dataclass
+class Prefecture:
+    # 既存フィールド
+    name: str
+    code: str
+    areas: List[Area]
+
+    # 新規フィールド
+    secondary_subdivisions: List[SecondarySubdivision]  # 二次細分リスト
+    prefecture_rain_1hour_max_timeline: List[GuidanceTimeSeries]  # 府県全体の最大1時間雨量
+    prefecture_rain_3hour_timeline: List[GuidanceTimeSeries]  # 府県全体の最大3時間雨量
+    prefecture_risk_timeline: List[Risk]  # 府県全体の最大リスク
+```
+
+**Area拡張**:
+```python
+@dataclass
+class Area:
+    name: str
+    meshes: List[Mesh]
+    secondary_subdivision_name: str  # 所属する二次細分名（新規）
+    risk_timeline: List[Risk]
+```
+
+#### **2. prepare_areas()の二次細分対応**
+
+**ファイル**: `server/services/data_service.py`
+
+```python
+# CSV第1列（二次細分名）を読み込み
+subdivision_names = dosha_data.iloc[:, 0].astype(str).str.strip().values
+area_names = dosha_data.iloc[:, 1].astype(str).str.strip().values
+
+# 二次細分構造を構築（OrderedDictでCSV出現順を保持）
+subdivision_dict = OrderedDict()
+for area in area_dict.values():
+    subdiv_name = area.secondary_subdivision_name
+    if subdiv_name not in subdivision_dict:
+        subdivision = SecondarySubdivision(name=subdiv_name)
+        subdivision_dict[subdiv_name] = subdivision
+    subdivision_dict[subdiv_name].areas.append(area)
+
+# Prefectureに設定
+prefecture = Prefecture(
+    name=pref_name,
+    code=pref_code,
+    areas=list(area_dict.values()),
+    secondary_subdivisions=list(subdivision_dict.values())
+)
+```
+
+**構築結果例**（滋賀県）:
+- 8つの二次細分
+- 41の市町村
+- 各二次細分に複数市町村が所属
+
+#### **3. 集約計算関数の実装**
+
+**ファイル**: `server/services/calculation_service.py`
+
+**二次細分内の最大値集約**:
+```python
+def calc_secondary_subdivision_aggregates(self, subdivision: SecondarySubdivision):
+    """二次細分内の最大雨量・リスクを集計"""
+    # 全メッシュを収集
+    all_meshes = []
+    for area in subdivision.areas:
+        all_meshes.extend(area.meshes)
+
+    # FTごとに最大値を集計
+    for ft in sorted(ft_set_1hour_max):
+        max_value = max(
+            (point.value for mesh in all_meshes
+             for point in mesh.rain_1hour_max if point.ft == ft),
+            default=0.0
+        )
+        subdivision.rain_1hour_max_timeline.append(
+            GuidanceTimeSeries(ft=ft, value=max_value)
+        )
+    # rain_3hour_timeline, risk_timelineも同様に集約
+```
+
+**府県全体の最大値集約**:
+```python
+def calc_prefecture_aggregates(self, prefecture: Prefecture):
+    """府県全体の最大雨量・リスクを集計"""
+    # 府県内の全メッシュから最大値を集計
+    all_meshes = []
+    for area in prefecture.areas:
+        all_meshes.extend(area.meshes)
+
+    # 二次細分と同様のロジックで集約
+```
+
+#### **4. APIレスポンス拡張**
+
+**ファイル**: `server/services/main_service.py`, `server/src/api/controllers/test_controller.py`
+
+```json
+{
+  "prefectures": {
+    "hyogo": {
+      "name": "兵庫県",
+      "code": "hyogo",
+      "areas": [...],
+      "secondary_subdivisions": [
+        {
+          "name": "阪神",
+          "area_names": ["神戸市", "尼崎市", ...],
+          "rain_1hour_max_timeline": [...],
+          "rain_3hour_timeline": [...],
+          "risk_timeline": [...]
+        }
+      ],
+      "prefecture_rain_1hour_max_timeline": [...],
+      "prefecture_rain_3hour_timeline": [...],
+      "prefecture_risk_timeline": [...]
+    }
+  }
+}
+```
+
+### 🎨 **クライアント側実装**
+
+#### **5. TypeScript型定義拡張**
+
+**ファイル**: `client/src/types/api.ts`
+
+```typescript
+export interface SecondarySubdivision {
+  name: string;
+  area_names: string[];
+  rain_1hour_max_timeline: TimeSeriesPoint[];
+  rain_3hour_timeline: TimeSeriesPoint[];
+  risk_timeline: RiskTimePoint[];
+}
+
+export interface Prefecture {
+  name: string;
+  code: string;
+  areas: Area[];
+  secondary_subdivisions?: SecondarySubdivision[];
+  prefecture_rain_1hour_max_timeline?: TimeSeriesPoint[];
+  prefecture_rain_3hour_timeline?: TimeSeriesPoint[];
+  prefecture_risk_timeline?: RiskTimePoint[];
+}
+
+export type RiskTimelineViewMode = 'municipality' | 'subdivision' | 'prefecture-all';
+```
+
+#### **6. AreaRiskBarChart表示モード切り替え**
+
+**ファイル**: `client/src/components/charts/AreaRiskBarChart.tsx`
+
+**表示モード切り替えUI**:
+```tsx
+<div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+  <label style={{ fontWeight: 'bold' }}>表示:</label>
+  <button onClick={() => setViewMode('municipality')}>市町村別</button>
+  <button onClick={() => setViewMode('subdivision')}>二次細分別</button>
+  <button onClick={() => setViewMode('prefecture-all')}>全府県一覧</button>
+</div>
+```
+
+**動的データ準備**:
+```typescript
+const displayData = useMemo(() => {
+  let rows: DisplayRow[] = [];
+
+  if (viewMode === 'municipality') {
+    // 市町村別表示
+    const selectedPref = prefectures.find(p => p.code === selectedPrefecture);
+    rows = selectedPref.areas.map(area => ({
+      name: area.name,
+      risk_timeline: area.risk_timeline
+    }));
+  } else if (viewMode === 'subdivision') {
+    // 二次細分別表示
+    rows = selectedPref.secondary_subdivisions.map(subdiv => ({
+      name: subdiv.name,
+      risk_timeline: subdiv.risk_timeline
+    }));
+  } else if (viewMode === 'prefecture-all') {
+    // 全府県一覧表示
+    rows = prefectures.map(pref => ({
+      name: pref.name,
+      risk_timeline: pref.prefecture_risk_timeline
+    }));
+  }
+
+  return { rows, dateGroups };
+}, [prefectures, selectedPrefecture, viewMode]);
+```
+
+### 📊 **動作確認結果**
+
+```bash
+# APIテスト結果（滋賀県の例）
+Prefecture: 滋賀県
+  Areas: 41                    # 市町村数
+  Secondary Subdivisions: 8    # 二次細分数
+  Example subdivision: 湖南    # 二次細分名
+  Subdivision areas: 9         # 二次細分内の市町村数
+  Prefecture risk timeline: 79 # 府県全体のリスクタイムラインポイント数
+```
+
+### 🎯 **実装の特徴**
+
+#### **データ構造の3階層化**
+```
+府県 (Prefecture)
+ ├─ 二次細分 (SecondarySubdivision)
+ │   └─ 市町村 (Area)
+ │       └─ メッシュ (Mesh)
+ └─ 府県全体集約データ
+```
+
+#### **効率的な集約計算**
+- サーバー側で事前に最大値を集約
+- クライアントは表示切り替えのみ
+- ネットワーク転送量を最小化
+
+#### **完全な後方互換性**
+- 既存の市町村別表示は完全に維持
+- 既存APIエンドポイントすべてで動作
+- レスポンス形式は拡張のみ（既存フィールドは変更なし）
+
+#### **CSV出現順序の保持**
+- OrderedDictを使用
+- 二次細分もCSV出現順で表示
+- データの一貫性を保証
+
+### 📁 **変更ファイル一覧**
+
+**サーバー側**:
+- `server/models/data_models.py` - SecondarySubdivision追加、Prefecture/Area拡張
+- `server/models/__init__.py` - SecondarySubdivisionをエクスポート
+- `server/services/data_service.py` - prepare_areas()の二次細分対応
+- `server/services/calculation_service.py` - 集約計算関数追加
+- `server/services/main_service.py` - 集約計算呼び出しとレスポンス拡張
+- `server/src/api/controllers/test_controller.py` - テストAPIの二次細分対応
+
+**クライアント側**:
+- `client/src/types/api.ts` - 型定義拡張（SecondarySubdivision, RiskTimelineViewMode）
+- `client/src/components/charts/AreaRiskBarChart.tsx` - 3モード表示実装
+
+### 🔄 **今後の拡張可能性**
+
+#### **雨量調整画面への展開**
+現在の実装で、雨量調整画面にも以下の機能を追加可能：
+- 二次細分別の最大雨量表示
+- 二次細分単位での一括雨量調整
+- サーバー側のデータ構造は既に対応済み
+
+#### **追加の集約レベル**
+データモデルは拡張可能な設計：
+- 広域ブロック（近畿地方全体など）
+- カスタムグループ（ユーザー定義地域）
+
+---
+
 **作成日**: 2025年7月23日
-**最終更新**: 2025年10月28日
-**バージョン**: 7.1.0（ランレングス展開リファクタリング・エリア表示順序改善版）
+**最終更新**: 2025年12月4日
+**バージョン**: 8.0.0（二次細分・府県一括処理機能完成版）
 **作成者**: Claude (Anthropic)
-**プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・パフォーマンス最適化・キャッシュシステム・高品質コード版）
+**プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・パフォーマンス最適化・3階層データ構造対応版）

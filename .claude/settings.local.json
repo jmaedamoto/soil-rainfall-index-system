@@ -46,7 +46,15 @@
       "Bash(npx tsc:*)",
       "Bash(git reset:*)",
       "Bash(timeout:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(cat:*)",
+      "Bash($env:PYTHONIOENCODING=\"utf-8\")",
+      "Bash(Select-Object -Last 50)",
+      "Bash(PYTHONIOENCODING=utf-8 python test_cache_identity.py)",
+      "Bash(git log:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python test_vectorized_calculation.py)",
+      "Bash(set PYTHONIOENCODING=utf-8)",
+      "Bash(export PYTHONIOENCODING=utf-8)"
     ],
     "deny": []
   }

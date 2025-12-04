@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
 import SoilRainfallMap from '../components/map/SoilRainfallMap';
 import TimeSlider from '../components/map/TimeSlider';
 import RiskTimelineChart from '../components/charts/RiskTimelineChart';
@@ -8,37 +7,24 @@ import AreaRiskBarChart from '../components/charts/AreaRiskBarChart';
 import ProgressBar from '../components/common/ProgressBar';
 import MeshAnalyzer from '../components/debug/MeshAnalyzer';
 import DataDownloader from '../components/debug/DataDownloader';
-import RainfallAdjustmentModal from '../components/RainfallAdjustmentModal';
 import { apiClient_ } from '../services/api';
 import { CalculationResult, Mesh, Area, Prefecture } from '../types/api';
 
-interface LocationState {
-  adjustedResult?: CalculationResult;
-  swiInitial?: string;
-  guidanceInitial?: string;
-  dataSource?: 'test' | 'production';
-}
-
 const SoilRainfallDashboard: React.FC = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const state = location.state as LocationState;
-
-  const [data, setData] = useState<CalculationResult | null>(state?.adjustedResult || null);
+  const [data, setData] = useState<CalculationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState(0);
   
-  // 時刻入力フィールドの状態（調整結果からの復元またはデフォルト）
-  const [swiInitialTime, setSwiInitialTime] = useState(state?.swiInitial || '2023-06-02T00:00:00Z');
-  const [guidInitialTime, setGuidInitialTime] = useState(state?.guidanceInitial || '2023-06-02T00:00:00Z');
+  // 時刻入力フィールドの状態（テストデータに合わせて2023-06-02T00:00:00Zに修正）
+  const [swiInitialTime, setSwiInitialTime] = useState('2023-06-02T00:00:00Z');
+  const [guidInitialTime, setGuidInitialTime] = useState('2023-06-02T00:00:00Z');
   const [useSeparateTimes, setUseSeparateTimes] = useState(false);
-
-  // データソース選択の状態（調整結果からの復元またはデフォルト）
-  const [dataSource, setDataSource] = useState<'test' | 'production'>(state?.dataSource || 'test');
-  const [isAdjustedData, setIsAdjustedData] = useState(!!state?.adjustedResult);
+  
+  // データソース選択の状態
+  const [dataSource, setDataSource] = useState<'test' | 'production'>('test');
   const [productionDateTime, setProductionDateTime] = useState(() => {
     // デフォルトは現在時刻の3時間前（6時間区切り）
     const now = new Date();
@@ -47,38 +33,6 @@ const SoilRainfallDashboard: React.FC = () => {
     threeHoursAgo.setHours(hours, 0, 0, 0);
     return threeHoursAgo.toISOString().slice(0, 19);
   });
-
-  // 雨量調整モーダルの状態
-  const [isRainfallModalOpen, setIsRainfallModalOpen] = useState(false);
-
-  // 雨量調整結果の処理
-  const handleRainfallAdjustmentResult = (result: CalculationResult) => {
-    setData(result);
-    setIsAdjustedData(true);
-
-    // 初期時刻をリセット
-    const meshes: Mesh[] = [];
-    Object.values(result.prefectures).forEach((prefecture: Prefecture) => {
-      prefecture.areas.forEach((area: Area) => {
-        area.meshes.forEach((mesh: Mesh) => {
-          meshes.push(mesh);
-        });
-      });
-    });
-
-    if (meshes.length > 0) {
-      const timeSet = new Set<number>();
-      meshes.forEach(mesh => {
-        mesh.swi_timeline.forEach(point => {
-          timeSet.add(point.ft);
-        });
-      });
-      const times = Array.from(timeSet).sort((a, b) => a - b);
-      if (times.length > 0) {
-        setSelectedTime(times[0]);
-      }
-    }
-  };
   
   // 時刻変更ハンドラー（最適化版）
   const handleTimeChange = (newTime: number) => {
@@ -222,7 +176,6 @@ const SoilRainfallDashboard: React.FC = () => {
     setError(null);
     setLoadingProgress(0);
     setLoadingMessage('APIサーバーに接続中...');
-    setIsAdjustedData(false); // 新規読み込みなので調整済みフラグをクリア
     
     try {
       console.log('APIサーバーへの接続を開始...');
@@ -623,9 +576,9 @@ const SoilRainfallDashboard: React.FC = () => {
       </div>
       
       {/* データ情報と再読み込み */}
-      <div style={{
-        backgroundColor: '#f5f5f5',
-        padding: '15px',
+      <div style={{ 
+        backgroundColor: '#f5f5f5', 
+        padding: '15px', 
         borderRadius: '8px',
         marginBottom: '20px',
         display: 'flex',
@@ -635,17 +588,6 @@ const SoilRainfallDashboard: React.FC = () => {
       }}>
         <div style={{ flex: 1 }}>
           <h3 style={{ marginTop: 0 }}>データ情報</h3>
-          {isAdjustedData && (
-            <div style={{
-              backgroundColor: '#fff3cd',
-              padding: '10px',
-              borderRadius: '4px',
-              marginBottom: '10px',
-              border: '1px solid #ffc107'
-            }}>
-              <strong>⚠️ 雨量調整済みデータ</strong> - ユーザーが編集した雨量予想に基づく計算結果
-            </div>
-          )}
           <p><strong>データソース:</strong> {dataSource === 'test' ? 'テストデータ' : '本番データ（気象庁GRIB2）'}</p>
           <p><strong>計算時刻:</strong> {new Date(data.calculation_time).toLocaleString('ja-JP')}</p>
           {data.swi_initial_time && (
@@ -669,8 +611,8 @@ const SoilRainfallDashboard: React.FC = () => {
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <button
+        <div>
+          <button 
             onClick={loadData}
             style={{
               padding: '10px 20px',
@@ -683,20 +625,6 @@ const SoilRainfallDashboard: React.FC = () => {
             }}
           >
             データ再読み込み
-          </button>
-          <button
-            onClick={() => setIsRainfallModalOpen(true)}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#FF9800',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            雨量調整
           </button>
         </div>
       </div>
@@ -818,8 +746,8 @@ const SoilRainfallDashboard: React.FC = () => {
       )}
 
       {/* フッター */}
-      <div style={{
-        textAlign: 'center',
+      <div style={{ 
+        textAlign: 'center', 
         marginTop: '40px',
         padding: '20px',
         backgroundColor: '#f5f5f5',
@@ -830,16 +758,6 @@ const SoilRainfallDashboard: React.FC = () => {
         <p>土壌雨量指数計算システム - 関西6府県対応</p>
         <p>リスクレベル: 0=正常, 1=注意, 2=警報, 3=土砂災害</p>
       </div>
-
-      {/* 雨量調整モーダル */}
-      <RainfallAdjustmentModal
-        isOpen={isRainfallModalOpen}
-        onClose={() => setIsRainfallModalOpen(false)}
-        swiInitial={swiInitialTime}
-        guidanceInitial={guidInitialTime}
-        dataSource={dataSource}
-        onResultCalculated={handleRainfallAdjustmentResult}
-      />
     </div>
   );
 };

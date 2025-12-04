@@ -10,7 +10,7 @@ import os
 import time
 from collections import defaultdict, OrderedDict
 
-from models import Prefecture, Area, Mesh, PREFECTURES_MASTER
+from models import Prefecture, Area, Mesh, SecondarySubdivision, PREFECTURES_MASTER
 
 
 logger = logging.getLogger(__name__)
@@ -207,8 +207,10 @@ class DataService:
             vba_swi_data = all_vba_swi_data.get(pref_code)
             
             # pandas vectorized operations を使用
+            # 第1列: 二次細分名、第2列: 市町村名、第3列: メッシュコード
+            subdivision_names = dosha_data.iloc[:, 0].astype(str).str.strip().values
+            area_names = dosha_data.iloc[:, 1].astype(str).str.strip().values
             mesh_codes = dosha_data.iloc[:, 2].astype(str).values
-            area_names = dosha_data.iloc[:, 1].astype(str).values
             advisary_bounds = dosha_data.iloc[:, 3].apply(self.parse_boundary_value).values
             warning_bounds = dosha_data.iloc[:, 4].apply(self.parse_boundary_value).values
             
@@ -270,10 +272,11 @@ class DataService:
             # OrderedDictを使用してCSV出現順を保持
             meshes = []
             area_dict = OrderedDict()
+            subdivision_dict = OrderedDict()  # 二次細分用
 
             # zip()を使った効率的なイテレーション
-            for code, area_name, coord, idx, adv, warn, dosa in zip(
-                mesh_codes, area_names, coords, indices,
+            for code, subdivision_name, area_name, coord, idx, adv, warn, dosa in zip(
+                mesh_codes, subdivision_names, area_names, coords, indices,
                 advisary_bounds, warning_bounds, dosyakei_bounds
             ):
                 try:
@@ -314,14 +317,27 @@ class DataService:
 
                     # エリア別に分類（CSV出現順を保持）
                     if area_name not in area_dict:
-                        area = Area(name=area_name, meshes=[])
+                        area = Area(
+                            name=area_name,
+                            meshes=[],
+                            secondary_subdivision_name=subdivision_name
+                        )
                         area_dict[area_name] = area
 
                     area_dict[area_name].meshes.append(mesh)
-                    
+
                 except Exception as e:
-                    logger.warning(f"Error creating mesh {i}: {e}")
+                    logger.warning(f"Error creating mesh: {e}")
                     continue
+
+            # 二次細分構造を構築（CSV出現順を保持）
+            for area in area_dict.values():
+                subdiv_name = area.secondary_subdivision_name
+                if subdiv_name not in subdivision_dict:
+                    subdivision = SecondarySubdivision(name=subdiv_name)
+                    subdivision_dict[subdiv_name] = subdivision
+
+                subdivision_dict[subdiv_name].areas.append(area)
             
             # 座標範囲を高速計算
             area_min_x = 0
@@ -338,11 +354,13 @@ class DataService:
                 code=pref_code,
                 areas=list(area_dict.values()),
                 area_min_x=area_min_x,
-                area_max_y=area_max_y
+                area_max_y=area_max_y,
+                secondary_subdivisions=list(subdivision_dict.values())
             )
             
             prefectures.append(prefecture)
-            logger.info(f"Prepared {pref_code}: {len(prefecture.areas)} areas, {len(meshes)} meshes")
+            logger.info(f"Prepared {pref_code}: {len(prefecture.secondary_subdivisions)} subdivisions, "
+                       f"{len(prefecture.areas)} areas, {len(meshes)} meshes")
         
         mesh_processing_time = time.time() - mesh_processing_start
         total_time = time.time() - start_time

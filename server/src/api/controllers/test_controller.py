@@ -248,6 +248,7 @@ class TestController:
                 for area in prefecture.areas:
                     area_result = {
                         "name": area.name,
+                        "secondary_subdivision_name": area.secondary_subdivision_name,
                         "meshes": []
                     }
                     
@@ -354,9 +355,51 @@ class TestController:
                         ]
                     
                     pref_result["areas"].append(area_result)
-                
+
+                # 二次細分ごとの集約計算
+                for subdivision in prefecture.secondary_subdivisions:
+                    self.main_service.calculation_service.calc_secondary_subdivision_aggregates(subdivision)
+
+                # 府県全体の集約計算
+                self.main_service.calculation_service.calc_prefecture_aggregates(prefecture)
+
+                # 二次細分データをレスポンスに追加
+                pref_result["secondary_subdivisions"] = [
+                    {
+                        "name": subdiv.name,
+                        "area_names": [area.name for area in subdiv.areas],
+                        "rain_1hour_max_timeline": [
+                            {"ft": r.ft, "value": float(r.value)}
+                            for r in subdiv.rain_1hour_max_timeline
+                        ],
+                        "rain_3hour_timeline": [
+                            {"ft": r.ft, "value": float(r.value)}
+                            for r in subdiv.rain_3hour_timeline
+                        ],
+                        "risk_timeline": [
+                            {"ft": r.ft, "value": r.value}
+                            for r in subdiv.risk_timeline
+                        ]
+                    }
+                    for subdiv in prefecture.secondary_subdivisions
+                ]
+
+                # 府県集約データをレスポンスに追加
+                pref_result["prefecture_rain_1hour_max_timeline"] = [
+                    {"ft": r.ft, "value": float(r.value)}
+                    for r in prefecture.prefecture_rain_1hour_max_timeline
+                ]
+                pref_result["prefecture_rain_3hour_timeline"] = [
+                    {"ft": r.ft, "value": float(r.value)}
+                    for r in prefecture.prefecture_rain_3hour_timeline
+                ]
+                pref_result["prefecture_risk_timeline"] = [
+                    {"ft": r.ft, "value": r.value}
+                    for r in prefecture.prefecture_risk_timeline
+                ]
+
                 results[prefecture.code] = pref_result
-                logger.info(f"完了: {prefecture.name} - {len(pref_result['areas'])}エリア")
+                logger.info(f"完了: {prefecture.name} - {len(pref_result['areas'])}エリア, {len(pref_result.get('secondary_subdivisions', []))}二次細分")
             
             total_time = time.time() - start_time
             logger.info(f"全処理完了: 総メッシュ数={total_meshes}, 処理成功={processed_meshes}, 処理時間={total_time:.2f}秒")
@@ -364,7 +407,7 @@ class TestController:
             # main_processと同じ形式でレスポンス（元の実装と同じ）
             return jsonify({
                 "status": "success",
-                "calculation_time": datetime.now().isoformat(),
+                "calculation_time": datetime.utcnow().isoformat(),
                 "initial_time": base_info.initial_date.isoformat(),
                 "swi_initial_time": base_info.initial_date.isoformat(),
                 "guid_initial_time": base_info.initial_date.isoformat(),

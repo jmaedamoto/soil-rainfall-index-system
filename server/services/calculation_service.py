@@ -10,8 +10,8 @@ import logging
 from datetime import datetime, timedelta
 
 from models import (
-    BaseInfo, SwiTimeSeries, GuidanceTimeSeries, Risk, 
-    Mesh, Area, Prefecture
+    BaseInfo, SwiTimeSeries, GuidanceTimeSeries, Risk,
+    Mesh, Area, Prefecture, SecondarySubdivision
 )
 
 logger = logging.getLogger(__name__)
@@ -639,3 +639,136 @@ class CalculationService:
     def calc_tunk_model_legacy(self, s1: float, s2: float, s3: float, dt: float, r: float) -> Tuple[float, float, float]:
         """既存コードとの互換性のため"""
         return self.calc_tunk_model(s1, s2, s3, dt, r)
+
+    def calc_secondary_subdivision_aggregates(self, subdivision: SecondarySubdivision):
+        """
+        二次細分内の集約データを計算
+        - 最大1時間雨量タイムライン
+        - 最大3時間雨量タイムライン
+        - 最大リスクタイムライン
+        """
+        try:
+            if not subdivision.areas:
+                return
+
+            # 全メッシュを収集
+            all_meshes = []
+            for area in subdivision.areas:
+                all_meshes.extend(area.meshes)
+
+            if not all_meshes:
+                return
+
+            # FT時刻のセットを取得
+            ft_set_1hour_max = set()
+            ft_set_3hour = set()
+            ft_set_risk = set()
+
+            for mesh in all_meshes:
+                for point in mesh.rain_1hour_max:
+                    ft_set_1hour_max.add(point.ft)
+                for point in mesh.rain_3hour:
+                    ft_set_3hour.add(point.ft)
+                for point in mesh.risk_hourly:
+                    ft_set_risk.add(point.ft)
+
+            # 1時間最大雨量の集約
+            for ft in sorted(ft_set_1hour_max):
+                max_value = max(
+                    (point.value for mesh in all_meshes
+                     for point in mesh.rain_1hour_max if point.ft == ft),
+                    default=0.0
+                )
+                subdivision.rain_1hour_max_timeline.append(
+                    GuidanceTimeSeries(ft=ft, value=max_value)
+                )
+
+            # 3時間雨量の集約
+            for ft in sorted(ft_set_3hour):
+                max_value = max(
+                    (point.value for mesh in all_meshes
+                     for point in mesh.rain_3hour if point.ft == ft),
+                    default=0.0
+                )
+                subdivision.rain_3hour_timeline.append(
+                    GuidanceTimeSeries(ft=ft, value=max_value)
+                )
+
+            # リスクレベルの集約
+            for ft in sorted(ft_set_risk):
+                max_risk = max(
+                    (point.value for mesh in all_meshes
+                     for point in mesh.risk_hourly if point.ft == ft),
+                    default=0
+                )
+                subdivision.risk_timeline.append(
+                    Risk(ft=ft, value=max_risk)
+                )
+
+        except Exception as e:
+            logger.error(f"二次細分集約エラー ({subdivision.name}): {e}")
+
+    def calc_prefecture_aggregates(self, prefecture: Prefecture):
+        """
+        府県全体の集約データを計算
+        - 最大1時間雨量タイムライン
+        - 最大3時間雨量タイムライン
+        - 最大リスクタイムライン
+        """
+        try:
+            # 全メッシュを収集
+            all_meshes = []
+            for area in prefecture.areas:
+                all_meshes.extend(area.meshes)
+
+            if not all_meshes:
+                return
+
+            # FT時刻のセットを取得
+            ft_set_1hour_max = set()
+            ft_set_3hour = set()
+            ft_set_risk = set()
+
+            for mesh in all_meshes:
+                for point in mesh.rain_1hour_max:
+                    ft_set_1hour_max.add(point.ft)
+                for point in mesh.rain_3hour:
+                    ft_set_3hour.add(point.ft)
+                for point in mesh.risk_hourly:
+                    ft_set_risk.add(point.ft)
+
+            # 1時間最大雨量の集約
+            for ft in sorted(ft_set_1hour_max):
+                max_value = max(
+                    (point.value for mesh in all_meshes
+                     for point in mesh.rain_1hour_max if point.ft == ft),
+                    default=0.0
+                )
+                prefecture.prefecture_rain_1hour_max_timeline.append(
+                    GuidanceTimeSeries(ft=ft, value=max_value)
+                )
+
+            # 3時間雨量の集約
+            for ft in sorted(ft_set_3hour):
+                max_value = max(
+                    (point.value for mesh in all_meshes
+                     for point in mesh.rain_3hour if point.ft == ft),
+                    default=0.0
+                )
+                prefecture.prefecture_rain_3hour_timeline.append(
+                    GuidanceTimeSeries(ft=ft, value=max_value)
+                )
+
+            # リスクレベルの集約
+            for ft in sorted(ft_set_risk):
+                max_risk = max(
+                    (point.value for mesh in all_meshes
+                     for point in mesh.risk_hourly if point.ft == ft),
+                    default=0
+                )
+                prefecture.prefecture_risk_timeline.append(
+                    Risk(ft=ft, value=max_risk)
+                )
+
+        except Exception as e:
+            logger.error(f"府県集約エラー ({prefecture.name}): {e}")

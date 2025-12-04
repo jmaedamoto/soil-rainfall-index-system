@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Area, Prefecture, RISK_COLORS, RiskLevel, RISK_LABELS } from '../../types/api';
+import { Area, Prefecture, SecondarySubdivision, RISK_COLORS, RiskLevel, RISK_LABELS, RiskTimelineViewMode } from '../../types/api';
 
 interface AreaRiskBarChartProps {
   prefectures: Prefecture[];
@@ -23,47 +23,72 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
   height = 800
 }) => {
   const [hoveredCell, setHoveredCell] = useState<{area: string, time: number, risk: number} | null>(null);
+  const [viewMode, setViewMode] = useState<RiskTimelineViewMode>('municipality');
 
-  // 選択された都道府県のエリアを取得
-  const areas = useMemo(() => {
-    const selectedPref = prefectures.find(p => p.code === selectedPrefecture);
-    return selectedPref ? selectedPref.areas : [];
-  }, [prefectures, selectedPrefecture]);
+  // viewModeに応じた表示データの準備
+  type DisplayRow = {
+    name: string;
+    risk_timeline: Array<{ ft: number; value: number }>;
+  };
 
-  // タイムライン構造を準備（日付と時刻のグループ化）
-  const { dateGroups, allAreas } = useMemo(() => {
-    if (areas.length === 0) return { dateGroups: [], allAreas: [] };
-
+  const displayData = useMemo((): { rows: DisplayRow[], dateGroups: Array<{ date: string; hours: Array<{ ft: number; hour: number }> }> } => {
     // UTC時刻をJST時刻に変換（+9時間）
     const initialTimeUTC = new Date(initialTime);
-    const JST_OFFSET = 9 * 60 * 60 * 1000; // 9時間をミリ秒に変換
+    const JST_OFFSET = 9 * 60 * 60 * 1000;
     const initialTimeJST = new Date(initialTimeUTC.getTime() + JST_OFFSET);
 
-    // 全ての利用可能な時刻を取得
-    const timeSet = new Set<number>();
-    areas.forEach(area => {
-      area.risk_timeline.forEach(point => {
-        timeSet.add(point.ft);
+    let rows: DisplayRow[] = [];
+    let timeSet = new Set<number>();
+
+    if (viewMode === 'municipality') {
+      // 市町村別表示
+      const selectedPref = prefectures.find(p => p.code === selectedPrefecture);
+      if (selectedPref) {
+        rows = selectedPref.areas.map(area => ({
+          name: area.name,
+          risk_timeline: area.risk_timeline
+        }));
+        selectedPref.areas.forEach(area => {
+          area.risk_timeline.forEach(point => timeSet.add(point.ft));
+        });
+      }
+    } else if (viewMode === 'subdivision') {
+      // 二次細分別表示
+      const selectedPref = prefectures.find(p => p.code === selectedPrefecture);
+      if (selectedPref && selectedPref.secondary_subdivisions) {
+        rows = selectedPref.secondary_subdivisions.map(subdiv => ({
+          name: subdiv.name,
+          risk_timeline: subdiv.risk_timeline
+        }));
+        selectedPref.secondary_subdivisions.forEach(subdiv => {
+          subdiv.risk_timeline.forEach(point => timeSet.add(point.ft));
+        });
+      }
+    } else if (viewMode === 'prefecture-all') {
+      // 全府県一覧表示
+      rows = prefectures.map(pref => ({
+        name: pref.name,
+        risk_timeline: pref.prefecture_risk_timeline || []
+      }));
+      prefectures.forEach(pref => {
+        if (pref.prefecture_risk_timeline) {
+          pref.prefecture_risk_timeline.forEach(point => timeSet.add(point.ft));
+        }
       });
-    });
+    }
+
     const sortedTimes = Array.from(timeSet).sort((a, b) => a - b);
 
     // 時刻を日付ごとにグループ化
-    // FTは3時間期間の終了時刻を表す（FT0=21-24時、FT3=0-3時、FT6=3-6時...）
     const dateGroups: Array<{
       date: string;
       hours: Array<{ ft: number; hour: number }>;
     }> = [];
 
     sortedTimes.forEach(ft => {
-      // FT時刻（期間の終了時刻）をJSTで計算
       const ftTimeJST = new Date(initialTimeJST.getTime() + ft * 60 * 60 * 1000);
       const ftHour = ftTimeJST.getHours();
-
-      // FTが表す3時間期間の開始時刻を計算（FT - 3時間）
       const periodStartTime = new Date(ftTimeJST.getTime() - 3 * 60 * 60 * 1000);
-
-      // 期間の日付は開始時刻の日付を使用
       const dateStr = `${periodStartTime.getMonth() + 1}月${periodStartTime.getDate()}日`;
 
       let dateGroup = dateGroups.find(g => g.date === dateStr);
@@ -74,11 +99,8 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
       dateGroup.hours.push({ ft, hour: ftHour });
     });
 
-    // 全エリアをCSV出現順（APIから返される順序）で維持
-    const allAreas = areas;
-
-    return { dateGroups, allAreas };
-  }, [areas, initialTime]);
+    return { rows, dateGroups };
+  }, [prefectures, selectedPrefecture, viewMode, initialTime]);
 
   return (
     <div style={{ marginBottom: '30px' }}>
@@ -92,33 +114,86 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
         {title}
       </h3>
 
-      {/* 都道府県選択 */}
+      {/* 都道府県選択と表示モード切り替え */}
       <div style={{
         display: 'flex',
         justifyContent: 'center',
         marginBottom: '20px',
-        gap: '10px',
-        alignItems: 'center'
+        gap: '20px',
+        alignItems: 'center',
+        flexWrap: 'wrap'
       }}>
-        <label htmlFor="prefecture-select" style={{ fontWeight: 'bold' }}>都道府県:</label>
-        <select
-          id="prefecture-select"
-          value={selectedPrefecture}
-          onChange={(e) => onPrefectureChange(e.target.value)}
-          style={{
-            padding: '8px 12px',
-            borderRadius: '4px',
-            border: '1px solid #ddd',
-            fontSize: '14px',
-            minWidth: '120px'
-          }}
-        >
-          {prefectures.map(prefecture => (
-            <option key={prefecture.code} value={prefecture.code}>
-              {prefecture.name}
-            </option>
-          ))}
-        </select>
+        {/* 都道府県選択 */}
+        {viewMode !== 'prefecture-all' && (
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <label htmlFor="prefecture-select" style={{ fontWeight: 'bold' }}>都道府県:</label>
+            <select
+              id="prefecture-select"
+              value={selectedPrefecture}
+              onChange={(e) => onPrefectureChange(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '4px',
+                border: '1px solid #ddd',
+                fontSize: '14px',
+                minWidth: '120px'
+              }}
+            >
+              {prefectures.map(prefecture => (
+                <option key={prefecture.code} value={prefecture.code}>
+                  {prefecture.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* 表示モード切り替え */}
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <label style={{ fontWeight: 'bold' }}>表示:</label>
+          <button
+            onClick={() => setViewMode('municipality')}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '4px',
+              border: viewMode === 'municipality' ? '2px solid #1976d2' : '1px solid #ddd',
+              backgroundColor: viewMode === 'municipality' ? '#e3f2fd' : '#fff',
+              fontSize: '14px',
+              cursor: 'pointer',
+              fontWeight: viewMode === 'municipality' ? 'bold' : 'normal'
+            }}
+          >
+            市町村別
+          </button>
+          <button
+            onClick={() => setViewMode('subdivision')}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '4px',
+              border: viewMode === 'subdivision' ? '2px solid #1976d2' : '1px solid #ddd',
+              backgroundColor: viewMode === 'subdivision' ? '#e3f2fd' : '#fff',
+              fontSize: '14px',
+              cursor: 'pointer',
+              fontWeight: viewMode === 'subdivision' ? 'bold' : 'normal'
+            }}
+          >
+            二次細分別
+          </button>
+          <button
+            onClick={() => setViewMode('prefecture-all')}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '4px',
+              border: viewMode === 'prefecture-all' ? '2px solid #1976d2' : '1px solid #ddd',
+              backgroundColor: viewMode === 'prefecture-all' ? '#e3f2fd' : '#fff',
+              fontSize: '14px',
+              cursor: 'pointer',
+              fontWeight: viewMode === 'prefecture-all' ? 'bold' : 'normal'
+            }}
+          >
+            全府県一覧
+          </button>
+        </div>
       </div>
 
       {/* タイムライン表 */}
@@ -177,7 +252,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
               }}>
                 {/* 空欄 */}
               </th>
-              {dateGroups.map(dateGroup =>
+              {displayData.dateGroups.map(dateGroup =>
                 dateGroup.hours.map((hourInfo, hourIndex) => {
                   const isSelected = hourInfo.ft === selectedTime;
                   return (
@@ -203,11 +278,11 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
             </tr>
           </thead>
 
-          {/* データ行（各エリア） */}
+          {/* データ行（各行） */}
           <tbody>
-            {allAreas.map((area, areaIndex) => (
-              <tr key={areaIndex} style={{ borderBottom: '1px solid #000' }}>
-                {/* エリア名（左側固定列） */}
+            {displayData.rows.map((row, rowIndex) => (
+              <tr key={rowIndex} style={{ borderBottom: '1px solid #000' }}>
+                {/* 行名（左側固定列） */}
                 <td style={{
                   backgroundColor: '#fff',
                   border: '2px solid #000',
@@ -220,17 +295,17 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                   overflow: 'hidden',
                   textOverflow: 'ellipsis'
                 }}>
-                  {area.name}
+                  {row.name}
                 </td>
 
                 {/* 各時刻のセル */}
-                {dateGroups.map(dateGroup =>
+                {displayData.dateGroups.map(dateGroup =>
                   dateGroup.hours.map((hourInfo, hourIndex) => {
-                    const riskPoint = area.risk_timeline.find(r => r.ft === hourInfo.ft);
+                    const riskPoint = row.risk_timeline.find(r => r.ft === hourInfo.ft);
                     const riskLevel = riskPoint ? riskPoint.value : 0;
                     const color = RISK_COLORS[riskLevel as RiskLevel];
                     const isSelected = hourInfo.ft === selectedTime;
-                    const isLastRow = areaIndex === allAreas.length - 1;
+                    const isLastRow = rowIndex === displayData.rows.length - 1;
 
                     return (
                       <td
@@ -252,7 +327,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                           }
                         }}
                         onMouseEnter={() => setHoveredCell({
-                          area: area.name,
+                          area: row.name,
                           time: hourInfo.ft,
                           risk: riskLevel
                         })}

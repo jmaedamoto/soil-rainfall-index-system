@@ -27,15 +27,28 @@ export interface Mesh {
 }
 
 export interface Area {
-  name: string;  // 地域名
+  name: string;  // 地域名（市町村名）
+  secondary_subdivision_name?: string;  // 所属する二次細分名
   meshes: Mesh[];  // メッシュデータ
   risk_timeline: RiskTimePoint[];  // リスク時系列
+}
+
+export interface SecondarySubdivision {
+  name: string;  // 二次細分名（例：「阪神」「播磨北西部」）
+  area_names: string[];  // 所属市町村名リスト
+  rain_1hour_max_timeline: TimeSeriesPoint[];  // 二次細分内の最大1時間雨量
+  rain_3hour_timeline: TimeSeriesPoint[];  // 二次細分内の最大3時間雨量
+  risk_timeline: RiskTimePoint[];  // 二次細分内の最大リスク
 }
 
 export interface Prefecture {
   name: string;  // 都道府県名
   code: string;  // 都道府県コード
-  areas: Area[];  // 地域データ
+  areas: Area[];  // 地域データ（市町村）
+  secondary_subdivisions?: SecondarySubdivision[];  // 二次細分リスト
+  prefecture_rain_1hour_max_timeline?: TimeSeriesPoint[];  // 府県全体の最大1時間雨量
+  prefecture_rain_3hour_timeline?: TimeSeriesPoint[];  // 府県全体の最大3時間雨量
+  prefecture_risk_timeline?: RiskTimePoint[];  // 府県全体の最大リスク
 }
 
 export interface CacheMetadata {
@@ -114,6 +127,9 @@ export const RISK_LABELS = {
   [RiskLevel.DISASTER]: '土砂災害'
 } as const;
 
+// リスクタイムライン表示モード
+export type RiskTimelineViewMode = 'municipality' | 'subdivision' | 'prefecture-all';
+
 // 雨量調整機能用の型定義
 
 export interface AreaRainfallForecast {
@@ -121,10 +137,12 @@ export interface AreaRainfallForecast {
   swi_initial_time: string;         // SWI初期時刻（ISO8601）
   guidance_initial_time: string;    // ガイダンス初期時刻（ISO8601）
   area_rainfall: Record<string, TimeSeriesPoint[]>;  // 市町村別雨量時系列
+  subdivision_rainfall?: Record<string, TimeSeriesPoint[]>;  // 二次細分別雨量時系列
 }
 
 export interface RainfallAdjustmentRequest {
   swi_initial: string;              // SWI初期時刻（ISO8601）
   guidance_initial: string;         // ガイダンス初期時刻（ISO8601）
   area_adjustments: Record<string, Record<number, number>>;  // 市町村別調整後雨量
+  subdivision_adjustments?: Record<string, Record<number, number>>;  // 二次細分別調整後雨量
 }
