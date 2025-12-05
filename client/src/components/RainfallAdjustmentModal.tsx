@@ -21,12 +21,15 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
 }) => {
   const [originalRainfall, setOriginalRainfall] = useState<Record<string, TimeSeriesPoint[]>>({});
   const [adjustedRainfall, setAdjustedRainfall] = useState<Record<string, TimeSeriesPoint[]>>({});
+  const [originalSubdivisionRainfall, setOriginalSubdivisionRainfall] = useState<Record<string, TimeSeriesPoint[]>>({});
+  const [adjustedSubdivisionRainfall, setAdjustedSubdivisionRainfall] = useState<Record<string, TimeSeriesPoint[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<'loading' | 'editing' | 'calculating'>('loading');
   const [selectedPrefecture, setSelectedPrefecture] = useState<string>('');
+  const [viewMode, setViewMode] = useState<'municipality' | 'subdivision'>('municipality');
 
-  // 府県別にグループ化
+  // 府県別にグループ化（市町村）
   const rainfallByPrefecture = useMemo(() => {
     const grouped: Record<string, Record<string, TimeSeriesPoint[]>> = {};
 
@@ -44,6 +47,25 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
 
     return grouped;
   }, [adjustedRainfall]);
+
+  // 府県別にグループ化（二次細分）
+  const subdivisionRainfallByPrefecture = useMemo(() => {
+    const grouped: Record<string, Record<string, TimeSeriesPoint[]>> = {};
+
+    Object.entries(adjustedSubdivisionRainfall).forEach(([subdivName, timeseries]) => {
+      // "府県名_二次細分名" の形式から府県名を抽出
+      const parts = subdivName.split('_');
+      if (parts.length >= 2) {
+        const prefName = parts[0];
+        if (!grouped[prefName]) {
+          grouped[prefName] = {};
+        }
+        grouped[prefName][subdivName] = timeseries;
+      }
+    });
+
+    return grouped;
+  }, [adjustedSubdivisionRainfall]);
 
   const prefectureList = useMemo(() => {
     return Object.keys(rainfallByPrefecture).sort();
@@ -74,6 +96,13 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
       if (data.status === 'success') {
         setOriginalRainfall(data.area_rainfall);
         setAdjustedRainfall(JSON.parse(JSON.stringify(data.area_rainfall)));
+
+        // 二次細分データがあれば設定
+        if (data.subdivision_rainfall) {
+          setOriginalSubdivisionRainfall(data.subdivision_rainfall);
+          setAdjustedSubdivisionRainfall(JSON.parse(JSON.stringify(data.subdivision_rainfall)));
+        }
+
         setStep('editing');
       } else {
         setError('雨量予想データの取得に失敗しました');
@@ -92,17 +121,31 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
       return;
     }
 
-    setAdjustedRainfall(prev => {
-      const updated = { ...prev };
-      const areaData = updated[areaName];
-      if (areaData) {
-        const newAreaData = areaData.map(point =>
-          point.ft === ft ? { ...point, value } : point
-        );
-        updated[areaName] = newAreaData;
-      }
-      return updated;
-    });
+    if (viewMode === 'municipality') {
+      setAdjustedRainfall(prev => {
+        const updated = { ...prev };
+        const areaData = updated[areaName];
+        if (areaData) {
+          const newAreaData = areaData.map(point =>
+            point.ft === ft ? { ...point, value } : point
+          );
+          updated[areaName] = newAreaData;
+        }
+        return updated;
+      });
+    } else {
+      setAdjustedSubdivisionRainfall(prev => {
+        const updated = { ...prev };
+        const subdivData = updated[areaName];
+        if (subdivData) {
+          const newSubdivData = subdivData.map(point =>
+            point.ft === ft ? { ...point, value } : point
+          );
+          updated[areaName] = newSubdivData;
+        }
+        return updated;
+      });
+    }
   };
 
   const executeRecalculation = async () => {
@@ -146,32 +189,47 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
 
   const resetToOriginal = () => {
     setAdjustedRainfall(JSON.parse(JSON.stringify(originalRainfall)));
+    setAdjustedSubdivisionRainfall(JSON.parse(JSON.stringify(originalSubdivisionRainfall)));
   };
 
-  // 選択された府県のデータ
+  // 選択された府県のデータ（表示モードに応じて切り替え）
   const currentPrefectureData = useMemo(() => {
-    return rainfallByPrefecture[selectedPrefecture] || {};
-  }, [rainfallByPrefecture, selectedPrefecture]);
+    if (viewMode === 'municipality') {
+      return rainfallByPrefecture[selectedPrefecture] || {};
+    } else {
+      return subdivisionRainfallByPrefecture[selectedPrefecture] || {};
+    }
+  }, [rainfallByPrefecture, subdivisionRainfallByPrefecture, selectedPrefecture, viewMode]);
 
   // 選択された府県の修正数
   const modifiedCountInPrefecture = useMemo(() => {
+    const originalData = viewMode === 'municipality' ? originalRainfall : originalSubdivisionRainfall;
     return Object.entries(currentPrefectureData).reduce((count, [areaName, timeseries]) => {
       return count + timeseries.filter(point => {
-        const originalPoint = originalRainfall[areaName]?.find(p => p.ft === point.ft);
+        const originalPoint = originalData[areaName]?.find(p => p.ft === point.ft);
         return originalPoint && Math.abs(originalPoint.value - point.value) > 0.01;
       }).length;
     }, 0);
-  }, [currentPrefectureData, originalRainfall]);
+  }, [currentPrefectureData, originalRainfall, originalSubdivisionRainfall, viewMode]);
 
   // 全体の修正数
   const totalModifiedCount = useMemo(() => {
-    return Object.entries(adjustedRainfall).reduce((count, [areaName, timeseries]) => {
-      return count + timeseries.filter(point => {
-        const originalPoint = originalRainfall[areaName]?.find(p => p.ft === point.ft);
-        return originalPoint && Math.abs(originalPoint.value - point.value) > 0.01;
-      }).length;
-    }, 0);
-  }, [adjustedRainfall, originalRainfall]);
+    if (viewMode === 'municipality') {
+      return Object.entries(adjustedRainfall).reduce((count, [areaName, timeseries]) => {
+        return count + timeseries.filter(point => {
+          const originalPoint = originalRainfall[areaName]?.find(p => p.ft === point.ft);
+          return originalPoint && Math.abs(originalPoint.value - point.value) > 0.01;
+        }).length;
+      }, 0);
+    } else {
+      return Object.entries(adjustedSubdivisionRainfall).reduce((count, [subdivName, timeseries]) => {
+        return count + timeseries.filter(point => {
+          const originalPoint = originalSubdivisionRainfall[subdivName]?.find(p => p.ft === point.ft);
+          return originalPoint && Math.abs(originalPoint.value - point.value) > 0.01;
+        }).length;
+      }, 0);
+    }
+  }, [adjustedRainfall, originalRainfall, adjustedSubdivisionRainfall, originalSubdivisionRainfall, viewMode]);
 
   if (!isOpen) return null;
 
@@ -302,6 +360,39 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
               ))}
             </div>
 
+            {/* 表示モード切り替え */}
+            <div style={{ marginBottom: '15px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <label style={{ fontWeight: 'bold' }}>表示:</label>
+              <button
+                onClick={() => setViewMode('municipality')}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: viewMode === 'municipality' ? '#1976D2' : '#f5f5f5',
+                  color: viewMode === 'municipality' ? 'white' : '#333',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: viewMode === 'municipality' ? 'bold' : 'normal'
+                }}
+              >
+                市町村別
+              </button>
+              <button
+                onClick={() => setViewMode('subdivision')}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: viewMode === 'subdivision' ? '#1976D2' : '#f5f5f5',
+                  color: viewMode === 'subdivision' ? 'white' : '#333',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: viewMode === 'subdivision' ? 'bold' : 'normal'
+                }}
+              >
+                二次細分別
+              </button>
+            </div>
+
             <div style={{ marginBottom: '15px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
               <button
                 onClick={resetToOriginal}
@@ -335,7 +426,7 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
                 再計算実行
               </button>
               <div style={{ marginLeft: 'auto', fontSize: '14px', color: '#666', textAlign: 'right' }}>
-                <div>表示中: {selectedPrefecture} ({Object.keys(currentPrefectureData).length}市町村)</div>
+                <div>表示中: {selectedPrefecture} ({Object.keys(currentPrefectureData).length}{viewMode === 'municipality' ? '市町村' : '二次細分'})</div>
                 <div>全体修正箇所: {totalModifiedCount} | 表示中: {modifiedCountInPrefecture}</div>
               </div>
             </div>
@@ -353,7 +444,9 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
               }}>
                 <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f5f5f5', zIndex: 1 }}>
                   <tr>
-                    <th style={{ padding: '8px', borderBottom: '2px solid #ddd', textAlign: 'left', minWidth: '150px' }}>市町村</th>
+                    <th style={{ padding: '8px', borderBottom: '2px solid #ddd', textAlign: 'left', minWidth: '150px' }}>
+                      {viewMode === 'municipality' ? '市町村' : '二次細分'}
+                    </th>
                     {Object.keys(currentPrefectureData).length > 0 &&
                       currentPrefectureData[Object.keys(currentPrefectureData)[0]]?.map(point => (
                         <th key={point.ft} style={{ padding: '8px', borderBottom: '2px solid #ddd', textAlign: 'center', minWidth: '70px' }}>
@@ -369,7 +462,8 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
                         {areaName.split('_')[1] || areaName}
                       </td>
                       {timeseries.map(point => {
-                        const originalPoint = originalRainfall[areaName]?.find(p => p.ft === point.ft);
+                        const originalData = viewMode === 'municipality' ? originalRainfall : originalSubdivisionRainfall;
+                        const originalPoint = originalData[areaName]?.find(p => p.ft === point.ft);
                         const isModified = originalPoint && Math.abs(originalPoint.value - point.value) > 0.01;
 
                         return (
