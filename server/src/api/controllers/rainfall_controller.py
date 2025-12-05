@@ -166,11 +166,17 @@ class RainfallController:
                 prefectures, guidance_grib2
             )
 
+            # 二次細分別雨量時系列を抽出
+            subdivision_rainfall = self.rainfall_service.extract_subdivision_rainfall_timeseries(
+                prefectures, guidance_grib2
+            )
+
             return jsonify({
                 "status": "success",
                 "swi_initial_time": swi_initial.isoformat(),
                 "guidance_initial_time": guidance_initial.isoformat(),
-                "area_rainfall": area_rainfall
+                "area_rainfall": area_rainfall,
+                "subdivision_rainfall": subdivision_rainfall
             })
 
         except Exception as e:

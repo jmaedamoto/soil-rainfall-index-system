@@ -74,6 +74,70 @@ class RainfallAdjustmentService:
         logger.info(f"市町村別雨量時系列抽出完了: {len(area_rainfall)}市町村")
         return area_rainfall
 
+    def extract_subdivision_rainfall_timeseries(
+        self,
+        prefectures: List[Prefecture],
+        guidance_grib2: Dict[str, Any]
+    ) -> Dict[str, List[Dict[str, float]]]:
+        """
+        二次細分ごとの雨量時系列を抽出
+
+        各二次細分の全メッシュから雨量データを収集し、
+        時刻（FT）ごとに最大値を取得して二次細分の代表値とする
+
+        Args:
+            prefectures: 都道府県データリスト
+            guidance_grib2: ガイダンスGRIB2データ
+
+        Returns:
+            {
+                "滋賀県_湖南": [
+                    {"ft": 0, "value": 5.2},
+                    {"ft": 3, "value": 12.5},
+                    ...
+                ],
+                ...
+            }
+        """
+        logger.info("二次細分別雨量時系列の抽出開始")
+        subdivision_rainfall = {}
+
+        # FT値の範囲を取得
+        ft_list = []
+        if 'data_3h' in guidance_grib2 and len(guidance_grib2['data_3h']) > 0:
+            ft_list = [item['ft'] for item in guidance_grib2['data_3h']]
+
+        for prefecture in prefectures:
+            if not hasattr(prefecture, 'secondary_subdivisions') or not prefecture.secondary_subdivisions:
+                continue
+
+            for subdivision in prefecture.secondary_subdivisions:
+                # 二次細分の一意キー
+                subdiv_key = f"{prefecture.name}_{subdivision.name}"
+
+                # 各FTごとの最大雨量を収集
+                ft_max_values = {ft: 0.0 for ft in ft_list}
+
+                # 二次細分内の全市町村のメッシュから雨量を収集
+                for area in subdivision.areas:
+                    for mesh in area.meshes:
+                        # メッシュの3時間雨量を取得
+                        for rain_point in mesh.rain_3hour:
+                            if rain_point.ft in ft_max_values:
+                                ft_max_values[rain_point.ft] = max(
+                                    ft_max_values[rain_point.ft],
+                                    rain_point.value
+                                )
+
+                # 時系列データに変換
+                subdivision_rainfall[subdiv_key] = [
+                    {"ft": ft, "value": ft_max_values[ft]}
+                    for ft in sorted(ft_list)
+                ]
+
+        logger.info(f"二次細分別雨量時系列抽出完了: {len(subdivision_rainfall)}二次細分")
+        return subdivision_rainfall
+
     def adjust_guidance_data_by_area_ratios(
         self,
         guidance_grib2: Dict[str, Any],
