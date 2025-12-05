@@ -222,7 +222,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
               }}>
                 {/* 空欄 */}
               </th>
-              {dateGroups.map((dateGroup, index) => (
+              {displayData.dateGroups.map((dateGroup, index) => (
                 <th
                   key={index}
                   colSpan={dateGroup.hours.length}
@@ -399,7 +399,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
         </div>
 
         <div style={{ marginTop: '15px', fontSize: '13px', color: '#666' }}>
-          ※ 表示中: {prefectures.find(p => p.code === selectedPrefecture)?.name || ''} - 全{allAreas.length}エリア
+          ※ 表示中: {viewMode === 'prefecture-all' ? '全府県' : prefectures.find(p => p.code === selectedPrefecture)?.name || ''} - 全{displayData.rows.length}エリア
         </div>
       </div>
     </div>

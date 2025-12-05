@@ -669,7 +669,10 @@ class CalculationService:
                     ft_set_1hour_max.add(point.ft)
                 for point in mesh.rain_3hour:
                     ft_set_3hour.add(point.ft)
-                for point in mesh.risk_hourly:
+
+            # リスクタイムラインはareaから取得（市町村別と同じFT）
+            for area in subdivision.areas:
+                for point in area.risk_timeline:
                     ft_set_risk.add(point.ft)
 
             # 1時間最大雨量の集約
@@ -694,11 +697,11 @@ class CalculationService:
                     GuidanceTimeSeries(ft=ft, value=max_value)
                 )
 
-            # リスクレベルの集約
+            # リスクレベルの集約（各areaのrisk_timelineから最大値を取得）
             for ft in sorted(ft_set_risk):
                 max_risk = max(
-                    (point.value for mesh in all_meshes
-                     for point in mesh.risk_hourly if point.ft == ft),
+                    (point.value for area in subdivision.areas
+                     for point in area.risk_timeline if point.ft == ft),
                     default=0
                 )
                 subdivision.risk_timeline.append(
@@ -734,7 +737,10 @@ class CalculationService:
                     ft_set_1hour_max.add(point.ft)
                 for point in mesh.rain_3hour:
                     ft_set_3hour.add(point.ft)
-                for point in mesh.risk_hourly:
+
+            # リスクタイムラインはareaから取得（市町村別と同じFT）
+            for area in prefecture.areas:
+                for point in area.risk_timeline:
                     ft_set_risk.add(point.ft)
 
             # 1時間最大雨量の集約
@@ -759,11 +765,11 @@ class CalculationService:
                     GuidanceTimeSeries(ft=ft, value=max_value)
                 )
 
-            # リスクレベルの集約
+            # リスクレベルの集約（各areaのrisk_timelineから最大値を取得）
             for ft in sorted(ft_set_risk):
                 max_risk = max(
-                    (point.value for mesh in all_meshes
-                     for point in mesh.risk_hourly if point.ft == ft),
+                    (point.value for area in prefecture.areas
+                     for point in area.risk_timeline if point.ft == ft),
                     default=0
                 )
                 prefecture.prefecture_risk_timeline.append(
