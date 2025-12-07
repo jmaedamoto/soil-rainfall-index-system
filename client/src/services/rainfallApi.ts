@@ -43,6 +43,9 @@ export const calculateWithAdjustedRainfall = async (
     `${API_BASE_URL}/api/rainfall-adjustment`,
     request,
     {
+      headers: {
+        'Content-Type': 'application/json'
+      },
       timeout: 300000 // 5分タイムアウト
     }
   );

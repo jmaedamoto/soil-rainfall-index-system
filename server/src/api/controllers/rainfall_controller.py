@@ -208,7 +208,11 @@ class RainfallController:
             CalculationResult（既存と同じ形式）
         """
         try:
-            data = request.get_json()
+            # デバッグ: Content-Typeを確認
+            logger.info(f"Content-Type: {request.content_type}")
+            logger.info(f"Request data (raw): {request.data[:200]}")  # 最初の200バイトのみ
+
+            data = request.get_json(force=True)  # force=Trueで強制的にJSONとしてパース
             if not data:
                 return jsonify({
                     "status": "error",
@@ -319,13 +323,49 @@ class RainfallController:
             # 地域データ構築
             prefectures = self.data_service.prepare_areas()
 
-            # メッシュ計算（元の雨量データ）
+            # 調整対象の市町村/二次細分キーセットを作成
+            adjusted_area_keys = set(converted_adjustments.keys())
+            logger.info(f"調整対象市町村/二次細分: {len(adjusted_area_keys)}件")
+
+            # 調整対象メッシュコードを収集（市町村別と二次細分別の両方に対応）
+            adjusted_mesh_codes = set()
+            adjusted_municipality_keys = set()  # 市町村キーを保存
+
+            for prefecture in prefectures:
+                # 市町村別の調整を確認
+                for area in prefecture.areas:
+                    area_key = f"{prefecture.name}_{area.name}"
+                    if area_key in adjusted_area_keys:
+                        adjusted_municipality_keys.add(area_key)
+                        for mesh in area.meshes:
+                            adjusted_mesh_codes.add(mesh.code)
+
+                # 二次細分別の調整を確認
+                for subdivision in prefecture.secondary_subdivisions:
+                    subdiv_key = f"{prefecture.name}_{subdivision.name}"
+                    if subdiv_key in adjusted_area_keys:
+                        # この二次細分に所属する全市町村を追加
+                        for area in subdivision.areas:
+                            area_key = f"{prefecture.name}_{area.name}"
+                            adjusted_municipality_keys.add(area_key)
+                            for mesh in area.meshes:
+                                adjusted_mesh_codes.add(mesh.code)
+
+            logger.info(f"調整対象メッシュ数: {len(adjusted_mesh_codes)}件（全{sum(len(a.meshes) for p in prefectures for a in p.areas)}件中）")
+            logger.info(f"調整対象市町村数: {len(adjusted_municipality_keys)}件")
+
+            # 調整対象メッシュのみ計算（元の雨量データ）
+            calculated_count = 0
             for prefecture in prefectures:
                 for area in prefecture.areas:
                     for i, mesh in enumerate(area.meshes):
-                        area.meshes[i] = self.calculation_service.process_mesh_calculations(
-                            mesh, swi_grib2, guidance_grib2
-                        )
+                        if mesh.code in adjusted_mesh_codes:
+                            area.meshes[i] = self.calculation_service.process_mesh_calculations(
+                                mesh, swi_grib2, guidance_grib2
+                            )
+                            calculated_count += 1
+
+            logger.info(f"初期計算完了: {calculated_count}メッシュ")
 
             # メッシュごとの調整比率を計算
             mesh_ratios = self.rainfall_service._calculate_mesh_ratios(
@@ -340,19 +380,32 @@ class RainfallController:
                 mesh_ratios
             )
 
-            # 調整後の雨量でSWI・危険度を再計算
+            # 調整後の雨量でSWI・危険度を再計算（調整対象メッシュのみ）
+            recalculated_count = 0
             for prefecture in prefectures:
                 for area in prefecture.areas:
                     for i, mesh in enumerate(area.meshes):
-                        # 雨量は既に調整済みなので、SWIと危険度のみ再計算
-                        area.meshes[i] = self.calculation_service.recalculate_swi_and_risk(
-                            mesh
-                        )
+                        if mesh.code in adjusted_mesh_codes:
+                            # 雨量は既に調整済みなので、SWIと危険度のみ再計算
+                            area.meshes[i] = self.calculation_service.recalculate_swi_and_risk(
+                                mesh
+                            )
+                            recalculated_count += 1
 
-            # リスクタイムライン計算
+            logger.info(f"再計算完了: {recalculated_count}メッシュ")
+
+            # リスクタイムライン計算（調整対象市町村のみ）
+            risk_calculated_count = 0
             for prefecture in prefectures:
                 for area in prefecture.areas:
-                    area.risk_timeline = self.calculation_service.calc_risk_timeline(area.meshes)
+                    area_key = f"{prefecture.name}_{area.name}"
+                    if area_key in adjusted_municipality_keys:
+                        area.risk_timeline = self.calculation_service.calc_risk_timeline(area.meshes)
+                        risk_calculated_count += 1
+
+            logger.info(f"リスクタイムライン計算完了: {risk_calculated_count}市町村")
+            logger.info(f"調整対象キー（最初の5件）: {list(adjusted_area_keys)[:5]}")
+            logger.info(f"調整対象市町村キー（最初の5件）: {list(adjusted_municipality_keys)[:5]}")
 
             # 結果構築（既存のmain_serviceと同じ形式）
             result = {
@@ -365,7 +418,7 @@ class RainfallController:
                 "prefectures": {}
             }
 
-            # データ構造を辞書形式に変換
+            # データ構造を辞書形式に変換（調整対象市町村のみ）
             for prefecture in prefectures:
                 pref_data = {
                     "name": prefecture.name,
@@ -374,6 +427,11 @@ class RainfallController:
                 }
 
                 for area in prefecture.areas:
+                    area_key = f"{prefecture.name}_{area.name}"
+                    # 調整対象市町村のみ出力
+                    if area_key not in adjusted_municipality_keys:
+                        continue
+
                     area_data = {
                         "name": area.name,
                         "meshes": [],
@@ -384,6 +442,10 @@ class RainfallController:
                     }
 
                     for mesh in area.meshes:
+                        # 調整対象メッシュのみ出力
+                        if mesh.code not in adjusted_mesh_codes:
+                            continue
+
                         mesh_data = {
                             "code": mesh.code,
                             "lat": mesh.lat,
@@ -406,9 +468,16 @@ class RainfallController:
                         }
                         area_data["meshes"].append(mesh_data)
 
-                    pref_data["areas"].append(area_data)
+                    # メッシュが存在する市町村のみ追加
+                    if area_data["meshes"]:
+                        pref_data["areas"].append(area_data)
 
-                result["prefectures"][prefecture.code] = pref_data
+                # 市町村が存在する府県のみ追加
+                if pref_data["areas"]:
+                    result["prefectures"][prefecture.code] = pref_data
+
+            logger.info(f"レスポンス府県数: {len(result['prefectures'])}")
+            logger.info(f"レスポンス府県コード: {list(result['prefectures'].keys())}")
 
             return jsonify(result)
 

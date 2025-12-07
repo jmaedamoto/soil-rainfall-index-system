@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { getRainfallForecast, calculateWithAdjustedRainfall } from '../services/rainfallApi';
 import { TimeSeriesPoint, CalculationResult } from '../types/api';
 
@@ -9,6 +9,11 @@ interface RainfallAdjustmentModalProps {
   guidanceInitial: string;
   dataSource: 'test' | 'production';
   onResultCalculated: (result: CalculationResult) => void;
+}
+
+interface CellSelection {
+  areaName: string;
+  ft: number;
 }
 
 const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
@@ -29,12 +34,18 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
   const [selectedPrefecture, setSelectedPrefecture] = useState<string>('');
   const [viewMode, setViewMode] = useState<'municipality' | 'subdivision'>('municipality');
 
+  // セル選択状態
+  const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
+  const [selectionStart, setSelectionStart] = useState<CellSelection | null>(null);
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [bulkEditValue, setBulkEditValue] = useState<string>('');
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
+
   // 府県別にグループ化（市町村）
   const rainfallByPrefecture = useMemo(() => {
     const grouped: Record<string, Record<string, TimeSeriesPoint[]>> = {};
 
     Object.entries(adjustedRainfall).forEach(([areaName, timeseries]) => {
-      // "府県名_市町村名" の形式から府県名を抽出
       const parts = areaName.split('_');
       if (parts.length >= 2) {
         const prefName = parts[0];
@@ -51,9 +62,7 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
   // 府県別にグループ化（二次細分）
   const subdivisionRainfallByPrefecture = useMemo(() => {
     const grouped: Record<string, Record<string, TimeSeriesPoint[]>> = {};
-
     Object.entries(adjustedSubdivisionRainfall).forEach(([subdivName, timeseries]) => {
-      // "府県名_二次細分名" の形式から府県名を抽出
       const parts = subdivName.split('_');
       if (parts.length >= 2) {
         const prefName = parts[0];
@@ -63,73 +72,155 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
         grouped[prefName][subdivName] = timeseries;
       }
     });
-
     return grouped;
   }, [adjustedSubdivisionRainfall]);
 
-  const prefectureList = useMemo(() => {
-    return Object.keys(rainfallByPrefecture).sort();
-  }, [rainfallByPrefecture]);
+  // セルキーを生成
+  const getCellKey = (areaName: string, ft: number) => `${areaName}:${ft}`;
 
-  // 初回データ取得時に最初の府県を選択
-  useEffect(() => {
-    if (prefectureList.length > 0 && !selectedPrefecture) {
-      setSelectedPrefecture(prefectureList[0]);
-    }
-  }, [prefectureList, selectedPrefecture]);
+  // セルが選択されているか判定
+  const isCellSelected = (areaName: string, ft: number) => {
+    return selectedCells.has(getCellKey(areaName, ft));
+  };
 
-  // モーダルが開かれたら自動的にデータ取得
-  useEffect(() => {
-    if (isOpen) {
-      fetchRainfallData();
-    }
-  }, [isOpen, swiInitial, guidanceInitial]);
+  // セルクリックハンドラ
+  const handleCellMouseDown = (areaName: string, ft: number, e: React.MouseEvent) => {
+    e.preventDefault();
 
-  const fetchRainfallData = async () => {
-    setLoading(true);
-    setError(null);
-    setStep('loading');
-
-    try {
-      const data = await getRainfallForecast(swiInitial, guidanceInitial);
-
-      if (data.status === 'success') {
-        setOriginalRainfall(data.area_rainfall);
-        setAdjustedRainfall(JSON.parse(JSON.stringify(data.area_rainfall)));
-
-        // 二次細分データがあれば設定
-        if (data.subdivision_rainfall) {
-          setOriginalSubdivisionRainfall(data.subdivision_rainfall);
-          setAdjustedSubdivisionRainfall(JSON.parse(JSON.stringify(data.subdivision_rainfall)));
-        }
-
-        setStep('editing');
+    if (e.ctrlKey || e.metaKey) {
+      // Ctrl/Cmd + クリック: トグル選択
+      const key = getCellKey(areaName, ft);
+      const newSelected = new Set(selectedCells);
+      if (newSelected.has(key)) {
+        newSelected.delete(key);
       } else {
-        setError('雨量予想データの取得に失敗しました');
+        newSelected.add(key);
       }
-    } catch (err) {
-      console.error('雨量予想取得エラー:', err);
-      setError(`エラー: ${err instanceof Error ? err.message : '不明なエラー'}`);
-    } finally {
-      setLoading(false);
+      setSelectedCells(newSelected);
+    } else if (e.shiftKey && selectionStart) {
+      // Shift + クリック: 範囲選択
+      selectRange(selectionStart, { areaName, ft });
+    } else {
+      // 通常クリック: 単一選択
+      setSelectedCells(new Set([getCellKey(areaName, ft)]));
+      setSelectionStart({ areaName, ft });
+      setIsSelecting(true);
     }
   };
 
-  const handleRainfallChange = (areaName: string, ft: number, newValue: string) => {
-    const value = parseFloat(newValue);
+  // セルドラッグハンドラ
+  const handleCellMouseEnter = (areaName: string, ft: number) => {
+    if (isSelecting && selectionStart) {
+      selectRange(selectionStart, { areaName, ft });
+    }
+  };
+
+  // マウスアップハンドラ
+  const handleMouseUp = useCallback(() => {
+    setIsSelecting(false);
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => document.removeEventListener('mouseup', handleMouseUp);
+  }, [handleMouseUp]);
+
+  // 範囲選択
+  const selectRange = (start: CellSelection, end: CellSelection) => {
+    const currentData = viewMode === 'municipality'
+      ? rainfallByPrefecture[selectedPrefecture] || {}
+      : subdivisionRainfallByPrefecture[selectedPrefecture] || {};
+
+    const areaNames = Object.keys(currentData);
+    const startAreaIndex = areaNames.indexOf(start.areaName);
+    const endAreaIndex = areaNames.indexOf(end.areaName);
+
+    if (startAreaIndex === -1 || endAreaIndex === -1) return;
+
+    const firstTimeseries = Object.values(currentData)[0];
+    if (!firstTimeseries || firstTimeseries.length === 0) return;
+
+    const ftValues = firstTimeseries.map(p => p.ft);
+    const startFtIndex = ftValues.indexOf(start.ft);
+    const endFtIndex = ftValues.indexOf(end.ft);
+
+    const minAreaIndex = Math.min(startAreaIndex, endAreaIndex);
+    const maxAreaIndex = Math.max(startAreaIndex, endAreaIndex);
+    const minFtIndex = Math.min(startFtIndex, endFtIndex);
+    const maxFtIndex = Math.max(startFtIndex, endFtIndex);
+
+    const newSelected = new Set<string>();
+    for (let i = minAreaIndex; i <= maxAreaIndex; i++) {
+      const areaName = areaNames[i];
+      for (let j = minFtIndex; j <= maxFtIndex; j++) {
+        const ft = ftValues[j];
+        newSelected.add(getCellKey(areaName, ft));
+      }
+    }
+
+    setSelectedCells(newSelected);
+  };
+
+  // 一括編集を適用
+  const applyBulkEdit = () => {
+    const value = parseFloat(bulkEditValue);
     if (isNaN(value) || value < 0) {
+      alert('0以上の数値を入力してください');
       return;
     }
+
+    const intValue = Math.round(value);
+
+    if (viewMode === 'municipality') {
+      setAdjustedRainfall(prev => {
+        const updated = { ...prev };
+        selectedCells.forEach(cellKey => {
+          const [areaName, ftStr] = cellKey.split(':');
+          const ft = parseInt(ftStr);
+          if (updated[areaName]) {
+            updated[areaName] = updated[areaName].map(point =>
+              point.ft === ft ? { ...point, value: intValue } : point
+            );
+          }
+        });
+        return updated;
+      });
+    } else {
+      setAdjustedSubdivisionRainfall(prev => {
+        const updated = { ...prev };
+        selectedCells.forEach(cellKey => {
+          const [areaName, ftStr] = cellKey.split(':');
+          const ft = parseInt(ftStr);
+          if (updated[areaName]) {
+            updated[areaName] = updated[areaName].map(point =>
+              point.ft === ft ? { ...point, value: intValue } : point
+            );
+          }
+        });
+        return updated;
+      });
+    }
+
+    setShowBulkEdit(false);
+    setBulkEditValue('');
+    setSelectedCells(new Set());
+  };
+
+  // 単一セルの値変更
+  const handleRainfallChange = (areaName: string, ft: number, value: string) => {
+    const numValue = parseFloat(value);
+    if (isNaN(numValue) || numValue < 0) return;
+
+    const intValue = Math.round(numValue);
 
     if (viewMode === 'municipality') {
       setAdjustedRainfall(prev => {
         const updated = { ...prev };
         const areaData = updated[areaName];
         if (areaData) {
-          const newAreaData = areaData.map(point =>
-            point.ft === ft ? { ...point, value } : point
+          updated[areaName] = areaData.map(point =>
+            point.ft === ft ? { ...point, value: intValue } : point
           );
-          updated[areaName] = newAreaData;
         }
         return updated;
       });
@@ -138,98 +229,140 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
         const updated = { ...prev };
         const subdivData = updated[areaName];
         if (subdivData) {
-          const newSubdivData = subdivData.map(point =>
-            point.ft === ft ? { ...point, value } : point
+          updated[areaName] = subdivData.map(point =>
+            point.ft === ft ? { ...point, value: intValue } : point
           );
-          updated[areaName] = newSubdivData;
         }
         return updated;
       });
     }
   };
 
-  const executeRecalculation = async () => {
-    setLoading(true);
-    setError(null);
-    setStep('calculating');
+  // 元に戻す
+  const resetToOriginal = () => {
+    if (viewMode === 'municipality') {
+      setAdjustedRainfall(JSON.parse(JSON.stringify(originalRainfall)));
+    } else {
+      setAdjustedSubdivisionRainfall(JSON.parse(JSON.stringify(originalSubdivisionRainfall)));
+    }
+    setSelectedCells(new Set());
+  };
 
-    try {
-      const areaAdjustments: Record<string, Record<number, number>> = {};
+  // 雨量データ取得
+  useEffect(() => {
+    if (isOpen && step === 'loading') {
+      const fetchData = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+          const data = await getRainfallForecast(
+            swiInitial,
+            guidanceInitial,
+            dataSource
+          );
 
-      for (const [areaName, timeseries] of Object.entries(adjustedRainfall)) {
-        areaAdjustments[areaName] = {};
-        timeseries.forEach(point => {
-          areaAdjustments[areaName][point.ft] = point.value;
-        });
-      }
+          setOriginalRainfall(data.area_rainfall);
+          setAdjustedRainfall(JSON.parse(JSON.stringify(data.area_rainfall)));
 
-      const request = {
-        swi_initial: swiInitial,
-        guidance_initial: guidanceInitial,
-        area_adjustments: areaAdjustments
+          if (data.subdivision_rainfall) {
+            setOriginalSubdivisionRainfall(data.subdivision_rainfall);
+            setAdjustedSubdivisionRainfall(JSON.parse(JSON.stringify(data.subdivision_rainfall)));
+          }
+
+          const prefNames = Object.keys(
+            Object.entries(data.area_rainfall).reduce((acc, [areaName]) => {
+              const prefName = areaName.split('_')[0];
+              acc[prefName] = true;
+              return acc;
+            }, {} as Record<string, boolean>)
+          );
+
+          if (prefNames.length > 0) {
+            setSelectedPrefecture(prefNames[0]);
+          }
+
+          setStep('editing');
+        } catch (err) {
+          setError(err instanceof Error ? err.message : '雨量データの取得に失敗しました');
+        } finally {
+          setLoading(false);
+        }
       };
 
-      const result = await calculateWithAdjustedRainfall(request);
+      fetchData();
+    }
+  }, [isOpen, step, swiInitial, guidanceInitial, dataSource]);
 
-      if (result.status === 'success') {
-        onResultCalculated(result);
-        onClose();
-      } else {
-        setError('再計算に失敗しました');
-        setStep('editing');
-      }
+  // 再計算実行
+  const handleRecalculate = async () => {
+    setStep('calculating');
+    setError(null);
+
+    try {
+      const currentRainfall = viewMode === 'municipality' ? adjustedRainfall : adjustedSubdivisionRainfall;
+      const adjustments: Record<string, Record<string, number>> = {};
+
+      Object.entries(currentRainfall).forEach(([areaName, timeseries]) => {
+        const areaAdjustments: Record<string, number> = {};
+        timeseries.forEach(point => {
+          areaAdjustments[point.ft.toString()] = point.value;
+        });
+        adjustments[areaName] = areaAdjustments;
+      });
+
+      const result = await calculateWithAdjustedRainfall({
+        swi_initial: swiInitial,
+        guidance_initial: guidanceInitial,
+        area_adjustments: adjustments
+      });
+
+      onResultCalculated(result);
+      onClose();
     } catch (err) {
-      console.error('再計算エラー:', err);
-      setError(`エラー: ${err instanceof Error ? err.message : '不明なエラー'}`);
+      setError(err instanceof Error ? err.message : '再計算に失敗しました');
       setStep('editing');
-    } finally {
-      setLoading(false);
     }
   };
 
-  const resetToOriginal = () => {
-    setAdjustedRainfall(JSON.parse(JSON.stringify(originalRainfall)));
-    setAdjustedSubdivisionRainfall(JSON.parse(JSON.stringify(originalSubdivisionRainfall)));
-  };
+  // 修正数カウント
+  const totalModifiedCount = useMemo(() => {
+    const originalData = viewMode === 'municipality' ? originalRainfall : originalSubdivisionRainfall;
+    const adjustedData = viewMode === 'municipality' ? adjustedRainfall : adjustedSubdivisionRainfall;
 
-  // 選択された府県のデータ（表示モードに応じて切り替え）
-  const currentPrefectureData = useMemo(() => {
-    if (viewMode === 'municipality') {
-      return rainfallByPrefecture[selectedPrefecture] || {};
-    } else {
-      return subdivisionRainfallByPrefecture[selectedPrefecture] || {};
-    }
-  }, [rainfallByPrefecture, subdivisionRainfallByPrefecture, selectedPrefecture, viewMode]);
+    let count = 0;
+    Object.entries(adjustedData).forEach(([areaName, timeseries]) => {
+      const originalTimeseries = originalData[areaName];
+      if (originalTimeseries) {
+        timeseries.forEach((point, index) => {
+          if (Math.abs(point.value - originalTimeseries[index].value) > 0.01) {
+            count++;
+          }
+        });
+      }
+    });
+    return count;
+  }, [viewMode, originalRainfall, adjustedRainfall, originalSubdivisionRainfall, adjustedSubdivisionRainfall]);
 
-  // 選択された府県の修正数
+  const currentPrefectureData = viewMode === 'municipality'
+    ? rainfallByPrefecture[selectedPrefecture] || {}
+    : subdivisionRainfallByPrefecture[selectedPrefecture] || {};
+
   const modifiedCountInPrefecture = useMemo(() => {
     const originalData = viewMode === 'municipality' ? originalRainfall : originalSubdivisionRainfall;
-    return Object.entries(currentPrefectureData).reduce((count, [areaName, timeseries]) => {
-      return count + timeseries.filter(point => {
-        const originalPoint = originalData[areaName]?.find(p => p.ft === point.ft);
-        return originalPoint && Math.abs(originalPoint.value - point.value) > 0.01;
-      }).length;
-    }, 0);
-  }, [currentPrefectureData, originalRainfall, originalSubdivisionRainfall, viewMode]);
 
-  // 全体の修正数
-  const totalModifiedCount = useMemo(() => {
-    if (viewMode === 'municipality') {
-      return Object.entries(adjustedRainfall).reduce((count, [areaName, timeseries]) => {
-        return count + timeseries.filter(point => {
-          const originalPoint = originalRainfall[areaName]?.find(p => p.ft === point.ft);
-          return originalPoint && Math.abs(originalPoint.value - point.value) > 0.01;
-        }).length;
-      }, 0);
-    } else {
-      return Object.entries(adjustedSubdivisionRainfall).reduce((count, [subdivName, timeseries]) => {
-        return count + timeseries.filter(point => {
-          const originalPoint = originalSubdivisionRainfall[subdivName]?.find(p => p.ft === point.ft);
-          return originalPoint && Math.abs(originalPoint.value - point.value) > 0.01;
-        }).length;
-      }, 0);
-    }
-  }, [adjustedRainfall, originalRainfall, adjustedSubdivisionRainfall, originalSubdivisionRainfall, viewMode]);
+    let count = 0;
+    Object.entries(currentPrefectureData).forEach(([areaName, timeseries]) => {
+      const originalTimeseries = originalData[areaName];
+      if (originalTimeseries) {
+        timeseries.forEach((point, index) => {
+          if (Math.abs(point.value - originalTimeseries[index].value) > 0.01) {
+            count++;
+          }
+        });
+      }
+    });
+    return count;
+  }, [currentPrefectureData, viewMode, originalRainfall, originalSubdivisionRainfall]);
 
   if (!isOpen) return null;
 
@@ -238,32 +371,32 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
       position: 'fixed',
       top: 0,
       left: 0,
-      right: 0,
-      bottom: 0,
+      width: '100vw',
+      height: '100vh',
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      zIndex: 1000
+      zIndex: 10000
     }}>
       <div style={{
         backgroundColor: 'white',
+        width: '95vw',
+        height: '90vh',
         borderRadius: '8px',
         padding: '20px',
-        maxWidth: '90vw',
-        maxHeight: '90vh',
-        overflow: 'auto',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden'
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <h2 style={{ margin: 0 }}>雨量予想調整</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+          <h2 style={{ margin: 0 }}>雨量調整</h2>
           <button
             onClick={onClose}
             style={{
               padding: '8px 16px',
-              backgroundColor: '#6c757d',
-              color: 'white',
-              border: 'none',
+              backgroundColor: '#f5f5f5',
+              border: '1px solid #ddd',
               borderRadius: '4px',
               cursor: 'pointer'
             }}
@@ -272,226 +405,410 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
           </button>
         </div>
 
-        {/* データソース表示 */}
-        <div style={{
-          backgroundColor: '#e3f2fd',
-          padding: '10px 15px',
-          borderRadius: '6px',
-          marginBottom: '20px',
-          fontSize: '14px'
-        }}>
-          <strong>データソース:</strong> {dataSource === 'test' ? 'テストデータ' : '本番データ（気象庁GRIB2）'}
-        </div>
-
-        {/* エラー表示 */}
-        {error && (
-          <div style={{
-            backgroundColor: '#f8d7da',
-            color: '#721c24',
-            padding: '10px 15px',
-            borderRadius: '4px',
-            marginBottom: '20px',
-            border: '1px solid #f5c6cb'
-          }}>
-            {error}
-          </div>
-        )}
-
-        {/* ローディング状態 */}
-        {step === 'loading' && (
+        {loading && (
           <div style={{ textAlign: 'center', padding: '40px' }}>
             <div style={{
-              width: '40px',
-              height: '40px',
               border: '4px solid #f3f3f3',
               borderTop: '4px solid #1976D2',
               borderRadius: '50%',
-              animation: 'spin 1s linear infinite',
-              margin: '0 auto 20px'
-            }} />
-            <p>雨量データを取得中...</p>
-          </div>
-        )}
-
-        {/* 再計算中 */}
-        {step === 'calculating' && (
-          <div style={{ textAlign: 'center', padding: '40px' }}>
-            <div style={{
               width: '40px',
               height: '40px',
-              border: '4px solid #f3f3f3',
-              borderTop: '4px solid #4CAF50',
-              borderRadius: '50%',
               animation: 'spin 1s linear infinite',
-              margin: '0 auto 20px'
+              margin: '0 auto'
             }} />
-            <p>危険度を再計算中...</p>
+            <p style={{ marginTop: '10px' }}>雨量データを読み込んでいます...</p>
           </div>
         )}
 
-        {/* 編集テーブル */}
-        {step === 'editing' && Object.keys(adjustedRainfall).length > 0 && (
+        {error && (
+          <div style={{
+            backgroundColor: '#ffebee',
+            color: '#c62828',
+            padding: '12px',
+            borderRadius: '4px',
+            marginBottom: '15px'
+          }}>
+            エラー: {error}
+          </div>
+        )}
+
+        {step === 'editing' && (
           <>
-            {/* 府県選択タブ */}
-            <div style={{
-              display: 'flex',
-              gap: '5px',
-              marginBottom: '15px',
-              borderBottom: '2px solid #ddd',
-              overflowX: 'auto'
-            }}>
-              {prefectureList.map(prefName => (
+            <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', flexWrap: 'wrap', alignItems: 'center' }}>
+              {/* 表示モード切り替え */}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <label style={{ fontWeight: 'bold' }}>表示:</label>
                 <button
-                  key={prefName}
-                  onClick={() => setSelectedPrefecture(prefName)}
+                  onClick={() => { setViewMode('municipality'); setSelectedCells(new Set()); }}
                   style={{
-                    padding: '10px 20px',
-                    backgroundColor: selectedPrefecture === prefName ? '#1976D2' : '#f5f5f5',
-                    color: selectedPrefecture === prefName ? 'white' : '#333',
-                    border: 'none',
-                    borderRadius: '4px 4px 0 0',
-                    cursor: 'pointer',
-                    fontWeight: selectedPrefecture === prefName ? 'bold' : 'normal',
-                    transition: 'all 0.2s'
+                    padding: '8px 16px',
+                    backgroundColor: viewMode === 'municipality' ? '#1976D2' : '#f5f5f5',
+                    color: viewMode === 'municipality' ? 'white' : 'black',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
                   }}
                 >
-                  {prefName}
+                  市町村別
                 </button>
-              ))}
+                <button
+                  onClick={() => { setViewMode('subdivision'); setSelectedCells(new Set()); }}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: viewMode === 'subdivision' ? '#1976D2' : '#f5f5f5',
+                    color: viewMode === 'subdivision' ? 'white' : 'black',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  二次細分別
+                </button>
+              </div>
+
+              {/* 府県選択 */}
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <label style={{ fontWeight: 'bold' }}>府県:</label>
+                <select
+                  value={selectedPrefecture}
+                  onChange={(e) => { setSelectedPrefecture(e.target.value); setSelectedCells(new Set()); }}
+                  style={{
+                    padding: '8px 12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                >
+                  {Object.keys(viewMode === 'municipality' ? rainfallByPrefecture : subdivisionRainfallByPrefecture).map(prefName => (
+                    <option key={prefName} value={prefName}>{prefName}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* セル選択情報 */}
+              {selectedCells.size > 0 && (
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 'bold' }}>選択中: {selectedCells.size}セル</span>
+                  <button
+                    onClick={() => setShowBulkEdit(true)}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#4CAF50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    一括編集
+                  </button>
+                  <button
+                    onClick={() => setSelectedCells(new Set())}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#f5f5f5',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    選択解除
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* 表示モード切り替え */}
-            <div style={{ marginBottom: '15px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <label style={{ fontWeight: 'bold' }}>表示:</label>
-              <button
-                onClick={() => setViewMode('municipality')}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: viewMode === 'municipality' ? '#1976D2' : '#f5f5f5',
-                  color: viewMode === 'municipality' ? 'white' : '#333',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: viewMode === 'municipality' ? 'bold' : 'normal'
-                }}
-              >
-                市町村別
-              </button>
-              <button
-                onClick={() => setViewMode('subdivision')}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: viewMode === 'subdivision' ? '#1976D2' : '#f5f5f5',
-                  color: viewMode === 'subdivision' ? 'white' : '#333',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: viewMode === 'subdivision' ? 'bold' : 'normal'
-                }}
-              >
-                二次細分別
-              </button>
-            </div>
+            {/* 一括編集ダイアログ */}
+            {showBulkEdit && (
+              <div style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                width: '100vw',
+                height: '100vh',
+                backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                zIndex: 20000
+              }}>
+                <div style={{
+                  backgroundColor: 'white',
+                  padding: '30px',
+                  borderRadius: '8px',
+                  minWidth: '400px'
+                }}>
+                  <h3>一括編集</h3>
+                  <p>{selectedCells.size}個のセルに同じ値を設定します</p>
+                  <div style={{ marginTop: '20px', marginBottom: '20px' }}>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                      雨量 (mm):
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      value={bulkEditValue}
+                      onChange={(e) => setBulkEditValue(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        fontSize: '16px'
+                      }}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          applyBulkEdit();
+                        } else if (e.key === 'Escape') {
+                          setShowBulkEdit(false);
+                          setBulkEditValue('');
+                        }
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={() => { setShowBulkEdit(false); setBulkEditValue(''); }}
+                      style={{
+                        padding: '10px 20px',
+                        backgroundColor: '#f5f5f5',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      キャンセル
+                    </button>
+                    <button
+                      onClick={applyBulkEdit}
+                      style={{
+                        padding: '10px 20px',
+                        backgroundColor: '#1976D2',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      適用
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
-            <div style={{ marginBottom: '15px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* 統計情報 */}
+            <div style={{
+              padding: '12px',
+              backgroundColor: '#f5f5f5',
+              borderRadius: '4px',
+              marginBottom: '15px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <span style={{ marginRight: '20px' }}>
+                  表示中: {selectedPrefecture} - 全{Object.keys(currentPrefectureData).length}{viewMode === 'municipality' ? '市町村' : '二次細分'}
+                </span>
+                <span style={{ marginRight: '20px' }}>
+                  現在の府県の修正数: {modifiedCountInPrefecture}セル
+                </span>
+                <span style={{ fontWeight: 'bold', color: totalModifiedCount > 0 ? '#d32f2f' : '#666' }}>
+                  全体の修正数: {totalModifiedCount}セル
+                </span>
+              </div>
               <button
                 onClick={resetToOriginal}
-                disabled={loading}
                 style={{
                   padding: '8px 16px',
-                  backgroundColor: '#ffc107',
-                  color: 'black',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.6 : 1
-                }}
-              >
-                元の値にリセット
-              </button>
-              <button
-                onClick={executeRecalculation}
-                disabled={loading}
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#4CAF50',
+                  backgroundColor: '#ff9800',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  fontWeight: 'bold',
-                  opacity: loading ? 0.6 : 1
+                  cursor: 'pointer'
                 }}
               >
-                再計算実行
+                元に戻す
               </button>
-              <div style={{ marginLeft: 'auto', fontSize: '14px', color: '#666', textAlign: 'right' }}>
-                <div>表示中: {selectedPrefecture} ({Object.keys(currentPrefectureData).length}{viewMode === 'municipality' ? '市町村' : '二次細分'})</div>
-                <div>全体修正箇所: {totalModifiedCount} | 表示中: {modifiedCountInPrefecture}</div>
-              </div>
             </div>
 
+            {/* Excelライクな表 */}
             <div style={{
-              maxHeight: '60vh',
+              flex: 1,
               overflow: 'auto',
               border: '1px solid #ddd',
-              borderRadius: '4px'
+              borderRadius: '4px',
+              userSelect: 'none'
             }}>
               <table style={{
                 width: '100%',
                 borderCollapse: 'collapse',
-                fontSize: '14px'
+                fontSize: '13px',
+                tableLayout: 'fixed'
               }}>
-                <thead style={{ position: 'sticky', top: 0, backgroundColor: '#f5f5f5', zIndex: 1 }}>
+                <thead style={{ position: 'sticky', top: 0, backgroundColor: '#1976D2', color: 'white', zIndex: 10 }}>
                   <tr>
-                    <th style={{ padding: '8px', borderBottom: '2px solid #ddd', textAlign: 'left', minWidth: '150px' }}>
-                      {viewMode === 'municipality' ? '市町村' : '二次細分'}
+                    <th style={{
+                      padding: '10px 8px',
+                      borderRight: '2px solid #fff',
+                      textAlign: 'left',
+                      fontWeight: 'bold',
+                      width: '200px',
+                      position: 'sticky',
+                      left: 0,
+                      backgroundColor: '#1976D2',
+                      zIndex: 11
+                    }}>
+                      {viewMode === 'municipality' ? '市町村名' : '二次細分名'}
                     </th>
                     {Object.keys(currentPrefectureData).length > 0 &&
                       currentPrefectureData[Object.keys(currentPrefectureData)[0]]?.map(point => (
-                        <th key={point.ft} style={{ padding: '8px', borderBottom: '2px solid #ddd', textAlign: 'center', minWidth: '70px' }}>
+                        <th key={point.ft} style={{
+                          padding: '10px 8px',
+                          borderRight: '1px solid #fff',
+                          textAlign: 'center',
+                          fontWeight: 'bold',
+                          minWidth: '80px'
+                        }}>
                           FT{point.ft}
                         </th>
                       ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(currentPrefectureData).map(([areaName, timeseries]) => (
-                    <tr key={areaName}>
-                      <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: 'bold' }}>
-                        {areaName.split('_')[1] || areaName}
-                      </td>
-                      {timeseries.map(point => {
-                        const originalData = viewMode === 'municipality' ? originalRainfall : originalSubdivisionRainfall;
-                        const originalPoint = originalData[areaName]?.find(p => p.ft === point.ft);
-                        const isModified = originalPoint && Math.abs(originalPoint.value - point.value) > 0.01;
+                  {Object.entries(currentPrefectureData).map(([areaName, timeseries]) => {
+                    const originalData = viewMode === 'municipality' ? originalRainfall : originalSubdivisionRainfall;
+                    return (
+                      <tr key={areaName} style={{ borderBottom: '1px solid #eee' }}>
+                        <td style={{
+                          padding: '8px',
+                          fontWeight: 'bold',
+                          backgroundColor: '#f5f5f5',
+                          borderRight: '2px solid #ddd',
+                          position: 'sticky',
+                          left: 0,
+                          zIndex: 9
+                        }}>
+                          {areaName.split('_')[1] || areaName}
+                        </td>
+                        {timeseries.map(point => {
+                          const originalPoint = originalData[areaName]?.find(p => p.ft === point.ft);
+                          const isModified = originalPoint && Math.abs(originalPoint.value - point.value) > 0.01;
+                          const isSelected = isCellSelected(areaName, point.ft);
 
-                        return (
-                          <td key={point.ft} style={{ padding: '4px', borderBottom: '1px solid #eee' }}>
-                            <input
-                              type="number"
-                              step="0.1"
-                              min="0"
-                              value={point.value.toFixed(1)}
-                              onChange={(e) => handleRainfallChange(areaName, point.ft, e.target.value)}
+                          return (
+                            <td
+                              key={point.ft}
                               style={{
-                                width: '60px',
                                 padding: '4px',
-                                border: '1px solid #ccc',
-                                borderRadius: '4px',
-                                textAlign: 'right',
-                                backgroundColor: isModified ? '#fff3cd' : 'white'
+                                borderRight: '1px solid #eee',
+                                textAlign: 'center',
+                                backgroundColor: isSelected
+                                  ? '#e3f2fd'
+                                  : isModified
+                                  ? '#fff3cd'
+                                  : 'white',
+                                border: isSelected ? '2px solid #1976D2' : '1px solid #eee',
+                                cursor: 'cell'
                               }}
-                            />
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
+                              onMouseDown={(e) => handleCellMouseDown(areaName, point.ft, e)}
+                              onMouseEnter={() => handleCellMouseEnter(areaName, point.ft)}
+                            >
+                              <input
+                                type="number"
+                                step="1"
+                                min="0"
+                                value={Math.round(point.value)}
+                                onChange={(e) => handleRainfallChange(areaName, point.ft, e.target.value)}
+                                className="rainfall-input"
+                                style={{
+                                  width: '100%',
+                                  padding: '6px',
+                                  border: 'none',
+                                  borderRadius: '0',
+                                  textAlign: 'center',
+                                  backgroundColor: 'transparent',
+                                  fontSize: '13px',
+                                  fontWeight: isModified ? 'bold' : 'normal'
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+
+            {/* 操作ヘルプ */}
+            <div style={{
+              marginTop: '10px',
+              padding: '10px',
+              backgroundColor: '#e3f2fd',
+              borderRadius: '4px',
+              fontSize: '12px'
+            }}>
+              <strong>操作方法:</strong>
+              クリック=単一選択 | ドラッグ=範囲選択 | Ctrl+クリック=複数選択 | Shift+クリック=範囲拡張
+            </div>
+
+            {/* ボタン */}
+            <div style={{ display: 'flex', gap: '10px', marginTop: '15px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={onClose}
+                style={{
+                  padding: '10px 24px',
+                  backgroundColor: '#f5f5f5',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleRecalculate}
+                disabled={totalModifiedCount === 0}
+                style={{
+                  padding: '10px 24px',
+                  backgroundColor: totalModifiedCount > 0 ? '#1976D2' : '#ccc',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: totalModifiedCount > 0 ? 'pointer' : 'not-allowed',
+                  fontSize: '14px',
+                  fontWeight: 'bold'
+                }}
+              >
+                再計算実行 ({totalModifiedCount}セル修正)
+              </button>
+            </div>
           </>
+        )}
+
+        {step === 'calculating' && (
+          <div style={{ textAlign: 'center', padding: '40px' }}>
+            <div style={{
+              border: '4px solid #f3f3f3',
+              borderTop: '4px solid #1976D2',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              animation: 'spin 1s linear infinite',
+              margin: '0 auto'
+            }} />
+            <p style={{ marginTop: '10px' }}>調整後の雨量で再計算中...</p>
+            <p style={{ fontSize: '12px', color: '#666' }}>
+              調整対象: {totalModifiedCount}セル
+            </p>
+          </div>
         )}
 
         <style>
@@ -499,6 +816,22 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
             @keyframes spin {
               0% { transform: rotate(0deg); }
               100% { transform: rotate(360deg); }
+            }
+
+            /* 雨量入力フィールドのスピナー（矢印ボタン）を非表示 */
+            input.rainfall-input::-webkit-outer-spin-button,
+            input.rainfall-input::-webkit-inner-spin-button {
+              -webkit-appearance: none;
+              margin: 0;
+            }
+            input.rainfall-input[type=number] {
+              -moz-appearance: textfield;
+            }
+
+            /* セル入力フォーカス時のスタイル */
+            input.rainfall-input:focus {
+              outline: 2px solid #1976D2;
+              outline-offset: -2px;
             }
           `}
         </style>
