@@ -20,6 +20,8 @@ from api.routes.test_routes import test_bp, init_test_routes
 from api.routes.performance_routes import performance_bp, init_performance_routes
 from api.routes.cache_routes import cache_bp
 from api.routes.rainfall_routes import rainfall_bp
+from api.routes.session_routes import create_session_blueprint
+from api.controllers.session_controller import SessionController
 
 def create_app(data_dir: str = "data"):
     """Flaskアプリケーション作成ファクトリー"""
@@ -30,6 +32,14 @@ def create_app(data_dir: str = "data"):
     init_main_routes(data_dir)
     init_test_routes(data_dir)
     init_performance_routes(data_dir)
+
+    # セッションBlueprint作成と登録
+    # main_routes.pyで作成されたsession_serviceを使用
+    from api.routes.main_routes import session_service
+    if session_service:
+        session_controller = SessionController(session_service)
+        session_bp = create_session_blueprint(session_controller)
+        app.register_blueprint(session_bp, url_prefix='/api')
 
     # Blueprint登録
     app.register_blueprint(main_bp)
@@ -80,5 +90,14 @@ if __name__ == '__main__':
     logger.info("  雨量調整API (rainfall_bp):")
     logger.info("    GET    /api/rainfall-forecast")
     logger.info("    POST   /api/rainfall-adjustment")
+    logger.info("  セッション管理API (session_bp):")
+    logger.info("    GET    /api/session/<session_id>")
+    logger.info("    GET    /api/session/<session_id>/prefecture/<prefecture_code>")
+    logger.info("    GET    /api/session/<session_id>/risk-at-time?ft=<ft>")
+    logger.info("    GET    /api/session/<session_id>/mesh/<mesh_code>")
+    logger.info("    DELETE /api/session/<session_id>")
+    logger.info("    GET    /api/sessions")
+    logger.info("    GET    /api/sessions/stats")
+    logger.info("    POST   /api/sessions/cleanup")
 
     app.run(debug=True, host='0.0.0.0', port=5000)

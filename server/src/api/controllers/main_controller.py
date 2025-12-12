@@ -23,10 +23,11 @@ logger = logging.getLogger(__name__)
 class MainController:
     """メインAPIコントローラー"""
 
-    def __init__(self, data_dir: str = "data"):
+    def __init__(self, data_dir: str = "data", session_service=None):
         self.main_service = MainService(data_dir)
         self.cache_service = get_cache_service()
         self.config_service = ConfigService()
+        self.session_service = session_service
         self.data_dir = data_dir
     
     def root(self):
@@ -261,6 +262,49 @@ class MainController:
             # メイン処理実行（個別URLを使用、use_cache=True でキャッシュ有効）
             result = self.main_service.main_process_from_separate_urls(
                 swi_url, guidance_url, use_cache=True)
+
+            # セッションサービスが有効な場合、セッション作成して軽量レスポンスを返す
+            if self.session_service:
+                # セッション作成
+                session_id = self.session_service.create_session(
+                    result['prefectures'],
+                    swi_initial.isoformat(),
+                    guidance_initial.isoformat(),
+                    datetime.now().isoformat()
+                )
+
+                # 利用可能な時刻を抽出（最初のメッシュから）
+                available_times = []
+                first_pref = next(iter(result['prefectures'].values()))
+                if first_pref.areas and first_pref.areas[0].meshes:
+                    first_mesh = first_pref.areas[0].meshes[0]
+                    available_times = sorted(set(
+                        [point.ft for point in first_mesh.risk_3hour_max_timeline] +
+                        [point.ft for point in first_mesh.risk_hourly_timeline]
+                    ))
+
+                # 軽量レスポンスを返す
+                return jsonify({
+                    "status": "success",
+                    "session_id": session_id,
+                    "swi_initial_time": swi_initial.isoformat(),
+                    "guidance_initial_time": guidance_initial.isoformat(),
+                    "available_prefectures": list(result['prefectures'].keys()),
+                    "available_times": available_times,
+                    "cache_info": {
+                        "cache_key": cache_key,
+                        "cache_hit": cache_exists,
+                        "cache_metadata": cache_metadata
+                    },
+                    "used_urls": {
+                        "swi_url": swi_url,
+                        "swi_initial_time": swi_initial.isoformat(),
+                        "guidance_url": guidance_url,
+                        "guidance_initial_time": guidance_initial.isoformat()
+                    }
+                })
+
+            # セッションサービスが無効な場合、従来通り全データを返す
             result["status"] = "success"
 
             # 使用したURLとキャッシュ情報も返却

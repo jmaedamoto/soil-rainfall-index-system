@@ -4,17 +4,22 @@
 """
 from flask import Blueprint
 from ..controllers.main_controller import MainController
+from services.session_service import SessionService
 
 # Blueprint作成
 main_bp = Blueprint('main', __name__)
 
 # コントローラーインスタンス（データディレクトリは後で設定）
 main_controller = None
+session_service = None
 
 def init_main_routes(data_dir: str = "data"):
     """メインルートを初期化"""
-    global main_controller
-    main_controller = MainController(data_dir)
+    global main_controller, session_service
+    # セッションサービスを作成（TTL: 1時間）
+    session_service = SessionService(ttl_hours=1)
+    # メインコントローラーにセッションサービスを渡す
+    main_controller = MainController(data_dir, session_service=session_service)
 
 @main_bp.route('/', methods=['GET'])
 def root():

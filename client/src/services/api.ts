@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { CalculationParams, CalculationResult, HealthStatus } from '../types/api';
+import { CalculationParams, CalculationResult, HealthStatus, LightweightCalculationResult } from '../types/api';
 import { mockProductionApi } from './mockProductionApi';
 
 // APIベースURL（環境に応じて自動設定）
@@ -101,19 +101,49 @@ export class SoilRainfallAPIClient {
 
   /**
    * 本番用土壌雨量指数計算（SWIとガイダンスの初期時刻を個別指定）
+   * セッションベースAPIを使用し、軽量レスポンスを返す
    */
   async calculateProductionSoilRainfallIndexWithUrls(params: {
     swi_initial: string;
     guidance_initial: string;
-  }): Promise<CalculationResult> {
-    // モックモードの場合はテストデータを返す
+  }): Promise<LightweightCalculationResult> {
+    // モックモードの場合はテストデータを返す（互換性のため従来形式）
     if (USE_MOCK_PRODUCTION_API) {
-      return mockProductionApi.calculateProductionSoilRainfallIndexWithUrls(params);
+      const mockResult = await mockProductionApi.calculateProductionSoilRainfallIndexWithUrls(params);
+      // モックデータをLightweightCalculationResultに変換
+      return {
+        status: mockResult.status,
+        session_id: 'mock_session_' + Date.now(),
+        swi_initial_time: mockResult.swi_initial_time || mockResult.initial_time,
+        guidance_initial_time: mockResult.guid_initial_time || mockResult.initial_time,
+        available_prefectures: Object.keys(mockResult.prefectures),
+        available_times: this.extractAvailableTimes(mockResult),
+        cache_info: mockResult.cache_info,
+        used_urls: mockResult.used_urls
+      };
     }
 
-    // 通常モード: 実際のAPIを呼び出す
-    const response = await apiClient.post<CalculationResult>('/production-soil-rainfall-index-with-urls', params);
+    // 通常モード: セッションベースAPIを呼び出す
+    const response = await apiClient.post<LightweightCalculationResult>(
+      '/production-soil-rainfall-index-with-urls',
+      params
+    );
     return response.data;
+  }
+
+  /**
+   * 利用可能な時刻を抽出（ヘルパー関数）
+   */
+  private extractAvailableTimes(result: CalculationResult): number[] {
+    const firstPref = Object.values(result.prefectures)[0];
+    if (!firstPref?.areas?.[0]?.meshes?.[0]) return [];
+
+    const firstMesh = firstPref.areas[0].meshes[0];
+    const times = new Set<number>();
+
+    firstMesh.risk_3hour_max_timeline?.forEach(point => times.add(point.ft));
+
+    return Array.from(times).sort((a, b) => a - b);
   }
 
   /**

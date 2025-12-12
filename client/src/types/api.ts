@@ -146,3 +146,51 @@ export interface RainfallAdjustmentRequest {
   area_adjustments: Record<string, Record<number, number>>;  // 市町村別調整後雨量
   subdivision_adjustments?: Record<string, Record<number, number>>;  // 二次細分別調整後雨量
 }
+
+// セッションベースAPI用の型定義
+
+export interface SessionInfo {
+  session_id: string;
+  created_at: string;               // ISO8601形式
+  expires_at: string;               // ISO8601形式
+  last_accessed: string;            // ISO8601形式
+  swi_initial_time: string;         // SWI初期時刻
+  guidance_initial_time: string;    // ガイダンス初期時刻
+  prefecture_count: number;
+  prefecture_codes: string[];
+}
+
+export interface LightweightCalculationResult {
+  status: 'success' | 'error';
+  session_id: string;               // セッションID
+  swi_initial_time: string;         // SWI初期時刻（ISO8601）
+  guidance_initial_time: string;    // ガイダンス初期時刻（ISO8601）
+  available_prefectures: string[];  // 利用可能な府県コード
+  available_times: number[];        // 利用可能なFT値
+  cache_info?: CacheInfo;           // キャッシュ情報
+  used_urls?: {                     // 使用したGRIB2 URL
+    swi_url: string;
+    swi_initial_time: string;
+    guidance_url: string;
+    guidance_initial_time: string;
+  };
+}
+
+export interface PrefectureDataResponse {
+  status: 'success' | 'error';
+  prefecture: Prefecture;
+  error?: string;
+}
+
+export interface RiskAtTimeResponse {
+  status: 'success' | 'error';
+  ft: number;
+  mesh_risks: Record<string, number>;  // メッシュコード → リスク値
+  error?: string;
+}
+
+export interface MeshDetailResponse {
+  status: 'success' | 'error';
+  mesh: Mesh;
+  error?: string;
+}
