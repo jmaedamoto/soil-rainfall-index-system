@@ -313,30 +313,6 @@ const Production: React.FC = () => {
               initialTime={initialTime}
             />
           </div>
-
-          {/* 凡例 */}
-          <div style={{
-            marginTop: '20px',
-            padding: '15px',
-            backgroundColor: '#f9f9f9',
-            borderRadius: '8px'
-          }}>
-            <h3 style={{ marginBottom: '10px' }}>危険度レベル</h3>
-            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '30px', height: '20px', backgroundColor: '#FFC107', border: '1px solid #ddd' }}></div>
-                <span>レベル1: 注意</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '30px', height: '20px', backgroundColor: '#F44336', border: '1px solid #ddd' }}></div>
-                <span>レベル2: 警報</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '30px', height: '20px', backgroundColor: '#9C27B0', border: '1px solid #ddd' }}></div>
-                <span>レベル3: 土砂災害警戒</span>
-              </div>
-            </div>
-          </div>
         </>
       )}
     </div>

@@ -103,20 +103,20 @@ export interface HealthStatus {
   version?: string;
 }
 
-// リスクレベルの定義
+// リスクレベルの定義（政府ガイドライン準拠: レベル0,2,3,4）
 export enum RiskLevel {
-  NORMAL = 0,     // 正常
-  CAUTION = 1,    // 注意
-  WARNING = 2,    // 警報
-  DISASTER = 3    // 土砂災害
+  NORMAL = 0,     // レベル0: 正常
+  CAUTION = 2,    // レベル2: 注意
+  WARNING = 3,    // レベル3: 警報
+  DISASTER = 4    // レベル4: 土砂災害
 }
 
 // リスクレベルの色定義
 export const RISK_COLORS = {
   [RiskLevel.NORMAL]: 'transparent',   // 無色（透明）
-  [RiskLevel.CAUTION]: '#FFC107',      // 黄（そのまま）
-  [RiskLevel.WARNING]: '#F44336',      // 赤（変更）
-  [RiskLevel.DISASTER]: '#9C27B0'      // 紫（変更）
+  [RiskLevel.CAUTION]: '#FFC107',      // 黄色
+  [RiskLevel.WARNING]: '#F44336',      // 赤色
+  [RiskLevel.DISASTER]: '#9C27B0'      // 紫色
 } as const;
 
 // リスクレベルのラベル

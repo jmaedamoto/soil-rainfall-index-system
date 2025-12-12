@@ -72,7 +72,7 @@ const MapLegend: React.FC<MapLegendProps> = ({ position = 'bottom-right' }) => {
               flexShrink: 0
             }}
           />
-          <span style={{ 
+          <span style={{
             color: '#333',
             fontWeight: level >= RiskLevel.WARNING ? 'bold' : 'normal'
           }}>

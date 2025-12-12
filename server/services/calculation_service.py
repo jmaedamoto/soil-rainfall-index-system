@@ -292,15 +292,15 @@ class CalculationService:
             for swi_item in swi_hourly:
                 swi_value = swi_item.value
 
-                # VBAと同じリスクレベル判定
+                # リスクレベル判定（政府ガイドライン準拠: レベル0,2,3,4）
                 if swi_value >= dosyakei_bound:
-                    risk = 3  # 土砂災害
+                    risk = 4  # レベル4: 土砂災害
                 elif swi_value >= warning_bound:
-                    risk = 2  # 警報
+                    risk = 3  # レベル3: 警報
                 elif swi_value >= advisary_bound:
-                    risk = 1  # 注意
+                    risk = 2  # レベル2: 注意
                 else:
-                    risk = 0  # 正常
+                    risk = 0  # レベル0: 正常
 
                 risk_hourly.append(Risk(ft=swi_item.ft, value=risk))
 
@@ -463,15 +463,15 @@ class CalculationService:
                     if t < len(mesh.swi):
                         swi_value = mesh.swi[t].value
 
-                        # VBAリスクレベル判定
+                        # リスクレベル判定（政府ガイドライン準拠: レベル0,2,3,4）
                         if swi_value >= mesh.dosyakei_bound:
-                            risk = 3  # 土砂災害
+                            risk = 4  # レベル4: 土砂災害
                         elif swi_value >= mesh.warning_bound:
-                            risk = 2  # 警報
+                            risk = 3  # レベル3: 警報
                         elif swi_value >= mesh.advisary_bound:
-                            risk = 1  # 注意
+                            risk = 2  # レベル2: 注意
                         else:
-                            risk = 0  # 正常
+                            risk = 0  # レベル0: 正常
 
                         max_risk = max(max_risk, risk)
 

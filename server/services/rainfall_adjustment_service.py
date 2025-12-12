@@ -65,9 +65,9 @@ class RainfallAdjustmentService:
                                 rain_point.value
                             )
 
-                # 時系列データに変換
+                # 時系列データに変換（整数値に丸める）
                 area_rainfall[area_key] = [
-                    {"ft": ft, "value": ft_max_values[ft]}
+                    {"ft": ft, "value": round(ft_max_values[ft])}
                     for ft in sorted(ft_list)
                 ]
 
@@ -129,9 +129,9 @@ class RainfallAdjustmentService:
                                     rain_point.value
                                 )
 
-                # 時系列データに変換
+                # 時系列データに変換（整数値に丸める）
                 subdivision_rainfall[subdiv_key] = [
-                    {"ft": ft, "value": ft_max_values[ft]}
+                    {"ft": ft, "value": round(ft_max_values[ft])}
                     for ft in sorted(ft_list)
                 ]
 
