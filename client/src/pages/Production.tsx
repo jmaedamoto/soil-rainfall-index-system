@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { apiClient_ } from '../services/api';
+import { mockProductionApi } from '../services/mockProductionApi';
 import SoilRainfallMap from '../components/map/SoilRainfallMap';
 import AreaRiskBarChart from '../components/charts/AreaRiskBarChart';
 import CacheInfo from '../components/CacheInfo';
@@ -55,8 +55,8 @@ const Production: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      // 本番環境用APIを呼び出し（実データ使用）
-      const result = await apiClient_.calculateProductionSoilRainfallIndexWithUrls({
+      // モックAPI（開発環境用）を呼び出し - テストデータ使用
+      const result = await mockProductionApi.calculateProductionSoilRainfallIndexWithUrls({
         swi_initial: swiInitialTime,
         guidance_initial: guidanceInitialTime
       });
@@ -118,7 +118,7 @@ const Production: React.FC = () => {
     ? allMeshes[0].swi_timeline.map(t => t.ft)
     : [];
 
-  const initialTime = data ? data.initial_time : null;
+  const initialTime = data?.initial_time || swiInitialTime;
 
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
@@ -304,14 +304,16 @@ const Production: React.FC = () => {
           {/* エリア別リスクレベル時系列 */}
           <div style={{ marginBottom: '30px' }}>
             <h2 style={{ marginBottom: '15px' }}>地域別危険度推移</h2>
-            <AreaRiskBarChart
-              prefectures={Object.values(data.prefectures)}
-              selectedTime={selectedTime}
-              selectedPrefecture={selectedPrefecture}
-              onPrefectureChange={setSelectedPrefecture}
-              onTimeSelect={handleTimeChange}
-              initialTime={initialTime}
-            />
+            {initialTime && (
+              <AreaRiskBarChart
+                prefectures={Object.values(data.prefectures)}
+                selectedTime={selectedTime}
+                selectedPrefecture={selectedPrefecture}
+                onPrefectureChange={setSelectedPrefecture}
+                onTimeSelect={handleTimeChange}
+                initialTime={initialTime}
+              />
+            )}
           </div>
         </>
       )}

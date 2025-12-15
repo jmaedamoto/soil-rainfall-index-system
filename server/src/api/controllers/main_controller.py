@@ -276,11 +276,11 @@ class MainController:
                 # 利用可能な時刻を抽出（最初のメッシュから）
                 available_times = []
                 first_pref = next(iter(result['prefectures'].values()))
-                if first_pref.areas and first_pref.areas[0].meshes:
-                    first_mesh = first_pref.areas[0].meshes[0]
+                if first_pref['areas'] and first_pref['areas'][0]['meshes']:
+                    first_mesh = first_pref['areas'][0]['meshes'][0]
                     available_times = sorted(set(
-                        [point.ft for point in first_mesh.risk_3hour_max_timeline] +
-                        [point.ft for point in first_mesh.risk_hourly_timeline]
+                        [point['ft'] for point in first_mesh['risk_3hour_max_timeline']] +
+                        [point['ft'] for point in first_mesh['risk_hourly_timeline']]
                     ))
 
                 # 軽量レスポンスを返す

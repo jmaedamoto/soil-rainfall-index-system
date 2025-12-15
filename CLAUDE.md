@@ -2476,5 +2476,78 @@ Prefecture: 滋賀県
 
 ---
 
-**最終更新**: 2025年12月12日
-**バージョン**: 8.1.0（政府ガイドライン準拠リスクレベル対応版）
+## 🔧 **2025年12月15日 本番環境API互換性バグ修正**
+
+### ✅ **辞書アクセスエラーの修正完了**
+
+本番環境で発生した `'dict' object has no attribute 'areas'` エラーを修正しました。
+
+#### **問題の原因**
+
+**サーバー側の処理フロー**:
+1. `main_service.py` が Prefecture オブジェクトを**完全に辞書形式**に変換してレスポンスを返す
+2. `main_controller.py` がセッション作成時に `result['prefectures']` を受け取る
+3. オブジェクト属性 (`.areas`) としてアクセスしようとしたため、本番環境でエラー発生
+
+**環境による動作の違い**:
+- **開発環境**: `USE_MOCK_PRODUCTION_API = True` → モックAPI経由でセッション作成をスキップするためエラーなし
+- **本番環境**: セッションサービスが有効 → `create_session()` が実行されてエラー発生
+
+#### **修正内容**
+
+**ファイル**: `server/src/api/controllers/main_controller.py:279-283`
+
+**修正前** (オブジェクト属性アクセス):
+```python
+if first_pref.areas and first_pref.areas[0].meshes:
+    first_mesh = first_pref.areas[0].meshes[0]
+    available_times = sorted(set(
+        [point.ft for point in first_mesh.risk_3hour_max_timeline] +
+        [point.ft for point in first_mesh.risk_hourly_timeline]
+    ))
+```
+
+**修正後** (辞書キーアクセス):
+```python
+if first_pref['areas'] and first_pref['areas'][0]['meshes']:
+    first_mesh = first_pref['areas'][0]['meshes'][0]
+    available_times = sorted(set(
+        [point['ft'] for point in first_mesh['risk_3hour_max_timeline']] +
+        [point['ft'] for point in first_mesh['risk_hourly_timeline']]
+    ))
+```
+
+#### **影響範囲**
+
+- **本番環境**: セッションベースAPI (`/api/production-soil-rainfall-index-with-urls`) が正常動作するようになる
+- **開発環境**: 既存の動作に影響なし（モックAPI経由で動作継続）
+- **クライアント側**: 修正不要（サーバー側のみの変更）
+
+#### **検証方法**
+
+本番環境での確認事項：
+1. ブラウザで本番運用画面 (`/production`) を開く
+2. 初期時刻を選択してデータ取得
+3. サーバーログで `'dict' object has no attribute 'areas'` エラーがないことを確認
+4. HTTPステータスコード 200 で `session_id` が返されることを確認
+5. 地図とグラフが正常に表示されることを確認
+
+**ログ確認コマンド**:
+```bash
+# サーバーログ確認
+sudo journalctl -u your-app-service-name -n 200 --no-pager
+
+# エラーがないことを確認
+grep "dict.*has no attribute" /path/to/log
+```
+
+#### **技術的教訓**
+
+- **データモデルの一貫性**: オブジェクト vs 辞書の扱いを統一する重要性
+- **環境差異の検証**: 開発環境と本番環境の動作フローの違いを確認する必要性
+- **エラーハンドリング**: 属性アクセス vs キーアクセスの明確な区別
+
+---
+
+**最終更新**: 2025年12月15日
+**バージョン**: 8.1.1（本番環境API互換性修正版）
