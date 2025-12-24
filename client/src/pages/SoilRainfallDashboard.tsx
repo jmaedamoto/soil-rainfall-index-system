@@ -838,6 +838,7 @@ const SoilRainfallDashboard: React.FC = () => {
         swiInitial={swiInitialTime}
         guidanceInitial={guidInitialTime}
         dataSource={dataSource}
+        existingData={data?.prefectures || null}
         onResultCalculated={handleRainfallAdjustmentResult}
       />
     </div>

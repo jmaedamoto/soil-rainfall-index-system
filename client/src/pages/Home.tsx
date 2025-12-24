@@ -115,25 +115,6 @@ const Home: React.FC = () => {
         >
           開発ダッシュボード
         </Link>
-
-        <Link
-          to="/rainfall-adjustment"
-          style={{
-            display: 'inline-block',
-            padding: '15px 30px',
-            backgroundColor: '#F57C00',
-            color: 'white',
-            textDecoration: 'none',
-            borderRadius: '8px',
-            fontSize: '18px',
-            fontWeight: 'bold',
-            transition: 'background-color 0.3s'
-          }}
-          onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#EF6C00'}
-          onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#F57C00'}
-        >
-          雨量予想調整
-        </Link>
       </div>
       
       <div style={{ 

@@ -77,9 +77,9 @@ export interface CalculationResult {
   prefectures: Record<string, Prefecture>;  // 都道府県データ
   used_urls?: {                 // 本番API使用時のGRIB2 URL（デバッグ用）
     swi_url: string;
+    swi_initial_time: string;
     guidance_url: string;
-    swi_initial_time?: string;
-    guidance_initial_time?: string;
+    guidance_initial_time: string;
   };
   cache_info?: CacheInfo;       // キャッシュ情報
   statistics?: {                // テストAPI使用時の統計情報

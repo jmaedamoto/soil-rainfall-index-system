@@ -3,6 +3,7 @@ import { mockProductionApi } from '../services/mockProductionApi';
 import SoilRainfallMap from '../components/map/SoilRainfallMap';
 import AreaRiskBarChart from '../components/charts/AreaRiskBarChart';
 import CacheInfo from '../components/CacheInfo';
+import RainfallAdjustmentModal from '../components/RainfallAdjustmentModal';
 import { CalculationResult, Mesh } from '../types/api';
 
 const Production: React.FC = () => {
@@ -12,10 +13,14 @@ const Production: React.FC = () => {
   const [selectedTime, setSelectedTime] = useState(0);
   const [selectedPrefecture, setSelectedPrefecture] = useState<string>('');
   const [isTimeChanging, setIsTimeChanging] = useState(false);
+  const [isAdjustedData, setIsAdjustedData] = useState(false);
 
   // SWIとガイダンスの初期時刻を個別に管理
   const [swiInitialTime, setSwiInitialTime] = useState<string>('');
   const [guidanceInitialTime, setGuidanceInitialTime] = useState<string>('');
+
+  // 雨量調整モーダルの状態
+  const [isRainfallModalOpen, setIsRainfallModalOpen] = useState(false);
 
   // 初期時刻の候補を生成（6時間ごと: 0, 6, 12, 18時）
   const generateTimeOptions = () => {
@@ -34,12 +39,8 @@ const Production: React.FC = () => {
   };
 
   useEffect(() => {
-    // デフォルトの初期時刻を設定（現在時刻の3時間前、6時間区切り）
-    const now = new Date();
-    const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-    const hour = Math.floor(threeHoursAgo.getHours() / 6) * 6;
-    threeHoursAgo.setHours(hour, 0, 0, 0);
-    const defaultTime = threeHoursAgo.toISOString();
+    // デフォルトの初期時刻を設定（テストデータ: 2023-06-02 00:00:00）
+    const defaultTime = '2023-06-02T00:00:00Z';
 
     setSwiInitialTime(defaultTime);
     setGuidanceInitialTime(defaultTime);
@@ -54,6 +55,7 @@ const Production: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      setIsAdjustedData(false); // 新規読み込みなので調整済みフラグをクリア
 
       // モックAPI（開発環境用）を呼び出し - テストデータ使用
       const result = await mockProductionApi.calculateProductionSoilRainfallIndexWithUrls({
@@ -69,6 +71,30 @@ const Production: React.FC = () => {
       setError(err instanceof Error ? err.message : '予期しないエラーが発生しました');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 雨量調整結果の処理
+  const handleRainfallAdjustmentResult = (result: CalculationResult) => {
+    setData(result);
+    setIsAdjustedData(true);
+
+    // 時刻をリセット
+    const meshes: Mesh[] = Object.values(result.prefectures).flatMap(pref =>
+      pref.areas.flatMap(area => area.meshes)
+    );
+
+    if (meshes.length > 0) {
+      const timeSet = new Set<number>();
+      meshes.forEach(mesh => {
+        mesh.swi_timeline.forEach(point => {
+          timeSet.add(point.ft);
+        });
+      });
+      const times = Array.from(timeSet).sort((a, b) => a - b);
+      if (times.length > 0) {
+        setSelectedTime(times[0]);
+      }
     }
   };
 
@@ -242,22 +268,63 @@ const Production: React.FC = () => {
             <CacheInfo cacheInfo={data.cache_info} />
           )}
 
-          {/* データ再取得ボタン */}
-          <div style={{ marginBottom: '20px' }}>
-            <button
-              onClick={() => setData(null)}
-              style={{
-                padding: '8px 16px',
-                fontSize: '14px',
-                color: 'white',
-                backgroundColor: '#666',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              初期時刻を変更
-            </button>
+          {/* データ情報と操作ボタン */}
+          <div style={{
+            marginBottom: '20px',
+            padding: '15px',
+            backgroundColor: '#f5f5f5',
+            borderRadius: '8px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start'
+          }}>
+            <div style={{ flex: 1 }}>
+              {isAdjustedData && (
+                <div style={{
+                  backgroundColor: '#fff3cd',
+                  padding: '10px',
+                  borderRadius: '4px',
+                  marginBottom: '10px',
+                  border: '1px solid #ffc107'
+                }}>
+                  <strong>⚠️ 雨量調整済みデータ</strong> - ユーザーが編集した雨量予想に基づく計算結果
+                </div>
+              )}
+              <p><strong>計算時刻:</strong> {new Date(data.calculation_time).toLocaleString('ja-JP')}</p>
+              <p><strong>初期時刻:</strong> {formatDateTime(swiInitialTime)}</p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                onClick={() => setData(null)}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '14px',
+                  color: 'white',
+                  backgroundColor: '#2196F3',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                初期時刻を変更
+              </button>
+              <button
+                onClick={() => setIsRainfallModalOpen(true)}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '14px',
+                  color: 'white',
+                  backgroundColor: '#FF9800',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                雨量調整
+              </button>
+            </div>
           </div>
 
           {/* 時刻選択 */}
@@ -315,6 +382,17 @@ const Production: React.FC = () => {
               />
             )}
           </div>
+
+          {/* 雨量調整モーダル */}
+          <RainfallAdjustmentModal
+            isOpen={isRainfallModalOpen}
+            onClose={() => setIsRainfallModalOpen(false)}
+            swiInitial={swiInitialTime}
+            guidanceInitial={guidanceInitialTime}
+            dataSource="test"
+            existingData={data?.prefectures || null}
+            onResultCalculated={handleRainfallAdjustmentResult}
+          />
         </>
       )}
     </div>

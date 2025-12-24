@@ -83,7 +83,7 @@ const MeshAnalyzer: React.FC<MeshAnalyzerProps> = ({ meshes, selectedTime = 0 })
   });
 
   // 警戒レベル分析（選択された時刻）
-  const riskLevelCounts = { 0: 0, 1: 0, 2: 0, 3: 0 };
+  const riskLevelCounts: Record<number, number> = { 0: 0, 2: 0, 3: 0, 4: 0 };
   const sampleValues: number[] = [];
   const sampleMeshDetails: any[] = [];
   const timelineAnalysis = {

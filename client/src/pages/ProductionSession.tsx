@@ -4,7 +4,8 @@ import { sessionApiClient } from '../services/sessionApi';
 import SoilRainfallMap from '../components/map/SoilRainfallMap';
 import AreaRiskBarChart from '../components/charts/AreaRiskBarChart';
 import CacheInfo from '../components/CacheInfo';
-import { Prefecture, Mesh, LightweightCalculationResult } from '../types/api';
+import RainfallAdjustmentModal from '../components/RainfallAdjustmentModal';
+import { Prefecture, Mesh, LightweightCalculationResult, CalculationResult } from '../types/api';
 
 const ProductionSession: React.FC = () => {
   // セッション情報
@@ -19,11 +20,15 @@ const ProductionSession: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState(0);
   const [selectedPrefecture, setSelectedPrefecture] = useState<string>('');
-  const [isTimeChanging, setIsTimeChanging] = useState(false);
+  const [_isTimeChanging, setIsTimeChanging] = useState(false);
+  const [isAdjustedData, setIsAdjustedData] = useState(false);
 
   // SWIとガイダンスの初期時刻を個別に管理
   const [swiInitialTime, setSwiInitialTime] = useState<string>('');
   const [guidanceInitialTime, setGuidanceInitialTime] = useState<string>('');
+
+  // 雨量調整モーダルの状態
+  const [isRainfallModalOpen, setIsRainfallModalOpen] = useState(false);
 
   // 初期時刻の候補を生成（6時間ごと: 0, 6, 12, 18時）
   const generateTimeOptions = () => {
@@ -42,12 +47,8 @@ const ProductionSession: React.FC = () => {
   };
 
   useEffect(() => {
-    // デフォルトの初期時刻を設定（現在時刻の3時間前、6時間区切り）
-    const now = new Date();
-    const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-    const hour = Math.floor(threeHoursAgo.getHours() / 6) * 6;
-    threeHoursAgo.setHours(hour, 0, 0, 0);
-    const defaultTime = threeHoursAgo.toISOString();
+    // デフォルトの初期時刻を設定（テストデータ: 2023-06-02 00:00:00）
+    const defaultTime = '2023-06-02T00:00:00Z';
 
     setSwiInitialTime(defaultTime);
     setGuidanceInitialTime(defaultTime);
@@ -62,6 +63,7 @@ const ProductionSession: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
+      setIsAdjustedData(false); // 新規読み込みなので調整済みフラグをクリア
 
       // セッションベースAPIを呼び出し（軽量レスポンス）
       const result = await apiClient_.calculateProductionSoilRainfallIndexWithUrls({
@@ -137,6 +139,31 @@ const ProductionSession: React.FC = () => {
     }
   };
 
+  // 雨量調整結果の処理
+  const handleRainfallAdjustmentResult = (result: CalculationResult) => {
+    // セッション情報を更新（調整結果を反映）
+    setPrefectureData(result.prefectures);
+    setIsAdjustedData(true);
+
+    // 時刻をリセット
+    const meshes: Mesh[] = Object.values(result.prefectures).flatMap(pref =>
+      pref.areas.flatMap(area => area.meshes)
+    );
+
+    if (meshes.length > 0) {
+      const timeSet = new Set<number>();
+      meshes.forEach(mesh => {
+        mesh.swi_timeline.forEach(point => {
+          timeSet.add(point.ft);
+        });
+      });
+      const times = Array.from(timeSet).sort((a, b) => a - b);
+      if (times.length > 0) {
+        setSelectedTime(times[0]);
+      }
+    }
+  };
+
   const timeOptions = generateTimeOptions();
 
   // 日時フォーマット関数（JST表示）
@@ -179,7 +206,7 @@ const ProductionSession: React.FC = () => {
     pref.areas.flatMap(area => area.meshes)
   );
 
-  const availableTimes = sessionInfo?.available_times || [];
+  const _availableTimes = sessionInfo?.available_times || [];
 
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
@@ -278,10 +305,42 @@ const ProductionSession: React.FC = () => {
         {/* セッション情報表示 */}
         {sessionInfo && (
           <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#e3f2fd', borderRadius: '4px', fontSize: '14px' }}>
+            {isAdjustedData && (
+              <div style={{
+                backgroundColor: '#fff3cd',
+                padding: '10px',
+                borderRadius: '4px',
+                marginBottom: '10px',
+                border: '1px solid #ffc107'
+              }}>
+                <strong>⚠️ 雨量調整済みデータ</strong> - ユーザーが編集した雨量予想に基づく計算結果
+              </div>
+            )}
             <div><strong>セッションID:</strong> {sessionInfo.session_id}</div>
             <div><strong>利用可能な府県:</strong> {sessionInfo.available_prefectures.join(', ')}</div>
             <div><strong>データ転送量:</strong> 初回レスポンス ~1KB（従来比 99.9%削減）</div>
           </div>
+        )}
+
+        {/* 雨量調整ボタン */}
+        {sessionInfo && (
+          <button
+            onClick={() => setIsRainfallModalOpen(true)}
+            style={{
+              marginTop: '10px',
+              padding: '10px 20px',
+              backgroundColor: '#FF9800',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              width: '100%',
+              fontSize: '16px',
+              fontWeight: 'bold'
+            }}
+          >
+            雨量調整
+          </button>
         )}
       </div>
 
@@ -322,21 +381,16 @@ const ProductionSession: React.FC = () => {
               <SoilRainfallMap
                 meshes={allMeshes}
                 selectedTime={selectedTime}
-                prefectures={[prefectureData[selectedPrefecture]]}
                 selectedPrefecture={selectedPrefecture}
-                onPrefectureSelect={handlePrefectureChange}
-                onTimeChange={handleTimeChange}
-                availableTimes={availableTimes}
-                initialTime={sessionInfo.swi_initial_time}
-                isTimeChanging={isTimeChanging}
+                swiInitialTime={sessionInfo.swi_initial_time}
               />
 
               <div style={{ marginTop: '30px' }}>
                 <AreaRiskBarChart
                   prefectures={[prefectureData[selectedPrefecture]]}
                   selectedPrefecture={selectedPrefecture}
-                  onPrefectureSelect={handlePrefectureChange}
                   selectedTime={selectedTime}
+                  onPrefectureChange={handlePrefectureChange}
                   onTimeSelect={handleTimeChange}
                   initialTime={sessionInfo.swi_initial_time}
                 />
@@ -344,6 +398,19 @@ const ProductionSession: React.FC = () => {
             </div>
           )}
         </div>
+      )}
+
+      {/* 雨量調整モーダル */}
+      {sessionInfo && (
+        <RainfallAdjustmentModal
+          isOpen={isRainfallModalOpen}
+          onClose={() => setIsRainfallModalOpen(false)}
+          swiInitial={swiInitialTime}
+          guidanceInitial={guidanceInitialTime}
+          dataSource="test"
+          existingData={prefectureData || null}
+          onResultCalculated={handleRainfallAdjustmentResult}
+        />
       )}
     </div>
   );

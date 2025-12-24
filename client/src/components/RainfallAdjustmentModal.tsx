@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { getRainfallForecast, calculateWithAdjustedRainfall } from '../services/rainfallApi';
-import { TimeSeriesPoint, CalculationResult } from '../types/api';
+import { calculateWithAdjustedRainfall } from '../services/rainfallApi';
+import { TimeSeriesPoint, CalculationResult, Prefecture } from '../types/api';
 
 interface RainfallAdjustmentModalProps {
   isOpen: boolean;
@@ -8,6 +8,7 @@ interface RainfallAdjustmentModalProps {
   swiInitial: string;
   guidanceInitial: string;
   dataSource: 'test' | 'production';
+  existingData: Record<string, Prefecture> | null; // 既存の計算結果データ
   onResultCalculated: (result: CalculationResult) => void;
 }
 
@@ -21,7 +22,8 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
   onClose,
   swiInitial,
   guidanceInitial,
-  dataSource,
+  dataSource: _dataSource,
+  existingData,
   onResultCalculated
 }) => {
   const [originalRainfall, setOriginalRainfall] = useState<Record<string, TimeSeriesPoint[]>>({});
@@ -77,6 +79,15 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
 
   // セルキーを生成
   const getCellKey = (areaName: string, ft: number) => `${areaName}:${ft}`;
+
+  // モーダルが開かれたときの初期化
+  useEffect(() => {
+    if (isOpen) {
+      setStep('loading');
+      setSelectedCells(new Set());
+      setError(null);
+    }
+  }, [isOpen]);
 
   // セルが選択されているか判定
   const isCellSelected = (areaName: string, ft: number) => {
@@ -248,50 +259,76 @@ const RainfallAdjustmentModal: React.FC<RainfallAdjustmentModalProps> = ({
     setSelectedCells(new Set());
   };
 
-  // 雨量データ取得
+  // 既存データから雨量情報を抽出
   useEffect(() => {
-    if (isOpen && step === 'loading') {
-      const fetchData = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-          const data = await getRainfallForecast(
-            swiInitial,
-            guidanceInitial,
-            dataSource
-          );
+    if (isOpen && step === 'loading' && existingData) {
+      setLoading(true);
+      setError(null);
 
-          setOriginalRainfall(data.area_rainfall);
-          setAdjustedRainfall(JSON.parse(JSON.stringify(data.area_rainfall)));
+      try {
+        // 既存データから市町村別雨量を抽出
+        const areaRainfall: Record<string, TimeSeriesPoint[]> = {};
+        const subdivRainfall: Record<string, TimeSeriesPoint[]> = {};
 
-          if (data.subdivision_rainfall) {
-            setOriginalSubdivisionRainfall(data.subdivision_rainfall);
-            setAdjustedSubdivisionRainfall(JSON.parse(JSON.stringify(data.subdivision_rainfall)));
+        Object.values(existingData).forEach(prefecture => {
+          // 市町村別
+          prefecture.areas.forEach(area => {
+            const areaKey = `${prefecture.name}_${area.name}`;
+
+            if (area.meshes.length > 0) {
+              // 市町村内の全メッシュから最大雨量を計算
+              const ftSet = new Set<number>();
+              area.meshes.forEach(mesh => {
+                if (mesh.rain_timeline) {
+                  mesh.rain_timeline.forEach(point => ftSet.add(point.ft));
+                }
+              });
+
+              const timeline: TimeSeriesPoint[] = Array.from(ftSet).sort((a, b) => a - b).map(ft => {
+                const maxValue = Math.max(
+                  ...area.meshes
+                    .map(mesh => mesh.rain_timeline?.find(p => p.ft === ft)?.value || 0)
+                );
+                return { ft, value: maxValue };
+              });
+
+              areaRainfall[areaKey] = timeline;
+            }
+          });
+
+          // 二次細分別
+          if (prefecture.secondary_subdivisions) {
+            prefecture.secondary_subdivisions.forEach(subdiv => {
+              const subdivKey = `${prefecture.name}_${subdiv.name}`;
+              if (subdiv.rain_3hour_timeline) {
+                subdivRainfall[subdivKey] = subdiv.rain_3hour_timeline.map(p => ({
+                  ft: p.ft,
+                  value: p.value
+                }));
+              }
+            });
           }
+        });
 
-          const prefNames = Object.keys(
-            Object.entries(data.area_rainfall).reduce((acc, [areaName]) => {
-              const prefName = areaName.split('_')[0];
-              acc[prefName] = true;
-              return acc;
-            }, {} as Record<string, boolean>)
-          );
+        setOriginalRainfall(areaRainfall);
+        setAdjustedRainfall(JSON.parse(JSON.stringify(areaRainfall)));
+        setOriginalSubdivisionRainfall(subdivRainfall);
+        setAdjustedSubdivisionRainfall(JSON.parse(JSON.stringify(subdivRainfall)));
 
-          if (prefNames.length > 0) {
-            setSelectedPrefecture(prefNames[0]);
-          }
-
-          setStep('editing');
-        } catch (err) {
-          setError(err instanceof Error ? err.message : '雨量データの取得に失敗しました');
-        } finally {
-          setLoading(false);
+        const prefNames = Object.keys(existingData);
+        if (prefNames.length > 0) {
+          const firstPrefName = Object.values(existingData)[0].name; // Prefectureオブジェクトのname属性を使用
+          setSelectedPrefecture(firstPrefName);
         }
-      };
 
-      fetchData();
+        setStep('editing');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '雨量データの抽出に失敗しました');
+      } finally {
+        setLoading(false);
+      }
     }
-  }, [isOpen, step, swiInitial, guidanceInitial, dataSource]);
+  }, [isOpen, step, existingData]);
 
   // 再計算実行
   const handleRecalculate = async () => {
