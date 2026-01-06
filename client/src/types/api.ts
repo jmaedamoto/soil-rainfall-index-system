@@ -113,7 +113,7 @@ export enum RiskLevel {
 
 // リスクレベルの色定義
 export const RISK_COLORS = {
-  [RiskLevel.NORMAL]: 'transparent',   // 無色（透明）
+  [RiskLevel.NORMAL]: '#2196F3',       // デバッグ用: 青色（本来はtransparent）
   [RiskLevel.CAUTION]: '#FFC107',      // 黄色
   [RiskLevel.WARNING]: '#F44336',      // 赤色
   [RiskLevel.DISASTER]: '#9C27B0'      // 紫色
@@ -176,9 +176,26 @@ export interface LightweightCalculationResult {
   };
 }
 
+// 軽量な府県データ（危険度時系列のみ）
+export interface LightweightPrefectureData {
+  name: string;
+  code: string;
+  areas: Array<{
+    name: string;
+    secondary_subdivision_name: string;
+    risk_timeline: RiskTimePoint[];
+  }>;
+  secondary_subdivisions: Array<{
+    name: string;
+    area_names: string[];
+    risk_timeline: RiskTimePoint[];
+  }>;
+  prefecture_risk_timeline: RiskTimePoint[];
+}
+
 export interface PrefectureDataResponse {
   status: 'success' | 'error';
-  prefecture: Prefecture;
+  prefecture: LightweightPrefectureData;  // 軽量データに変更
   error?: string;
 }
 
@@ -186,6 +203,7 @@ export interface RiskAtTimeResponse {
   status: 'success' | 'error';
   ft: number;
   mesh_risks: Record<string, number>;  // メッシュコード → リスク値
+  mesh_coords: Record<string, { lat: number; lon: number }>;  // メッシュコード → 座標
   error?: string;
 }
 

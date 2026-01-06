@@ -324,7 +324,7 @@ class CalculationService:
             risk_3hour_max = []
 
             # 3時間ごとにグループ化して最大値を取得
-            # FT1,2,3 → FT3, FT4,5,6 → FT6, ...
+            # FT0,1,2 → FT0, FT3,4,5 → FT3, FT6,7,8 → FT6, ...
             for i in range(0, len(risk_hourly), 3):
                 # 3時間分のリスクを取得
                 group = risk_hourly[i:i+3]
@@ -334,10 +334,10 @@ class CalculationService:
                 # 最大リスクを計算
                 max_risk = max(r.value for r in group)
 
-                # 3時間期間の終了時刻をFTとする
-                ft_end = group[-1].ft
+                # 3時間期間の開始時刻をFTとする（クライアント側の期待に合わせる）
+                ft_start = group[0].ft
 
-                risk_3hour_max.append(Risk(ft=ft_end, value=max_risk))
+                risk_3hour_max.append(Risk(ft=ft_start, value=max_risk))
 
             return risk_3hour_max
 

@@ -11,10 +11,10 @@ test_bp = Blueprint('test', __name__)
 # コントローラーインスタンス（データディレクトリは後で設定）
 test_controller = None
 
-def init_test_routes(data_dir: str = "data"):
+def init_test_routes(data_dir: str = "data", session_service=None):
     """テストルートを初期化"""
     global test_controller
-    test_controller = TestController(data_dir)
+    test_controller = TestController(data_dir, session_service)
 
 @test_bp.route('/api/test-bin-data', methods=['GET'])
 def test_bin_data():
@@ -41,7 +41,12 @@ def test_full_soil_rainfall_index():
     """テスト用：binファイルを使って全メッシュのmain_processと同じ形式のJSONを返す（元の実装と同じ戻り値形式）"""
     return test_controller.test_full_soil_rainfall_index()
 
-@test_bp.route('/api/test-full-parallel-soil-rainfall-index', methods=['GET'])  
+@test_bp.route('/api/test-full-parallel-soil-rainfall-index', methods=['GET'])
 def test_full_parallel_soil_rainfall_index():
     """並列処理版（実際は最適化されたシーケンシャル処理）"""
     return test_controller.test_full_parallel_soil_rainfall_index()
+
+@test_bp.route('/api/test-session-with-local-bins', methods=['POST'])
+def test_session_with_local_bins():
+    """テスト用セッションベースAPI（ローカルbinファイル使用）"""
+    return test_controller.test_session_with_local_bins()

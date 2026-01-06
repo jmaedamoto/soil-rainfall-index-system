@@ -10,7 +10,9 @@ import 'leaflet/dist/leaflet.css';
 // Canvas描画に移行したため、MemoizedRectangleは不要
 
 interface SoilRainfallMapProps {
-  meshes: Mesh[];
+  meshes?: Mesh[]; // 通常モード: 全メッシュデータ
+  meshRisks?: Record<string, number>; // セッションモード: メッシュコード→リスク値
+  meshCoords?: Record<string, { lat: number; lon: number }>; // セッションモード: メッシュ座標
   selectedTime: number; // 選択された時刻（ft値）
   selectedPrefecture?: string; // 選択された都道府県
   prefectureData?: { [prefCode: string]: { areas: { meshes: Mesh[] }[] } }; // 都道府県データ
@@ -22,6 +24,8 @@ interface SoilRainfallMapProps {
 
 const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
   meshes,
+  meshRisks,
+  meshCoords,
   selectedTime,
   selectedPrefecture,
   prefectureData,
@@ -30,6 +34,14 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
   swiInitialTime,
   guidanceInitialTime
 }) => {
+  // デバッグログ
+  console.log('[SoilRainfallMap] Props:', {
+    meshes: meshes ? `${meshes.length} meshes` : 'undefined',
+    meshRisks: meshRisks ? `${Object.keys(meshRisks).length} risks` : 'undefined',
+    meshCoords: meshCoords ? `${Object.keys(meshCoords).length} coords` : 'undefined',
+    selectedTime
+  });
+
   const [bounds, setBounds] = useState<LatLngBounds | null>(null);
   const [showLandCondition, setShowLandCondition] = useState(false);
   const [showStandard, setShowStandard] = useState(false);
@@ -67,14 +79,14 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
 
   // メッシュデータから地図の境界を計算
   useEffect(() => {
-    if (meshes.length > 0) {
+    if (meshes && meshes.length > 0) {
       const lats = meshes.map(m => m.lat);
       const lons = meshes.map(m => m.lon);
       const minLat = Math.min(...lats);
       const maxLat = Math.max(...lats);
       const minLon = Math.min(...lons);
       const maxLon = Math.max(...lons);
-      
+
       const mapBounds = new LatLngBounds(
         [minLat, minLon],
         [maxLat, maxLon]
@@ -85,7 +97,7 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
 
   // メッシュ間隔を動的に計算
   const meshIntervals = useMemo(() => {
-    if (meshes.length < 2) return { latInterval: 0.008, lonInterval: 0.008 };
+    if (!meshes || meshes.length < 2) return { latInterval: 0.008, lonInterval: 0.008 };
 
     const lats = meshes.map(m => m.lat);
     const lons = meshes.map(m => m.lon);
@@ -153,7 +165,7 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
   // 時刻インデックスマップを事前作成（最適化）
   const timeIndexMap = useMemo(() => {
     const map = new Map<string, number>();
-    if (meshes.length > 0) {
+    if (meshes && meshes.length > 0) {
       // 最初のメッシュの時系列から時刻インデックスを作成
       meshes[0].swi_timeline.forEach((point, index) => {
         map.set(`${point.ft}`, index);
@@ -247,6 +259,8 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
         {/* Canvas描画によるメッシュ表示（高速化・安定版） */}
         <SimpleCanvasLayer
           meshes={meshes}
+          meshRisks={meshRisks}
+          meshCoords={meshCoords}
           selectedTime={selectedTime}
           meshIntervals={meshIntervals}
           onMeshClick={onMeshClick}

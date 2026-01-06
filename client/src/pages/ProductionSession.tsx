@@ -1,19 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { apiClient_ } from '../services/api';
+import { apiClient_, USE_MOCK_PRODUCTION_API } from '../services/api';
 import { sessionApiClient } from '../services/sessionApi';
 import SoilRainfallMap from '../components/map/SoilRainfallMap';
 import AreaRiskBarChart from '../components/charts/AreaRiskBarChart';
 import CacheInfo from '../components/CacheInfo';
 import RainfallAdjustmentModal from '../components/RainfallAdjustmentModal';
-import { Prefecture, Mesh, LightweightCalculationResult, CalculationResult } from '../types/api';
+import { LightweightPrefectureData, Mesh, LightweightCalculationResult, CalculationResult, Prefecture as PrefectureType } from '../types/api';
 
 const ProductionSession: React.FC = () => {
   // セッション情報
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = useState<LightweightCalculationResult | null>(null);
 
-  // 府県データ（オンデマンド読み込み）
-  const [prefectureData, setPrefectureData] = useState<Record<string, Prefecture>>({});
+  // 府県データ（危険度時系列のみ、オンデマンド読み込み）
+  const [prefectureRiskData, setPrefectureRiskData] = useState<Record<string, LightweightPrefectureData>>({});
+
+  // 地図表示用の時刻別リスク値（全メッシュ）
+  const [meshRisksAtTime, setMeshRisksAtTime] = useState<Record<string, number>>({});
+  const [meshCoords, setMeshCoords] = useState<Record<string, { lat: number; lon: number }>>({});
+
+  // モックモード用: 全データをキャッシュ
+  const [cachedFullData, setCachedFullData] = useState<CalculationResult | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [loadingPrefecture, setLoadingPrefecture] = useState<string | null>(null);
@@ -74,27 +81,20 @@ const ProductionSession: React.FC = () => {
       setSessionInfo(result);
       setSessionId(result.session_id);
 
-      // モックモードの場合、sessionIdに"mock_session_"が含まれている
-      if (result.session_id.startsWith('mock_session_')) {
-        // モックモード: 全データを再取得して府県データに設定
-        console.log('モックモード: 全データを読み込み中...');
-        const mockFullData = await apiClient_.testFullCalculation();
-        setPrefectureData(mockFullData.prefectures);
-
-        // デフォルトで最初の都道府県を選択
-        const firstPrefCode = Object.keys(mockFullData.prefectures)[0];
+      // セッションAPIを使用してデータを読み込み
+      // デフォルトで最初の都道府県を選択
+      if (result.available_prefectures.length > 0) {
+        const firstPrefCode = result.available_prefectures[0];
         setSelectedPrefecture(firstPrefCode);
-      } else {
-        // 本番モード: 府県データをクリア
-        setPrefectureData({});
+        // 最初の府県データを読み込み
+        await loadPrefectureData(result.session_id, firstPrefCode);
+      }
 
-        // デフォルトで最初の都道府県を選択
-        if (result.available_prefectures.length > 0) {
-          const firstPrefCode = result.available_prefectures[0];
-          setSelectedPrefecture(firstPrefCode);
-          // 最初の府県データを読み込み
-          await loadPrefectureData(result.session_id, firstPrefCode);
-        }
+      // 初期時刻のメッシュリスク値を読み込み
+      if (result.available_times.length > 0) {
+        const initialTime = result.available_times[0];
+        setSelectedTime(initialTime);
+        await loadRiskAtTime(result.session_id, initialTime);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : '予期しないエラーが発生しました');
@@ -103,14 +103,32 @@ const ProductionSession: React.FC = () => {
     }
   };
 
-  const loadPrefectureData = async (session: string, prefectureCode: string) => {
-    // モックモードの場合はスキップ（全データが既に読み込まれている）
-    if (session.startsWith('mock_session_')) {
-      return;
-    }
+  const loadRiskAtTime = async (session: string, ft: number) => {
+    // セッションAPIを使用して指定時刻のリスク値を取得
+    try {
+      console.log(`[ProductionSession] loadRiskAtTime: session=${session}, FT=${ft}`);
+      const response = await sessionApiClient.getRiskAtTime(session, ft);
+      if (response.status === 'success') {
+        console.log(`[ProductionSession] Loaded ${Object.keys(response.mesh_risks).length} mesh risks for FT=${ft}`);
 
+        // 危険度別の統計
+        const riskStats = { 0: 0, 2: 0, 3: 0, 4: 0 };
+        Object.values(response.mesh_risks).forEach(risk => {
+          if (risk in riskStats) riskStats[risk as keyof typeof riskStats]++;
+        });
+        console.log('[ProductionSession] Risk distribution:', riskStats);
+
+        setMeshRisksAtTime(response.mesh_risks);
+        setMeshCoords(response.mesh_coords);
+      }
+    } catch (err) {
+      console.error(`メッシュリスク値読み込みエラー (FT=${ft}):`, err);
+    }
+  };
+
+  const loadPrefectureData = async (session: string, prefectureCode: string) => {
     // 既に読み込み済みの場合はスキップ
-    if (prefectureData[prefectureCode]) {
+    if (prefectureRiskData[prefectureCode]) {
       return;
     }
 
@@ -119,7 +137,7 @@ const ProductionSession: React.FC = () => {
       const response = await sessionApiClient.getPrefectureData(session, prefectureCode);
 
       if (response.status === 'success') {
-        setPrefectureData(prev => ({
+        setPrefectureRiskData(prev => ({
           ...prev,
           [prefectureCode]: response.prefecture
         }));
@@ -141,16 +159,37 @@ const ProductionSession: React.FC = () => {
 
   // 雨量調整結果の処理
   const handleRainfallAdjustmentResult = (result: CalculationResult) => {
-    // セッション情報を更新（調整結果を反映）
-    setPrefectureData(result.prefectures);
+    // 雨量調整後は全データモードに切り替え（セッションAPIは使用しない）
     setIsAdjustedData(true);
 
-    // 時刻をリセット
+    // 全府県データから危険度時系列を抽出
+    const prefRiskData: Record<string, LightweightPrefectureData> = {};
+    Object.values(result.prefectures).forEach(pref => {
+      prefRiskData[pref.code] = {
+        name: pref.name,
+        code: pref.code,
+        areas: pref.areas.map(area => ({
+          name: area.name,
+          secondary_subdivision_name: area.secondary_subdivision_name || '',
+          risk_timeline: area.risk_timeline
+        })),
+        secondary_subdivisions: pref.secondary_subdivisions?.map(subdiv => ({
+          name: subdiv.name,
+          area_names: subdiv.areas.map(a => a.name),
+          risk_timeline: subdiv.risk_timeline
+        })) || [],
+        prefecture_risk_timeline: pref.prefecture_risk_timeline || []
+      };
+    });
+    setPrefectureRiskData(prefRiskData);
+
+    // メッシュリスク値を抽出（地図表示用）
     const meshes: Mesh[] = Object.values(result.prefectures).flatMap(pref =>
       pref.areas.flatMap(area => area.meshes)
     );
 
     if (meshes.length > 0) {
+      // 利用可能な時刻を取得
       const timeSet = new Set<number>();
       meshes.forEach(mesh => {
         mesh.swi_timeline.forEach(point => {
@@ -158,8 +197,21 @@ const ProductionSession: React.FC = () => {
         });
       });
       const times = Array.from(timeSet).sort((a, b) => a - b);
+
+      // 初期時刻を設定
       if (times.length > 0) {
-        setSelectedTime(times[0]);
+        const initialTime = times[0];
+        setSelectedTime(initialTime);
+
+        // 初期時刻のメッシュリスク値を抽出
+        const meshRisks: Record<string, number> = {};
+        meshes.forEach(mesh => {
+          const riskPoint = mesh.risk_3hour_max_timeline.find(p => p.ft === initialTime);
+          if (riskPoint) {
+            meshRisks[mesh.code] = riskPoint.value;
+          }
+        });
+        setMeshRisksAtTime(meshRisks);
       }
     }
   };
@@ -173,21 +225,32 @@ const ProductionSession: React.FC = () => {
     return `${jstDate.getUTCFullYear()}年${jstDate.getUTCMonth() + 1}月${jstDate.getUTCDate()}日 ${jstDate.getUTCHours()}時 (JST)`;
   };
 
-  const handleTimeChange = (newTime: number) => {
+  const handleTimeChange = async (newTime: number) => {
+    console.log(`[ProductionSession] handleTimeChange: ${selectedTime} -> ${newTime}`);
+
     // 同じ時刻が選択された場合は何もしない
     if (newTime === selectedTime) return;
 
     // ローディング状態を即座に設定
     setIsTimeChanging(true);
 
-    // 状態更新を次のフレームで実行
-    requestAnimationFrame(() => {
+    try {
+      // 状態更新
       setSelectedTime(newTime);
-      // 短い遅延の後、ローディング解除
+
+      // セッションIDがあれば、新しい時刻のメッシュリスク値を読み込み
+      if (sessionId) {
+        console.log(`[ProductionSession] Calling loadRiskAtTime for FT=${newTime}`);
+        await loadRiskAtTime(sessionId, newTime);
+      } else {
+        console.warn('[ProductionSession] No sessionId - skipping loadRiskAtTime');
+      }
+    } finally {
+      // ローディング解除
       requestAnimationFrame(() => {
         setTimeout(() => setIsTimeChanging(false), 50);
       });
-    });
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -200,11 +263,6 @@ const ProductionSession: React.FC = () => {
       handleTimeChange(selectedTime + 3);
     }
   };
-
-  // 全メッシュデータを集約（読み込み済みの府県データから）
-  const allMeshes: Mesh[] = Object.values(prefectureData).flatMap(pref =>
-    pref.areas.flatMap(area => area.meshes)
-  );
 
   const _availableTimes = sessionInfo?.available_times || [];
 
@@ -364,7 +422,7 @@ const ProductionSession: React.FC = () => {
                 <option key={code} value={code}>
                   {code}
                   {loadingPrefecture === code && ' (読み込み中...)'}
-                  {prefectureData[code] && ' ✓'}
+                  {prefectureRiskData[code] && ' ✓'}
                 </option>
               ))}
             </select>
@@ -376,10 +434,11 @@ const ProductionSession: React.FC = () => {
           </div>
 
           {/* 地図とチャート */}
-          {prefectureData[selectedPrefecture] && (
+          {prefectureRiskData[selectedPrefecture] && (
             <div onKeyDown={handleKeyPress} tabIndex={0}>
               <SoilRainfallMap
-                meshes={allMeshes}
+                meshRisks={meshRisksAtTime}
+                meshCoords={meshCoords}
                 selectedTime={selectedTime}
                 selectedPrefecture={selectedPrefecture}
                 swiInitialTime={sessionInfo.swi_initial_time}
@@ -387,7 +446,7 @@ const ProductionSession: React.FC = () => {
 
               <div style={{ marginTop: '30px' }}>
                 <AreaRiskBarChart
-                  prefectures={[prefectureData[selectedPrefecture]]}
+                  prefectures={[prefectureRiskData[selectedPrefecture]]}
                   selectedPrefecture={selectedPrefecture}
                   selectedTime={selectedTime}
                   onPrefectureChange={handlePrefectureChange}
@@ -408,7 +467,7 @@ const ProductionSession: React.FC = () => {
           swiInitial={swiInitialTime}
           guidanceInitial={guidanceInitialTime}
           dataSource="test"
-          existingData={prefectureData || null}
+          existingData={null}
           onResultCalculated={handleRainfallAdjustmentResult}
         />
       )}

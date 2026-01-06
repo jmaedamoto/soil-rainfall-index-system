@@ -30,12 +30,15 @@ def create_app(data_dir: str = "data"):
 
     # ルート初期化
     init_main_routes(data_dir)
-    init_test_routes(data_dir)
-    init_performance_routes(data_dir)
 
     # セッションBlueprint作成と登録
     # main_routes.pyで作成されたsession_serviceを使用
     from api.routes.main_routes import session_service
+
+    # テストルートにもsession_serviceを渡す
+    init_test_routes(data_dir, session_service)
+    init_performance_routes(data_dir)
+
     if session_service:
         session_controller = SessionController(session_service)
         session_bp = create_session_blueprint(session_controller)
@@ -67,6 +70,8 @@ if __name__ == '__main__':
     logger.info("    GET  /api/data-check")
     logger.info("    POST /api/soil-rainfall-index")
     logger.info("    GET  /api/production-soil-rainfall-index")
+    logger.info("    POST /api/production-soil-rainfall-index-with-urls")
+    logger.info("    POST /api/test-session-with-local-bins")
     logger.info("  テストAPI (test_bp):")
     logger.info("    GET  /api/test-bin-data")
     logger.info("    GET  /api/test-grib2-analysis")

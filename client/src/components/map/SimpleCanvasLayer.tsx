@@ -4,7 +4,9 @@ import { useMap } from 'react-leaflet';
 import { Mesh, RISK_COLORS, RiskLevel } from '../../types/api';
 
 interface SimpleCanvasLayerProps {
-  meshes: Mesh[];
+  meshes?: Mesh[]; // 通常モード: 全メッシュデータ
+  meshRisks?: Record<string, number>; // セッションモード: メッシュコード→リスク値
+  meshCoords?: Record<string, { lat: number; lon: number }>; // セッションモード: メッシュ座標
   selectedTime: number;
   meshIntervals: { latInterval: number; lonInterval: number };
   onMeshClick?: (mesh: Mesh) => void;
@@ -12,6 +14,8 @@ interface SimpleCanvasLayerProps {
 
 const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
   meshes,
+  meshRisks,
+  meshCoords,
   selectedTime,
   meshIntervals,
   onMeshClick
@@ -22,11 +26,11 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
   const drawFunctionRef = useRef<(() => void) | null>(null);
 
   // 最新の値を参照するためのref
-  const propsRef = useRef({ meshes, selectedTime, meshIntervals });
+  const propsRef = useRef({ meshes, meshRisks, meshCoords, selectedTime, meshIntervals });
 
   // propsRefを常に最新の値で更新
   useEffect(() => {
-    propsRef.current = { meshes, selectedTime, meshIntervals };
+    propsRef.current = { meshes, meshRisks, meshCoords, selectedTime, meshIntervals };
   });
 
   useEffect(() => {
@@ -39,45 +43,91 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
     const meshLayerGroup = L.layerGroup();
 
     const drawMeshes = () => {
-      const { meshes: currentMeshes, selectedTime: currentSelectedTime, meshIntervals: currentMeshIntervals } = propsRef.current;
+      const {
+        meshes: currentMeshes,
+        meshRisks: currentMeshRisks,
+        meshCoords: currentMeshCoords,
+        selectedTime: currentSelectedTime,
+        meshIntervals: currentMeshIntervals
+      } = propsRef.current;
 
       // 既存のレイヤーをクリア
       meshLayerGroup.clearLayers();
 
-      // 時刻インデックス取得
-      let timeIndex = 0;
-      if (currentMeshes.length > 0) {
-        timeIndex = currentMeshes[0].swi_timeline.findIndex(point => point.ft === currentSelectedTime);
-        if (timeIndex === -1) timeIndex = 0;
-      }
-
       const latHalfSize = currentMeshIntervals.latInterval / 2;
       const lonHalfSize = currentMeshIntervals.lonInterval / 2;
 
-      currentMeshes.forEach(mesh => {
-        // SWI値とリスクレベル計算
-        const swiValue = mesh.swi_timeline[timeIndex]?.value || 0;
+      // セッションモード: meshRisks + meshCoordsを使用
+      if (currentMeshRisks && currentMeshCoords) {
+        console.log('[SimpleCanvasLayer] Session mode - meshRisks count:', Object.keys(currentMeshRisks).length);
+        console.log('[SimpleCanvasLayer] Session mode - meshCoords count:', Object.keys(currentMeshCoords).length);
+        console.log('[SimpleCanvasLayer] RiskLevel.NORMAL =', RiskLevel.NORMAL);
+        console.log('[SimpleCanvasLayer] Sample mesh risks:', Object.entries(currentMeshRisks).slice(0, 3));
 
-        let riskLevel = RiskLevel.NORMAL;
-        if (swiValue >= mesh.dosyakei_bound) {
-          riskLevel = RiskLevel.DISASTER;
-        } else if (swiValue >= mesh.warning_bound) {
-          riskLevel = RiskLevel.WARNING;
-        } else if (swiValue >= mesh.advisary_bound) {
-          riskLevel = RiskLevel.CAUTION;
-        }
+        let drawnCount = 0;
+        let skippedNoCoords = 0;
 
-        // 危険度0は描画しない
-        if (riskLevel === RiskLevel.NORMAL) return;
+        Object.entries(currentMeshRisks).forEach(([meshCode, riskValue]) => {
+          // 危険度0は描画しない
+          if (riskValue === RiskLevel.NORMAL) return;
 
-        // メッシュ矩形を作成
-        const bounds = L.latLngBounds(
-          [mesh.lat - latHalfSize, mesh.lon - lonHalfSize],
-          [mesh.lat + latHalfSize, mesh.lon + lonHalfSize]
-        );
+          const coords = currentMeshCoords[meshCode];
+          if (!coords) {
+            skippedNoCoords++;
+            return;
+          }
 
-        const rectangle = L.rectangle(bounds, {
-          color: RISK_COLORS[riskLevel],
+          // メッシュ矩形を作成
+          const bounds = L.latLngBounds(
+            [coords.lat - latHalfSize, coords.lon - lonHalfSize],
+            [coords.lat + latHalfSize, coords.lon + lonHalfSize]
+          );
+
+          const rectangle = L.rectangle(bounds, {
+            color: RISK_COLORS[riskValue],
+            fillColor: RISK_COLORS[riskValue],
+            fillOpacity: 0.7,
+            weight: 1,
+            renderer: canvasRenderer
+          });
+
+          meshLayerGroup.addLayer(rectangle);
+          drawnCount++;
+        });
+
+        console.log(`[SimpleCanvasLayer] Drew ${drawnCount} meshes, skipped ${skippedNoCoords} (no coords)`);
+      }
+      // 通常モード: meshesを使用
+      else if (currentMeshes && currentMeshes.length > 0) {
+        // 時刻インデックス取得
+        let timeIndex = 0;
+        timeIndex = currentMeshes[0].swi_timeline.findIndex(point => point.ft === currentSelectedTime);
+        if (timeIndex === -1) timeIndex = 0;
+
+        currentMeshes.forEach(mesh => {
+          // SWI値とリスクレベル計算
+          const swiValue = mesh.swi_timeline[timeIndex]?.value || 0;
+
+          let riskLevel = RiskLevel.NORMAL;
+          if (swiValue >= mesh.dosyakei_bound) {
+            riskLevel = RiskLevel.DISASTER;
+          } else if (swiValue >= mesh.warning_bound) {
+            riskLevel = RiskLevel.WARNING;
+          } else if (swiValue >= mesh.advisary_bound) {
+            riskLevel = RiskLevel.CAUTION;
+          }
+
+          // 危険度0は描画しない
+          if (riskLevel === RiskLevel.NORMAL) return;
+
+          // メッシュ矩形を作成
+          const bounds = L.latLngBounds(
+            [mesh.lat - latHalfSize, mesh.lon - lonHalfSize],
+            [mesh.lat + latHalfSize, mesh.lon + lonHalfSize]
+          );
+
+          const rectangle = L.rectangle(bounds, {
+            color: RISK_COLORS[riskLevel],
           fillColor: RISK_COLORS[riskLevel],
           fillOpacity: 0.7,
           weight: 0.5,
@@ -85,12 +135,13 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
           renderer: canvasRenderer
         });
 
-        if (onMeshClick) {
-          rectangle.on('click', () => onMeshClick(mesh));
-        }
+          if (onMeshClick) {
+            rectangle.on('click', () => onMeshClick(mesh));
+          }
 
-        meshLayerGroup.addLayer(rectangle);
-      });
+          meshLayerGroup.addLayer(rectangle);
+        });
+      }
     };
 
     // 初回描画
@@ -124,12 +175,14 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
 
   // データ更新時の再描画
   useEffect(() => {
-    console.log('Data changed - redrawing meshes. selectedTime:', selectedTime, 'meshes count:', meshes.length);
+    const meshCount = meshes?.length || 0;
+    const riskCount = meshRisks ? Object.keys(meshRisks).length : 0;
+    console.log('Data changed - redrawing. selectedTime:', selectedTime, 'meshes:', meshCount, 'meshRisks:', riskCount);
 
     if (drawFunctionRef.current) {
       drawFunctionRef.current();
     }
-  }, [selectedTime, meshes, meshIntervals]);
+  }, [selectedTime, meshes, meshRisks, meshCoords, meshIntervals]);
 
   return null;
 };

@@ -14,6 +14,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.append(project_root)
 
 from services.main_service import MainService
+from services.session_service import SessionService
 from models import SwiTimeSeries, GuidanceTimeSeries
 
 
@@ -22,9 +23,10 @@ logger = logging.getLogger(__name__)
 
 class TestController:
     """テストAPIコントローラー"""
-    
-    def __init__(self, data_dir: str = "data"):
+
+    def __init__(self, data_dir: str = "data", session_service: SessionService = None):
         self.main_service = MainService(data_dir)
+        self.session_service = session_service
         self.data_dir = data_dir
     
     def test_bin_data(self):
@@ -428,7 +430,111 @@ class TestController:
                 "timestamp": datetime.now().isoformat()
             }), 500
     
-    def test_full_parallel_soil_rainfall_index(self):  
+    def test_full_parallel_soil_rainfall_index(self):
         """並列処理版（実際は最適化されたシーケンシャル処理）"""
         # test_full_soil_rainfall_index と同じ実装（最適化済み）
         return self.test_full_soil_rainfall_index()
+
+    def test_session_with_local_bins(self):
+        """
+        テスト用セッションベースAPI
+        ローカルbinファイルを使ってセッションを作成し、本番と同じセッションAPIで動作する
+        """
+        try:
+            if not self.session_service:
+                return jsonify({
+                    "status": "error",
+                    "error": "SessionService not initialized",
+                    "timestamp": datetime.now().isoformat()
+                }), 500
+
+            # binファイルのパス
+            swi_bin_path = os.path.join(self.data_dir, "Z__C_RJTD_20230602000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin")
+            guidance_bin_path = os.path.join(self.data_dir, "guid_msm_grib2_20230602000000_rmax00.bin")
+
+            # ファイル存在確認
+            if not os.path.exists(swi_bin_path):
+                return jsonify({
+                    "status": "error",
+                    "error": "SWI binファイルが見つかりません",
+                    "timestamp": datetime.now().isoformat()
+                }), 500
+
+            if not os.path.exists(guidance_bin_path):
+                return jsonify({
+                    "status": "error",
+                    "error": "ガイダンス binファイルが見つかりません",
+                    "timestamp": datetime.now().isoformat()
+                }), 500
+
+            logger.info("テスト用セッション作成: ローカルGRIB2ファイルを使用")
+
+            # GRIB2解析
+            base_info, swi_grib2 = self.main_service.grib2_service.unpack_swi_grib2_from_file(swi_bin_path)
+            _, guidance_grib2 = self.main_service.grib2_service.unpack_guidance_grib2_from_file(guidance_bin_path)
+
+            # 地域データ構築とメッシュ計算（main_serviceを使用）
+            prefectures = self.main_service.data_service.prepare_areas()
+
+            # メッシュ計算処理
+            for prefecture in prefectures:
+                for area in prefecture.areas:
+                    for i, mesh in enumerate(area.meshes):
+                        area.meshes[i] = self.main_service.calculation_service.process_mesh_calculations(
+                            mesh, swi_grib2, guidance_grib2
+                        )
+
+            # リスクタイムライン計算
+            for prefecture in prefectures:
+                for area in prefecture.areas:
+                    area.risk_timeline = self.main_service.calculation_service.calc_risk_timeline(area.meshes)
+
+                # 二次細分ごとの集約計算
+                for subdivision in prefecture.secondary_subdivisions:
+                    self.main_service.calculation_service.calc_secondary_subdivision_aggregates(subdivision)
+
+                # 府県全体の集約計算
+                self.main_service.calculation_service.calc_prefecture_aggregates(prefecture)
+
+            # Prefectureオブジェクトを辞書形式に変換
+            prefectures_dict = {}
+            for pref in prefectures:
+                prefectures_dict[pref.code] = self.main_service._prefecture_to_dict(pref)
+
+            # セッションに保存（session_serviceを使用）
+            session_id = self.session_service.create_session(prefectures_dict, base_info.initial_date.isoformat())
+
+            # 利用可能な時刻を取得
+            available_times = []
+            if len(prefectures) > 0 and len(prefectures[0].areas) > 0 and len(prefectures[0].areas[0].meshes) > 0:
+                first_mesh = prefectures[0].areas[0].meshes[0]
+                available_times = sorted(set(
+                    [point.ft for point in first_mesh.risk_3hour_max_timeline] +
+                    [point.ft for point in first_mesh.risk_hourly_timeline]
+                ))
+
+            # 利用可能な府県コードを取得
+            available_prefectures = [pref.code for pref in prefectures]
+
+            logger.info(f"テスト用セッション作成完了: session_id={session_id}")
+
+            # 軽量レスポンス（セッションIDと利用可能な時刻・府県のみ）
+            return jsonify({
+                "status": "success",
+                "session_id": session_id,
+                "swi_initial_time": base_info.initial_date.isoformat(),
+                "guidance_initial_time": base_info.initial_date.isoformat(),
+                "available_times": available_times,
+                "available_prefectures": available_prefectures,
+                "timestamp": datetime.now().isoformat()
+            })
+
+        except Exception as e:
+            logger.error(f"テスト用セッション作成エラー: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                "status": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }), 500

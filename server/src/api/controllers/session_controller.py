@@ -4,7 +4,6 @@
 """
 from flask import jsonify, request
 from datetime import datetime
-from dataclasses import asdict
 import logging
 import os
 import sys
@@ -55,9 +54,15 @@ class SessionController:
 
     def get_prefecture_data(self, session_id: str, prefecture_code: str):
         """
-        府県データ取得
+        府県データ取得（危険度時系列のみ）
 
         GET /api/session/<session_id>/prefecture/<prefecture_code>
+
+        Returns:
+            - 府県名、コード
+            - エリア別危険度時系列
+            - 二次細分別危険度時系列
+            - 府県全体危険度時系列
         """
         try:
             prefecture = self.session_service.get_prefecture(
@@ -73,12 +78,32 @@ class SessionController:
                     "prefecture_code": prefecture_code
                 }), 404
 
-            # Prefectureオブジェクトを辞書に変換
-            prefecture_dict = asdict(prefecture)
+            # 危険度時系列のみを抽出（prefectureは辞書形式）
+            response_data = {
+                "name": prefecture["name"],
+                "code": prefecture["code"],
+                "areas": [
+                    {
+                        "name": area["name"],
+                        "secondary_subdivision_name": area["secondary_subdivision_name"],
+                        "risk_timeline": area["risk_timeline"]
+                    }
+                    for area in prefecture["areas"]
+                ],
+                "secondary_subdivisions": [
+                    {
+                        "name": subdiv["name"],
+                        "area_names": subdiv["area_names"],
+                        "risk_timeline": subdiv["risk_timeline"]
+                    }
+                    for subdiv in prefecture.get("secondary_subdivisions", [])
+                ],
+                "prefecture_risk_timeline": prefecture.get("prefecture_risk_timeline", [])
+            }
 
             return jsonify({
                 "status": "success",
-                "prefecture": prefecture_dict
+                "prefecture": response_data
             })
 
         except Exception as e:
@@ -111,26 +136,32 @@ class SessionController:
                     "session_id": session_id
                 }), 404
 
-            # 全府県の全メッシュからリスク値を抽出
+            # 全府県の全メッシュからリスク値と座標を抽出（辞書形式）
             mesh_risks = {}
+            mesh_coords = {}
             prefectures = session['prefectures']
 
             for pref_code, prefecture in prefectures.items():
-                for area in prefecture.areas:
-                    for mesh in area.meshes:
+                for area in prefecture["areas"]:
+                    for mesh in area["meshes"]:
                         # 指定されたFTのリスク値を取得
                         risk_value = 0
-                        for risk_point in mesh.risk_3hour_max_timeline:
-                            if risk_point.ft == ft:
-                                risk_value = risk_point.value
+                        for risk_point in mesh["risk_3hour_max_timeline"]:
+                            if risk_point["ft"] == ft:
+                                risk_value = risk_point["value"]
                                 break
 
-                        mesh_risks[mesh.code] = risk_value
+                        mesh_risks[mesh["code"]] = risk_value
+                        mesh_coords[mesh["code"]] = {
+                            "lat": mesh["lat"],
+                            "lon": mesh["lon"]
+                        }
 
             return jsonify({
                 "status": "success",
                 "ft": ft,
-                "mesh_risks": mesh_risks
+                "mesh_risks": mesh_risks,
+                "mesh_coords": mesh_coords
             })
 
         except Exception as e:
@@ -156,14 +187,14 @@ class SessionController:
                     "session_id": session_id
                 }), 404
 
-            # 全府県からメッシュを検索
+            # 全府県からメッシュを検索（辞書形式）
             prefectures = session['prefectures']
             target_mesh = None
 
             for pref_code, prefecture in prefectures.items():
-                for area in prefecture.areas:
-                    for mesh in area.meshes:
-                        if mesh.code == mesh_code:
+                for area in prefecture["areas"]:
+                    for mesh in area["meshes"]:
+                        if mesh["code"] == mesh_code:
                             target_mesh = mesh
                             break
                     if target_mesh:
@@ -178,8 +209,8 @@ class SessionController:
                     "mesh_code": mesh_code
                 }), 404
 
-            # Meshオブジェクトを辞書に変換
-            mesh_dict = asdict(target_mesh)
+            # 既に辞書形式なのでそのまま使用
+            mesh_dict = target_mesh
 
             return jsonify({
                 "status": "success",

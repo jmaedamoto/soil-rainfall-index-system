@@ -8,7 +8,7 @@ const API_BASE_URL = process.env.NODE_ENV === 'production'
   : 'http://localhost:5000/api';  // 開発環境：localhost指定
 
 // モックモードフラグ（開発環境でのみ有効）
-const USE_MOCK_PRODUCTION_API = process.env.NODE_ENV !== 'production' && true;
+export const USE_MOCK_PRODUCTION_API = process.env.NODE_ENV !== 'production' && true;
 
 // Axiosインスタンスの作成
 const apiClient = axios.create({
@@ -107,20 +107,10 @@ export class SoilRainfallAPIClient {
     swi_initial: string;
     guidance_initial: string;
   }): Promise<LightweightCalculationResult> {
-    // モックモードの場合はテストデータを返す（互換性のため従来形式）
+    // モックモードの場合はテストデータを返す
     if (USE_MOCK_PRODUCTION_API) {
-      const mockResult = await mockProductionApi.calculateProductionSoilRainfallIndexWithUrls(params);
-      // モックデータをLightweightCalculationResultに変換
-      return {
-        status: mockResult.status,
-        session_id: 'mock_session_' + Date.now(),
-        swi_initial_time: mockResult.swi_initial_time || mockResult.initial_time,
-        guidance_initial_time: mockResult.guid_initial_time || mockResult.initial_time,
-        available_prefectures: Object.keys(mockResult.prefectures),
-        available_times: this.extractAvailableTimes(mockResult),
-        cache_info: mockResult.cache_info,
-        used_urls: mockResult.used_urls
-      };
+      // セッションベース用のモックメソッドを呼び出す
+      return await mockProductionApi.calculateProductionSoilRainfallIndexWithUrlsSession(params);
     }
 
     // 通常モード: セッションベースAPIを呼び出す
