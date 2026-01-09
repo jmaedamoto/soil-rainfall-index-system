@@ -12,6 +12,7 @@ from .grib2_service import Grib2Service
 from .data_service import DataService
 from .calculation_service import CalculationService
 from .cache_service import get_cache_service
+from .response_builder import ResponseBuilder
 from src.config.config_service import ConfigService
 
 
@@ -89,114 +90,15 @@ class MainService:
             risk_time = time.time() - risk_start
             logger.info(f"リスクタイムライン・集約計算完了: {risk_time:.2f}秒")
             
-            # 結果構築
+            # 結果構築（ResponseBuilderを使用）
             total_time = time.time() - start_time
-            
-            result = {
-                "status": "success",
-                "calculation_time": datetime.utcnow().isoformat(),
-                "initial_time": base_info.initial_date.isoformat(),
-                "note": "フル版: ローカルbinファイルからの実データ（全メッシュ処理）",
-                "prefectures": {}
-            }
-            
-            # データ構造を辞書形式に変換
-            for prefecture in prefectures:
-                pref_data = {
-                    "name": prefecture.name,
-                    "code": prefecture.code,
-                    "areas": [],
-                    "secondary_subdivisions": [],
-                    "prefecture_rain_1hour_max_timeline": [
-                        {"ft": r.ft, "value": float(r.value)}
-                        for r in prefecture.prefecture_rain_1hour_max_timeline
-                    ],
-                    "prefecture_rain_3hour_timeline": [
-                        {"ft": r.ft, "value": float(r.value)}
-                        for r in prefecture.prefecture_rain_3hour_timeline
-                    ],
-                    "prefecture_risk_timeline": [
-                        {"ft": r.ft, "value": r.value}
-                        for r in prefecture.prefecture_risk_timeline
-                    ]
-                }
 
-                # 二次細分データ
-                for subdivision in prefecture.secondary_subdivisions:
-                    subdiv_data = {
-                        "name": subdivision.name,
-                        "area_names": [area.name for area in subdivision.areas],
-                        "rain_1hour_max_timeline": [
-                            {"ft": r.ft, "value": float(r.value)}
-                            for r in subdivision.rain_1hour_max_timeline
-                        ],
-                        "rain_3hour_timeline": [
-                            {"ft": r.ft, "value": float(r.value)}
-                            for r in subdivision.rain_3hour_timeline
-                        ],
-                        "risk_timeline": [
-                            {"ft": r.ft, "value": r.value}
-                            for r in subdivision.risk_timeline
-                        ]
-                    }
-                    pref_data["secondary_subdivisions"].append(subdiv_data)
-
-                # エリア（市町村）データ
-                for area in prefecture.areas:
-                    area_data = {
-                        "name": area.name,
-                        "secondary_subdivision_name": area.secondary_subdivision_name,
-                        "meshes": [],
-                        "risk_timeline": [
-                            {"ft": risk.ft, "value": risk.value}
-                            for risk in area.risk_timeline
-                        ]
-                    }
-
-                    for mesh in area.meshes:
-                        mesh_data = {
-                            "code": mesh.code,
-                            "lat": float(mesh.lat),
-                            "lon": float(mesh.lon),
-                            "x": int(mesh.x),
-                            "y": int(mesh.y),
-                            "advisary_bound": int(mesh.advisary_bound),
-                            "warning_bound": int(mesh.warning_bound),
-                            "dosyakei_bound": int(mesh.dosyakei_bound),
-                            "swi_timeline": [
-                                {"ft": s.ft, "value": float(s.value)}
-                                for s in mesh.swi
-                            ],
-                            "swi_hourly_timeline": [
-                                {"ft": s.ft, "value": float(s.value)}
-                                for s in mesh.swi_hourly
-                            ],
-                            "rain_1hour_timeline": [
-                                {"ft": r.ft, "value": float(r.value)}
-                                for r in mesh.rain_1hour
-                            ],
-                            "rain_1hour_max_timeline": [
-                                {"ft": r.ft, "value": float(r.value)}
-                                for r in mesh.rain_1hour_max
-                            ],
-                            "rain_timeline": [
-                                {"ft": r.ft, "value": float(r.value)}
-                                for r in mesh.rain_3hour
-                            ],
-                            "risk_hourly_timeline": [
-                                {"ft": r.ft, "value": r.value}
-                                for r in mesh.risk_hourly
-                            ],
-                            "risk_3hour_max_timeline": [
-                                {"ft": r.ft, "value": r.value}
-                                for r in mesh.risk_3hour_max
-                            ]
-                        }
-                        area_data["meshes"].append(mesh_data)
-
-                    pref_data["areas"].append(area_data)
-
-                result["prefectures"][prefecture.code] = pref_data
+            result = ResponseBuilder.build_prefecture_response(
+                prefectures,
+                base_info.initial_date
+            )
+            result["status"] = "success"
+            result["note"] = "フル版: ローカルbinファイルからの実データ（全メッシュ処理）"
             
             logger.info(f"総処理時間: {total_time:.2f}秒")
             logger.info(f"処理速度: {total_meshes/total_time:.0f} meshes/second")
@@ -406,112 +308,8 @@ class MainService:
                 # 府県全体の集約計算
                 self.calculation_service.calc_prefecture_aggregates(prefecture)
             
-            # 結果構築
-            result = {
-                "calculation_time": datetime.utcnow().isoformat(),
-                "initial_time": initial_time.isoformat(),
-                "prefectures": {}
-            }
-            
-            # データ変換は main_process_from_files と同じロジック
-            for prefecture in prefectures:
-                pref_data = {
-                    "name": prefecture.name,
-                    "code": prefecture.code,
-                    "areas": [],
-                    "secondary_subdivisions": [],
-                    "prefecture_rain_1hour_max_timeline": [
-                        {"ft": r.ft, "value": float(r.value)}
-                        for r in prefecture.prefecture_rain_1hour_max_timeline
-                    ],
-                    "prefecture_rain_3hour_timeline": [
-                        {"ft": r.ft, "value": float(r.value)}
-                        for r in prefecture.prefecture_rain_3hour_timeline
-                    ],
-                    "prefecture_risk_timeline": [
-                        {"ft": r.ft, "value": r.value}
-                        for r in prefecture.prefecture_risk_timeline
-                    ]
-                }
-
-                # 二次細分データ
-                for subdivision in prefecture.secondary_subdivisions:
-                    subdiv_data = {
-                        "name": subdivision.name,
-                        "area_names": [area.name for area in subdivision.areas],
-                        "rain_1hour_max_timeline": [
-                            {"ft": r.ft, "value": float(r.value)}
-                            for r in subdivision.rain_1hour_max_timeline
-                        ],
-                        "rain_3hour_timeline": [
-                            {"ft": r.ft, "value": float(r.value)}
-                            for r in subdivision.rain_3hour_timeline
-                        ],
-                        "risk_timeline": [
-                            {"ft": r.ft, "value": r.value}
-                            for r in subdivision.risk_timeline
-                        ]
-                    }
-                    pref_data["secondary_subdivisions"].append(subdiv_data)
-
-                # エリア（市町村）データ
-                for area in prefecture.areas:
-                    area_data = {
-                        "name": area.name,
-                        "secondary_subdivision_name": area.secondary_subdivision_name,
-                        "meshes": [],
-                        "risk_timeline": [
-                            {"ft": risk.ft, "value": risk.value}
-                            for risk in area.risk_timeline
-                        ]
-                    }
-
-                    for mesh in area.meshes:
-                        mesh_data = {
-                            "code": mesh.code,
-                            "lat": float(mesh.lat),
-                            "lon": float(mesh.lon),
-                            "x": int(mesh.x),
-                            "y": int(mesh.y),
-                            "advisary_bound": int(mesh.advisary_bound),
-                            "warning_bound": int(mesh.warning_bound),
-                            "dosyakei_bound": int(mesh.dosyakei_bound),
-                            "swi_timeline": [
-                                {"ft": s.ft, "value": float(s.value)}
-                                for s in mesh.swi
-                            ],
-                            "swi_hourly_timeline": [
-                                {"ft": s.ft, "value": float(s.value)}
-                                for s in mesh.swi_hourly
-                            ],
-                            "rain_1hour_timeline": [
-                                {"ft": r.ft, "value": float(r.value)}
-                                for r in mesh.rain_1hour
-                            ],
-                            "rain_1hour_max_timeline": [
-                                {"ft": r.ft, "value": float(r.value)}
-                                for r in mesh.rain_1hour_max
-                            ],
-                            "rain_timeline": [
-                                {"ft": r.ft, "value": float(r.value)}
-                                for r in mesh.rain_3hour
-                            ],
-                            "risk_hourly_timeline": [
-                                {"ft": r.ft, "value": r.value}
-                                for r in mesh.risk_hourly
-                            ],
-                            "risk_3hour_max_timeline": [
-                                {"ft": r.ft, "value": r.value}
-                                for r in mesh.risk_3hour_max
-                            ]
-                        }
-                        area_data["meshes"].append(mesh_data)
-
-                    pref_data["areas"].append(area_data)
-
-                result["prefectures"][prefecture.code] = pref_data
-            
-            return result
+            # 結果構築（ResponseBuilderを使用）
+            return ResponseBuilder.build_prefecture_response(prefectures, initial_time)
             
         except Exception as e:
             logger.error(f"データ処理エラー: {e}")

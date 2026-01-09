@@ -659,54 +659,14 @@ class CalculationService:
             if not all_meshes:
                 return
 
-            # FT時刻のセットを取得
-            ft_set_1hour_max = set()
-            ft_set_3hour = set()
-            ft_set_risk = set()
-
-            for mesh in all_meshes:
-                for point in mesh.rain_1hour_max:
-                    ft_set_1hour_max.add(point.ft)
-                for point in mesh.rain_3hour:
-                    ft_set_3hour.add(point.ft)
-
-            # リスクタイムラインはareaから取得（市町村別と同じFT）
-            for area in subdivision.areas:
-                for point in area.risk_timeline:
-                    ft_set_risk.add(point.ft)
-
-            # 1時間最大雨量の集約
-            for ft in sorted(ft_set_1hour_max):
-                max_value = max(
-                    (point.value for mesh in all_meshes
-                     for point in mesh.rain_1hour_max if point.ft == ft),
-                    default=0.0
-                )
-                subdivision.rain_1hour_max_timeline.append(
-                    GuidanceTimeSeries(ft=ft, value=max_value)
-                )
-
-            # 3時間雨量の集約
-            for ft in sorted(ft_set_3hour):
-                max_value = max(
-                    (point.value for mesh in all_meshes
-                     for point in mesh.rain_3hour if point.ft == ft),
-                    default=0.0
-                )
-                subdivision.rain_3hour_timeline.append(
-                    GuidanceTimeSeries(ft=ft, value=max_value)
-                )
-
-            # リスクレベルの集約（各areaのrisk_timelineから最大値を取得）
-            for ft in sorted(ft_set_risk):
-                max_risk = max(
-                    (point.value for area in subdivision.areas
-                     for point in area.risk_timeline if point.ft == ft),
-                    default=0
-                )
-                subdivision.risk_timeline.append(
-                    Risk(ft=ft, value=max_risk)
-                )
+            # 汎用集約メソッドを使用
+            subdivision.rain_1hour_max_timeline = self._aggregate_timeline(
+                all_meshes, 'rain_1hour_max', GuidanceTimeSeries
+            )
+            subdivision.rain_3hour_timeline = self._aggregate_timeline(
+                all_meshes, 'rain_3hour', GuidanceTimeSeries
+            )
+            subdivision.risk_timeline = self._aggregate_area_risk_timeline(subdivision.areas)
 
         except Exception as e:
             logger.error(f"二次細分集約エラー ({subdivision.name}): {e}")
@@ -727,54 +687,73 @@ class CalculationService:
             if not all_meshes:
                 return
 
-            # FT時刻のセットを取得
-            ft_set_1hour_max = set()
-            ft_set_3hour = set()
-            ft_set_risk = set()
-
-            for mesh in all_meshes:
-                for point in mesh.rain_1hour_max:
-                    ft_set_1hour_max.add(point.ft)
-                for point in mesh.rain_3hour:
-                    ft_set_3hour.add(point.ft)
-
-            # リスクタイムラインはareaから取得（市町村別と同じFT）
-            for area in prefecture.areas:
-                for point in area.risk_timeline:
-                    ft_set_risk.add(point.ft)
-
-            # 1時間最大雨量の集約
-            for ft in sorted(ft_set_1hour_max):
-                max_value = max(
-                    (point.value for mesh in all_meshes
-                     for point in mesh.rain_1hour_max if point.ft == ft),
-                    default=0.0
-                )
-                prefecture.prefecture_rain_1hour_max_timeline.append(
-                    GuidanceTimeSeries(ft=ft, value=max_value)
-                )
-
-            # 3時間雨量の集約
-            for ft in sorted(ft_set_3hour):
-                max_value = max(
-                    (point.value for mesh in all_meshes
-                     for point in mesh.rain_3hour if point.ft == ft),
-                    default=0.0
-                )
-                prefecture.prefecture_rain_3hour_timeline.append(
-                    GuidanceTimeSeries(ft=ft, value=max_value)
-                )
-
-            # リスクレベルの集約（各areaのrisk_timelineから最大値を取得）
-            for ft in sorted(ft_set_risk):
-                max_risk = max(
-                    (point.value for area in prefecture.areas
-                     for point in area.risk_timeline if point.ft == ft),
-                    default=0
-                )
-                prefecture.prefecture_risk_timeline.append(
-                    Risk(ft=ft, value=max_risk)
-                )
+            # 汎用集約メソッドを使用
+            prefecture.prefecture_rain_1hour_max_timeline = self._aggregate_timeline(
+                all_meshes, 'rain_1hour_max', GuidanceTimeSeries
+            )
+            prefecture.prefecture_rain_3hour_timeline = self._aggregate_timeline(
+                all_meshes, 'rain_3hour', GuidanceTimeSeries
+            )
+            prefecture.prefecture_risk_timeline = self._aggregate_area_risk_timeline(prefecture.areas)
 
         except Exception as e:
             logger.error(f"府県集約エラー ({prefecture.name}): {e}")
+
+    def _aggregate_timeline(self, meshes: List[Mesh], attribute_name: str, model_class):
+        """
+        メッシュのタイムラインデータを集約（最大値）
+
+        Args:
+            meshes: メッシュリスト
+            attribute_name: 集約対象の属性名（例: 'rain_1hour_max', 'rain_3hour'）
+            model_class: データモデルクラス（GuidanceTimeSeries or Risk）
+
+        Returns:
+            集約されたタイムライン
+        """
+        # FT時刻のセットを取得
+        ft_set = set()
+        for mesh in meshes:
+            timeline = getattr(mesh, attribute_name, [])
+            for point in timeline:
+                ft_set.add(point.ft)
+
+        # 各FTで最大値を集約
+        aggregated_timeline = []
+        for ft in sorted(ft_set):
+            max_value = max(
+                (point.value for mesh in meshes
+                 for point in getattr(mesh, attribute_name, []) if point.ft == ft),
+                default=0.0
+            )
+            aggregated_timeline.append(model_class(ft=ft, value=max_value))
+
+        return aggregated_timeline
+
+    def _aggregate_area_risk_timeline(self, areas: List[Area]) -> List[Risk]:
+        """
+        エリアのリスクタイムラインを集約（最大値）
+
+        Args:
+            areas: エリアリスト
+
+        Returns:
+            集約されたリスクタイムライン
+        """
+        # FT時刻のセットを取得
+        ft_set = set()
+        for area in areas:
+            for point in area.risk_timeline:
+                ft_set.add(point.ft)
+
+        # 各FTで最大リスクを集約
+        aggregated_risk = []
+        for ft in sorted(ft_set):
+            max_risk = max(
+                (point.value for area in areas
+                 for point in area.risk_timeline if point.ft == ft),
+                default=0
+            )
+            aggregated_risk.append(Risk(ft=ft, value=max_risk))
+
+        return aggregated_risk
