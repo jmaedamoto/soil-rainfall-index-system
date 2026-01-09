@@ -98,6 +98,68 @@ class SessionAPIClient {
     );
     return response.data.deleted_count;
   }
+
+  /**
+   * 雨量調整用の雨量データ取得
+   */
+  async getRainfallData(sessionId: string): Promise<{
+    area_rainfall: Record<string, Array<{ ft: number; value: number }>>;
+    subdivision_rainfall: Record<string, Array<{ ft: number; value: number }>>;
+  }> {
+    const response = await axios.get<{
+      status: string;
+      area_rainfall: Record<string, Array<{ ft: number; value: number }>>;
+      subdivision_rainfall: Record<string, Array<{ ft: number; value: number }>>;
+    }>(
+      `${this.apiBaseUrl}/session/${sessionId}/rainfall-data`
+    );
+    return {
+      area_rainfall: response.data.area_rainfall,
+      subdivision_rainfall: response.data.subdivision_rainfall
+    };
+  }
+
+  /**
+   * 雨量調整後の再計算（セッションベース）
+   */
+  async recalculateWithAdjustedRainfall(
+    sessionId: string,
+    adjustments: Record<string, Array<{ ft: number; value: number }>>,
+    swiInitial: string,
+    guidanceInitial: string,
+    dataSource: string
+  ): Promise<{
+    session_id: string;
+    adjusted: boolean;
+    ft: number;
+    mesh_risks: Record<string, number>;
+    mesh_coords: Record<string, { lat: number; lon: number }>;
+  }> {
+    const response = await axios.post<{
+      status: string;
+      session_id: string;
+      adjusted: boolean;
+      ft: number;
+      mesh_risks: Record<string, number>;
+      mesh_coords: Record<string, { lat: number; lon: number }>;
+    }>(
+      `${this.apiBaseUrl}/session/${sessionId}/recalculate`,
+      {
+        adjustments,
+        swi_initial: swiInitial,
+        guidance_initial: guidanceInitial,
+        data_source: dataSource
+      },
+      { timeout: 300000 }
+    );
+    return {
+      session_id: response.data.session_id,
+      adjusted: response.data.adjusted,
+      ft: response.data.ft,
+      mesh_risks: response.data.mesh_risks,
+      mesh_coords: response.data.mesh_coords,
+    };
+  }
 }
 
 export const sessionApiClient = new SessionAPIClient();

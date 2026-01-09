@@ -112,6 +112,48 @@ export class MockProductionAPI {
       throw new Error('テストデータの取得に失敗しました。サーバーが起動しているか確認してください。');
     }
   }
+
+  /**
+   * セッションから府県データを取得
+   */
+  async getSessionPrefectureData(sessionId: string, prefectureCode: string): Promise<any> {
+    const response = await axios.get(
+      `${this.apiBaseUrl}/session/${sessionId}/prefecture/${prefectureCode}`
+    );
+    return response.data;
+  }
+
+  /**
+   * セッションから特定時刻のリスクデータを取得
+   */
+  async getSessionRiskAtTime(sessionId: string, ft: number): Promise<any> {
+    const response = await axios.get(
+      `${this.apiBaseUrl}/session/${sessionId}/risk-at-time`,
+      { params: { ft } }
+    );
+    return response.data;
+  }
+
+  /**
+   * セッションで雨量調整後の再計算
+   */
+  async recalculateWithAdjustedRainfall(sessionId: string, adjustments: any): Promise<any> {
+    const response = await axios.post(
+      `${this.apiBaseUrl}/session/${sessionId}/recalculate`,
+      { adjustments }
+    );
+    return response.data;
+  }
+
+  /**
+   * セッションから雨量データを取得
+   */
+  async getSessionRainfallData(sessionId: string): Promise<any> {
+    const response = await axios.get(
+      `${this.apiBaseUrl}/session/${sessionId}/rainfall-data`
+    );
+    return response.data;
+  }
 }
 
 // シングルトンインスタンス

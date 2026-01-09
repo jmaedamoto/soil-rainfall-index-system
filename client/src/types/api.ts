@@ -113,7 +113,7 @@ export enum RiskLevel {
 
 // リスクレベルの色定義
 export const RISK_COLORS = {
-  [RiskLevel.NORMAL]: '#2196F3',       // デバッグ用: 青色（本来はtransparent）
+  [RiskLevel.NORMAL]: '#FFFFFF',       // 白色（正常）
   [RiskLevel.CAUTION]: '#FFC107',      // 黄色
   [RiskLevel.WARNING]: '#F44336',      // 赤色
   [RiskLevel.DISASTER]: '#9C27B0'      // 紫色

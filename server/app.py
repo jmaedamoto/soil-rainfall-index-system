@@ -100,6 +100,8 @@ if __name__ == '__main__':
     logger.info("    GET    /api/session/<session_id>/prefecture/<prefecture_code>")
     logger.info("    GET    /api/session/<session_id>/risk-at-time?ft=<ft>")
     logger.info("    GET    /api/session/<session_id>/mesh/<mesh_code>")
+    logger.info("    GET    /api/session/<session_id>/rainfall-data")
+    logger.info("    POST   /api/session/<session_id>/recalculate")
     logger.info("    DELETE /api/session/<session_id>")
     logger.info("    GET    /api/sessions")
     logger.info("    GET    /api/sessions/stats")

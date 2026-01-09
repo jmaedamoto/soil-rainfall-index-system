@@ -455,15 +455,15 @@ class RainfallController:
                             "dosyakei_bound": mesh.dosyakei_bound,
                             "swi_timeline": [
                                 {"ft": s.ft, "value": s.value}
-                                for s in mesh.swi_timeline
+                                for s in mesh.swi
                             ],
                             "rain_timeline": [
                                 {"ft": r.ft, "value": r.value}
-                                for r in mesh.rain_timeline
+                                for r in mesh.rain_3hour
                             ],
                             "risk_3hour_max_timeline": [
                                 {"ft": r.ft, "value": r.value}
-                                for r in mesh.risk_3hour_max_timeline
+                                for r in mesh.risk_3hour_max
                             ]
                         }
                         area_data["meshes"].append(mesh_data)

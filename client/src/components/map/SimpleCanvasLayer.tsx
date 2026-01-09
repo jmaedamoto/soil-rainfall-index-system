@@ -59,13 +59,6 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
 
       // セッションモード: meshRisks + meshCoordsを使用
       if (currentMeshRisks && currentMeshCoords) {
-        console.log('[SimpleCanvasLayer] Session mode - meshRisks count:', Object.keys(currentMeshRisks).length);
-        console.log('[SimpleCanvasLayer] Session mode - meshCoords count:', Object.keys(currentMeshCoords).length);
-        console.log('[SimpleCanvasLayer] RiskLevel.NORMAL =', RiskLevel.NORMAL);
-        console.log('[SimpleCanvasLayer] Sample mesh risks:', Object.entries(currentMeshRisks).slice(0, 3));
-
-        let drawnCount = 0;
-        let skippedNoCoords = 0;
 
         Object.entries(currentMeshRisks).forEach(([meshCode, riskValue]) => {
           // 危険度0は描画しない
@@ -73,7 +66,6 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
 
           const coords = currentMeshCoords[meshCode];
           if (!coords) {
-            skippedNoCoords++;
             return;
           }
 
@@ -87,15 +79,12 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
             color: RISK_COLORS[riskValue],
             fillColor: RISK_COLORS[riskValue],
             fillOpacity: 0.7,
-            weight: 1,
+            weight: 0,
             renderer: canvasRenderer
           });
 
           meshLayerGroup.addLayer(rectangle);
-          drawnCount++;
         });
-
-        console.log(`[SimpleCanvasLayer] Drew ${drawnCount} meshes, skipped ${skippedNoCoords} (no coords)`);
       }
       // 通常モード: meshesを使用
       else if (currentMeshes && currentMeshes.length > 0) {
@@ -128,12 +117,11 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
 
           const rectangle = L.rectangle(bounds, {
             color: RISK_COLORS[riskLevel],
-          fillColor: RISK_COLORS[riskLevel],
-          fillOpacity: 0.7,
-          weight: 0.5,
-          opacity: 0.8,
-          renderer: canvasRenderer
-        });
+            fillColor: RISK_COLORS[riskLevel],
+            fillOpacity: 0.7,
+            weight: 0,
+            renderer: canvasRenderer
+          });
 
           if (onMeshClick) {
             rectangle.on('click', () => onMeshClick(mesh));
@@ -175,10 +163,6 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
 
   // データ更新時の再描画
   useEffect(() => {
-    const meshCount = meshes?.length || 0;
-    const riskCount = meshRisks ? Object.keys(meshRisks).length : 0;
-    console.log('Data changed - redrawing. selectedTime:', selectedTime, 'meshes:', meshCount, 'meshRisks:', riskCount);
-
     if (drawFunctionRef.current) {
       drawFunctionRef.current();
     }

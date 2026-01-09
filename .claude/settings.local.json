@@ -54,7 +54,9 @@
       "Bash(git log:*)",
       "Bash(PYTHONIOENCODING=utf-8 python test_vectorized_calculation.py)",
       "Bash(set PYTHONIOENCODING=utf-8)",
-      "Bash(export PYTHONIOENCODING=utf-8)"
+      "Bash(export PYTHONIOENCODING=utf-8)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)"
     ],
     "deny": []
   }

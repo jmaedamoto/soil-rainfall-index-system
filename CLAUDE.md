@@ -2957,5 +2957,83 @@ async calculateProductionSoilRainfallIndexWithUrlsSession(params: {
 
 ---
 
-**最終更新**: 2026年1月6日
-**バージョン**: 8.3.0（セッションベースAPI実装完了版）
+
+## 🎉 **2026年1月9日 雨量調整再計算バグ修正完了**
+
+### ✅ **セッションベース雨量調整機能の完全修正**
+
+雨量調整後の再計算で発生していた2つの重大なバグを修正し、完全動作を実現しました。
+
+#### **修正したバグ**
+
+**Bug 1: 雨量調整後にメッシュが表示されない**
+- **原因**: `session_controller.py` line 523でMesh作成時に `swi=[]` （空リスト）を渡していた
+- **影響**: `recalculate_swi_and_risk` がSWIデータ不足でスキップ、risk_3hour_maxが空のまま、全mesh_risksが0
+- **修正**: 既存のSWIタイムラインデータを読み込むように変更
+```python
+swi=[
+    SwiTimeSeries(ft=p['ft'], value=p['value'])
+    for p in mesh_dict.get('swi_timeline', [])
+],
+```
+
+**Bug 2: rain_1hourデータ不足による計算エラー**
+- **原因**: `recalculate_swi_and_risk` は1時間雨量ベースで計算するが、`rain_1hour=[]`（空リスト）を渡していた
+- **影響**: 1時間ごとのSWI・リスク計算が正しく実行されない
+- **修正**: 調整された3時間雨量から1時間雨量を推定するロジックを追加
+```python
+# 3時間雨量を3等分して各1時間に割り当て（保守的アプローチ）
+rain_1hour_estimated = []
+for rain_point in mesh_dict['rain_timeline']:
+    ft_3h = rain_point['ft']
+    rain_3h = rain_point['value']
+    rain_1h_avg = rain_3h / 3.0
+
+    for hour_offset in range(3):
+        ft_1h = ft_3h - 3 + hour_offset + 1
+        if ft_1h >= 0:
+            rain_1hour_estimated.append(
+                SwiTimeSeries(ft=ft_1h, value=rain_1h_avg)
+            )
+```
+
+#### **修正効果**
+
+✅ **メッシュ表示**: 雨量調整後も地図上にメッシュが正しく表示される
+✅ **危険度計算**: 雨量増加に伴い危険度も正しく上昇
+✅ **時刻切り替え**: 時刻スライダー操作でメッシュが正常に表示される
+✅ **データ整合性**: mesh_risksとmesh_coordsが完全に同期
+
+#### **変更ファイル**
+
+**サーバー側**:
+- `server/src/api/controllers/session_controller.py` (lines 513-553)
+  - 既存SWIデータの読み込み追加
+  - 1時間雨量推定ロジック実装
+  - Meshオブジェクト作成の修正
+
+**クライアント側**:
+- `client/src/services/sessionApi.ts` (lines 131-161)
+  - mesh_coords型定義追加
+- `client/src/pages/ProductionSession.tsx` (lines 508-514)
+  - mesh_coords受け取りロジック追加
+- `client/src/components/RainfallAdjustmentModalSession.tsx` (line 12, 321)
+  - mesh_coords引き渡し対応
+
+#### **技術的特徴**
+
+**1時間雨量推定アルゴリズム**:
+- 3時間雨量を均等に3等分（保守的アプローチ）
+- 各1時間に同じ雨量値を割り当て
+- FT値を適切に計算（ft_1h = ft_3h - 3 + hour_offset + 1）
+
+**データフロー**:
+1. クライアント：調整された3時間雨量データを送信
+2. サーバー：3時間雨量から1時間雨量を推定
+3. サーバー：既存SWIデータと推定1時間雨量でSWI・リスクを再計算
+4. サーバー：mesh_risksとmesh_coordsを返却
+5. クライアント：地図を更新、メッシュを表示
+
+---
+**最終更新**: 2026年1月9日
+**バージョン**: 8.3.1（セッションベース雨量調整バグ修正完了版）

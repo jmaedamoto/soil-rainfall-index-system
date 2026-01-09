@@ -4,7 +4,7 @@ import { sessionApiClient } from '../services/sessionApi';
 import SoilRainfallMap from '../components/map/SoilRainfallMap';
 import AreaRiskBarChart from '../components/charts/AreaRiskBarChart';
 import CacheInfo from '../components/CacheInfo';
-import RainfallAdjustmentModal from '../components/RainfallAdjustmentModal';
+import RainfallAdjustmentModalSession from '../components/RainfallAdjustmentModalSession';
 import { LightweightPrefectureData, Mesh, LightweightCalculationResult, CalculationResult, Prefecture as PrefectureType } from '../types/api';
 
 const ProductionSession: React.FC = () => {
@@ -36,6 +36,7 @@ const ProductionSession: React.FC = () => {
 
   // 雨量調整モーダルの状態
   const [isRainfallModalOpen, setIsRainfallModalOpen] = useState(false);
+  const [rainfallData, setRainfallData] = useState<Record<string, any> | null>(null);
 
   // 初期時刻の候補を生成（6時間ごと: 0, 6, 12, 18時）
   const generateTimeOptions = () => {
@@ -106,18 +107,8 @@ const ProductionSession: React.FC = () => {
   const loadRiskAtTime = async (session: string, ft: number) => {
     // セッションAPIを使用して指定時刻のリスク値を取得
     try {
-      console.log(`[ProductionSession] loadRiskAtTime: session=${session}, FT=${ft}`);
       const response = await sessionApiClient.getRiskAtTime(session, ft);
       if (response.status === 'success') {
-        console.log(`[ProductionSession] Loaded ${Object.keys(response.mesh_risks).length} mesh risks for FT=${ft}`);
-
-        // 危険度別の統計
-        const riskStats = { 0: 0, 2: 0, 3: 0, 4: 0 };
-        Object.values(response.mesh_risks).forEach(risk => {
-          if (risk in riskStats) riskStats[risk as keyof typeof riskStats]++;
-        });
-        console.log('[ProductionSession] Risk distribution:', riskStats);
-
         setMeshRisksAtTime(response.mesh_risks);
         setMeshCoords(response.mesh_coords);
       }
@@ -157,62 +148,38 @@ const ProductionSession: React.FC = () => {
     }
   };
 
-  // 雨量調整結果の処理
-  const handleRainfallAdjustmentResult = (result: CalculationResult) => {
-    // 雨量調整後は全データモードに切り替え（セッションAPIは使用しない）
-    setIsAdjustedData(true);
+  // 全府県データを読み込む（全府県一覧モード用）
+  const loadAllPrefectures = async () => {
+    if (!sessionId || !sessionInfo) return;
 
-    // 全府県データから危険度時系列を抽出
-    const prefRiskData: Record<string, LightweightPrefectureData> = {};
-    Object.values(result.prefectures).forEach(pref => {
-      prefRiskData[pref.code] = {
-        name: pref.name,
-        code: pref.code,
-        areas: pref.areas.map(area => ({
-          name: area.name,
-          secondary_subdivision_name: area.secondary_subdivision_name || '',
-          risk_timeline: area.risk_timeline
-        })),
-        secondary_subdivisions: pref.secondary_subdivisions?.map(subdiv => ({
-          name: subdiv.name,
-          area_names: subdiv.areas.map(a => a.name),
-          risk_timeline: subdiv.risk_timeline
-        })) || [],
-        prefecture_risk_timeline: pref.prefecture_risk_timeline || []
-      };
-    });
-    setPrefectureRiskData(prefRiskData);
-
-    // メッシュリスク値を抽出（地図表示用）
-    const meshes: Mesh[] = Object.values(result.prefectures).flatMap(pref =>
-      pref.areas.flatMap(area => area.meshes)
+    // 未読み込みの府県を特定
+    const unloadedPrefectures = sessionInfo.available_prefectures.filter(
+      code => !prefectureRiskData[code]
     );
 
-    if (meshes.length > 0) {
-      // 利用可能な時刻を取得
-      const timeSet = new Set<number>();
-      meshes.forEach(mesh => {
-        mesh.swi_timeline.forEach(point => {
-          timeSet.add(point.ft);
-        });
+    if (unloadedPrefectures.length === 0) {
+      return; // すべて読み込み済み
+    }
+
+    // 並列で読み込み
+    try {
+      const promises = unloadedPrefectures.map(prefCode =>
+        sessionApiClient.getPrefectureData(sessionId, prefCode)
+      );
+
+      const results = await Promise.all(promises);
+
+      // 結果を統合
+      const newData: Record<string, LightweightPrefectureData> = { ...prefectureRiskData };
+      results.forEach((response, index) => {
+        if (response.status === 'success') {
+          newData[unloadedPrefectures[index]] = response.prefecture;
+        }
       });
-      const times = Array.from(timeSet).sort((a, b) => a - b);
 
-      // 初期時刻を設定
-      if (times.length > 0) {
-        const initialTime = times[0];
-        setSelectedTime(initialTime);
-
-        // 初期時刻のメッシュリスク値を抽出
-        const meshRisks: Record<string, number> = {};
-        meshes.forEach(mesh => {
-          const riskPoint = mesh.risk_3hour_max_timeline.find(p => p.ft === initialTime);
-          if (riskPoint) {
-            meshRisks[mesh.code] = riskPoint.value;
-          }
-        });
-        setMeshRisksAtTime(meshRisks);
-      }
+      setPrefectureRiskData(newData);
+    } catch (err) {
+      console.error('全府県データ読み込みエラー:', err);
     }
   };
 
@@ -240,10 +207,7 @@ const ProductionSession: React.FC = () => {
 
       // セッションIDがあれば、新しい時刻のメッシュリスク値を読み込み
       if (sessionId) {
-        console.log(`[ProductionSession] Calling loadRiskAtTime for FT=${newTime}`);
         await loadRiskAtTime(sessionId, newTime);
-      } else {
-        console.warn('[ProductionSession] No sessionId - skipping loadRiskAtTime');
       }
     } finally {
       // ローディング解除
@@ -383,7 +347,64 @@ const ProductionSession: React.FC = () => {
         {/* 雨量調整ボタン */}
         {sessionInfo && (
           <button
-            onClick={() => setIsRainfallModalOpen(true)}
+            onClick={async () => {
+              // セッションベース雨量調整を開く
+              if (sessionId) {
+                // セッションから雨量データを取得
+                try {
+                  const data = await sessionApiClient.getRainfallData(sessionId);
+                  // Prefecture型の形式に変換
+                  const prefectureData: Record<string, any> = {};
+
+                  // 府県別にグループ化
+                  const prefGroups: Record<string, any> = {};
+
+                  // 市町村データから府県を初期化
+                  Object.keys(data.area_rainfall).forEach(key => {
+                    const [prefName] = key.split('_');
+                    if (!prefGroups[prefName]) {
+                      prefGroups[prefName] = {
+                        name: prefName,
+                        code: prefName.toLowerCase(),
+                        areas: [],
+                        secondary_subdivisions: []
+                      };
+                    }
+                  });
+
+                  // 市町村データを追加
+                  Object.entries(data.area_rainfall).forEach(([key, timeline]) => {
+                    const [prefName, areaName] = key.split('_');
+                    if (prefGroups[prefName]) {
+                      prefGroups[prefName].areas.push({
+                        name: areaName,
+                        meshes: [{
+                          rain_timeline: timeline
+                        }]
+                      });
+                    }
+                  });
+
+                  // 二次細分データを追加
+                  Object.entries(data.subdivision_rainfall).forEach(([key, timeline]) => {
+                    const [prefName, subdivName] = key.split('_');
+                    if (prefGroups[prefName]) {
+                      prefGroups[prefName].secondary_subdivisions.push({
+                        name: subdivName,
+                        rain_3hour_timeline: timeline
+                      });
+                    }
+                  });
+
+                  Object.assign(prefectureData, prefGroups);
+                  setRainfallData(prefectureData);
+                  setIsRainfallModalOpen(true);
+                } catch (err) {
+                  console.error('雨量データ取得エラー:', err);
+                  setError('雨量データの取得に失敗しました');
+                }
+              }
+            }}
             style={{
               marginTop: '10px',
               padding: '10px 20px',
@@ -446,11 +467,27 @@ const ProductionSession: React.FC = () => {
 
               <div style={{ marginTop: '30px' }}>
                 <AreaRiskBarChart
-                  prefectures={[prefectureRiskData[selectedPrefecture]]}
+                  prefectures={Object.values(prefectureRiskData).filter(p => p !== undefined)}
+                  availablePrefectures={sessionInfo.available_prefectures.map(code => {
+                    const nameMap: Record<string, string> = {
+                      'shiga': '滋賀県',
+                      'kyoto': '京都府',
+                      'osaka': '大阪府',
+                      'hyogo': '兵庫県',
+                      'nara': '奈良県',
+                      'wakayama': '和歌山県'
+                    };
+                    return { code, name: nameMap[code] || code };
+                  })}
                   selectedPrefecture={selectedPrefecture}
                   selectedTime={selectedTime}
                   onPrefectureChange={handlePrefectureChange}
                   onTimeSelect={handleTimeChange}
+                  onViewModeChange={(mode) => {
+                    if (mode === 'prefecture-all') {
+                      loadAllPrefectures();
+                    }
+                  }}
                   initialTime={sessionInfo.swi_initial_time}
                 />
               </div>
@@ -459,16 +496,22 @@ const ProductionSession: React.FC = () => {
         </div>
       )}
 
-      {/* 雨量調整モーダル */}
-      {sessionInfo && (
-        <RainfallAdjustmentModal
+      {/* 雨量調整モーダル（セッションベース） */}
+      {sessionInfo && sessionId && (
+        <RainfallAdjustmentModalSession
           isOpen={isRainfallModalOpen}
           onClose={() => setIsRainfallModalOpen(false)}
+          sessionId={sessionId}
           swiInitial={swiInitialTime}
           guidanceInitial={guidanceInitialTime}
           dataSource="test"
-          existingData={null}
-          onResultCalculated={handleRainfallAdjustmentResult}
+          onSessionRecalculated={(meshRisks, meshCoords) => {
+            // セッションが更新されたので、メッシュリスクと座標を更新
+            setMeshRisksAtTime(meshRisks);
+            setMeshCoords(meshCoords);
+            setIsAdjustedData(true);
+            setSelectedTime(0); // FT=0に戻す
+          }}
         />
       )}
     </div>

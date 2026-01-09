@@ -34,14 +34,6 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
   swiInitialTime,
   guidanceInitialTime
 }) => {
-  // デバッグログ
-  console.log('[SoilRainfallMap] Props:', {
-    meshes: meshes ? `${meshes.length} meshes` : 'undefined',
-    meshRisks: meshRisks ? `${Object.keys(meshRisks).length} risks` : 'undefined',
-    meshCoords: meshCoords ? `${Object.keys(meshCoords).length} coords` : 'undefined',
-    selectedTime
-  });
-
   const [bounds, setBounds] = useState<LatLngBounds | null>(null);
   const [showLandCondition, setShowLandCondition] = useState(false);
   const [showStandard, setShowStandard] = useState(false);
@@ -97,7 +89,13 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
 
   // メッシュ間隔を動的に計算
   const meshIntervals = useMemo(() => {
-    if (!meshes || meshes.length < 2) return { latInterval: 0.008, lonInterval: 0.008 };
+    // サーバー側の計算式に基づく固定値
+    // lat = (y + 0.5) * 30 / 3600 → 間隔は 30/3600
+    // lon = (x + 0.5) * 45 / 3600 + 100 → 間隔は 45/3600
+    const MESH_LAT_INTERVAL = 30 / 3600;  // 0.00833...度
+    const MESH_LON_INTERVAL = 45 / 3600;  // 0.0125度
+
+    if (!meshes || meshes.length < 2) return { latInterval: MESH_LAT_INTERVAL, lonInterval: MESH_LON_INTERVAL };
 
     const lats = meshes.map(m => m.lat);
     const lons = meshes.map(m => m.lon);

@@ -284,12 +284,14 @@ class MainController:
                     ))
 
                 # 軽量レスポンスを返す
+                available_prefs = list(result['prefectures'].keys())
+
                 return jsonify({
                     "status": "success",
                     "session_id": session_id,
                     "swi_initial_time": swi_initial.isoformat(),
                     "guidance_initial_time": guidance_initial.isoformat(),
-                    "available_prefectures": list(result['prefectures'].keys()),
+                    "available_prefectures": available_prefs,
                     "available_times": available_times,
                     "cache_info": {
                         "cache_key": cache_key,
@@ -384,12 +386,14 @@ class MainController:
                     ))
 
                 # 軽量レスポンスを返す
+                available_prefs = list(result['prefectures'].keys())
+
                 return jsonify({
                     "status": "success",
                     "session_id": session_id,
                     "swi_initial_time": swi_initial_time,
                     "guidance_initial_time": guidance_initial_time,
-                    "available_prefectures": list(result['prefectures'].keys()),
+                    "available_prefectures": available_prefs,
                     "available_times": available_times,
                     "cache_info": None,  # テストモードではキャッシュなし
                     "used_urls": {

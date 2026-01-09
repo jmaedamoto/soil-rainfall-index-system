@@ -56,4 +56,14 @@ def create_session_blueprint(session_controller):
     def cleanup_sessions():
         return session_controller.cleanup_sessions()
 
+    # 雨量調整用の雨量データ取得
+    @session_bp.route('/session/<session_id>/rainfall-data', methods=['GET'])
+    def get_rainfall_data(session_id):
+        return session_controller.get_rainfall_data(session_id)
+
+    # 雨量調整後の再計算（セッションベース）
+    @session_bp.route('/session/<session_id>/recalculate', methods=['POST'])
+    def recalculate_with_adjusted_rainfall(session_id):
+        return session_controller.recalculate_with_adjusted_rainfall(session_id)
+
     return session_bp

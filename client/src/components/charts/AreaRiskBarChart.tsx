@@ -3,10 +3,12 @@ import { Area, Prefecture, SecondarySubdivision, RISK_COLORS, RiskLevel, RISK_LA
 
 interface AreaRiskBarChartProps {
   prefectures: Prefecture[];
+  availablePrefectures?: Array<{ code: string; name: string }>; // 利用可能な全府県リスト
   selectedTime: number;
   selectedPrefecture: string;
   onPrefectureChange: (prefectureCode: string) => void;
   onTimeSelect?: (ft: number) => void; // 時刻選択コールバック
+  onViewModeChange?: (mode: RiskTimelineViewMode) => void; // 表示モード変更コールバック
   initialTime: string; // UTC時刻（ISO8601形式）
   title?: string;
   height?: number;
@@ -14,16 +16,26 @@ interface AreaRiskBarChartProps {
 
 const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
   prefectures,
+  availablePrefectures,
   selectedTime,
   selectedPrefecture,
   onPrefectureChange,
   onTimeSelect,
+  onViewModeChange,
   initialTime,
   title = 'エリア別リスクレベル時系列',
   height = 800
 }) => {
   const [hoveredCell, setHoveredCell] = useState<{area: string, time: number, risk: number} | null>(null);
   const [viewMode, setViewMode] = useState<RiskTimelineViewMode>('municipality');
+
+  // 表示モード変更ハンドラ
+  const handleViewModeChange = (mode: RiskTimelineViewMode) => {
+    setViewMode(mode);
+    if (onViewModeChange) {
+      onViewModeChange(mode);
+    }
+  };
 
   // viewModeに応じた表示データの準備
   type DisplayRow = {
@@ -139,9 +151,9 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                 minWidth: '120px'
               }}
             >
-              {prefectures.map(prefecture => (
+              {(availablePrefectures || prefectures).map(prefecture => (
                 <option key={prefecture.code} value={prefecture.code}>
-                  {prefecture.name}
+                  {prefecture.name || prefecture.code}
                 </option>
               ))}
             </select>
@@ -152,7 +164,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <label style={{ fontWeight: 'bold' }}>表示:</label>
           <button
-            onClick={() => setViewMode('municipality')}
+            onClick={() => handleViewModeChange('municipality')}
             style={{
               padding: '8px 12px',
               borderRadius: '4px',
@@ -166,7 +178,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
             市町村別
           </button>
           <button
-            onClick={() => setViewMode('subdivision')}
+            onClick={() => handleViewModeChange('subdivision')}
             style={{
               padding: '8px 12px',
               borderRadius: '4px',
@@ -180,7 +192,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
             二次細分別
           </button>
           <button
-            onClick={() => setViewMode('prefecture-all')}
+            onClick={() => handleViewModeChange('prefecture-all')}
             style={{
               padding: '8px 12px',
               borderRadius: '4px',
@@ -377,25 +389,27 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
           リスクレベル凡例
         </div>
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-          {Object.entries(RISK_LABELS).map(([level, label]) => {
-            const color = RISK_COLORS[parseInt(level) as RiskLevel];
-            return (
-              <div key={level} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div
-                  style={{
-                    width: '40px',
-                    height: '24px',
-                    backgroundColor: color,
-                    border: '1px solid #000',
-                    borderRadius: '3px'
-                  }}
-                />
-                <span style={{ fontSize: '14px' }}>
-                  レベル{level}: {label}
-                </span>
-              </div>
-            );
-          })}
+          {Object.entries(RISK_LABELS)
+            .filter(([level]) => parseInt(level) !== RiskLevel.NORMAL)  // レベル0を除外
+            .map(([level, label]) => {
+              const color = RISK_COLORS[parseInt(level) as RiskLevel];
+              return (
+                <div key={level} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div
+                    style={{
+                      width: '40px',
+                      height: '24px',
+                      backgroundColor: color,
+                      border: '1px solid #000',
+                      borderRadius: '3px'
+                    }}
+                  />
+                  <span style={{ fontSize: '14px' }}>
+                    レベル{level}: {label}
+                  </span>
+                </div>
+              );
+            })}
         </div>
 
         <div style={{ marginTop: '15px', fontSize: '13px', color: '#666' }}>
