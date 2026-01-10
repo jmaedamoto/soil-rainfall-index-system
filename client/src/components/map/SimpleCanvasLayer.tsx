@@ -76,8 +76,8 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
           );
 
           const rectangle = L.rectangle(bounds, {
-            color: RISK_COLORS[riskValue],
-            fillColor: RISK_COLORS[riskValue],
+            color: RISK_COLORS[riskValue as keyof typeof RISK_COLORS],
+            fillColor: RISK_COLORS[riskValue as keyof typeof RISK_COLORS],
             fillOpacity: 0.7,
             weight: 0,
             renderer: canvasRenderer
@@ -116,8 +116,8 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
           );
 
           const rectangle = L.rectangle(bounds, {
-            color: RISK_COLORS[riskLevel],
-            fillColor: RISK_COLORS[riskLevel],
+            color: RISK_COLORS[riskLevel as keyof typeof RISK_COLORS],
+            fillColor: RISK_COLORS[riskLevel as keyof typeof RISK_COLORS],
             fillOpacity: 0.7,
             weight: 0,
             renderer: canvasRenderer

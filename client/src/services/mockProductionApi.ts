@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { LightweightCalculationResult } from '../types/api';
+import { LightweightCalculationResult, CalculationResult } from '../types/api';
 
 /**
  * 本番環境APIのモック（開発環境用）

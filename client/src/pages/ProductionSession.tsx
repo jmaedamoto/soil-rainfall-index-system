@@ -467,7 +467,7 @@ const ProductionSession: React.FC = () => {
 
               <div style={{ marginTop: '30px' }}>
                 <AreaRiskBarChart
-                  prefectures={Object.values(prefectureRiskData).filter(p => p !== undefined)}
+                  prefectures={Object.values(prefectureRiskData).filter(p => p !== undefined) as PrefectureType[]}
                   availablePrefectures={sessionInfo.available_prefectures.map(code => {
                     const nameMap: Record<string, string> = {
                       'shiga': '滋賀県',

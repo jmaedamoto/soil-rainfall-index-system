@@ -56,7 +56,8 @@
       "Bash(set PYTHONIOENCODING=utf-8)",
       "Bash(export PYTHONIOENCODING=utf-8)",
       "Bash(netstat:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(file:*)"
     ],
     "deny": []
   }
