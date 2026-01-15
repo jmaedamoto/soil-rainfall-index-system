@@ -16,8 +16,6 @@ sys.path.append(os.path.join(project_root, 'src'))
 
 # Blueprintルートのインポート
 from api.routes.main_routes import main_bp, init_main_routes
-from api.routes.test_routes import test_bp, init_test_routes
-from api.routes.performance_routes import performance_bp, init_performance_routes
 from api.routes.cache_routes import cache_bp
 from api.routes.rainfall_routes import rainfall_bp
 from api.routes.session_routes import create_session_blueprint
@@ -35,10 +33,6 @@ def create_app(data_dir: str = "data"):
     # main_routes.pyで作成されたsession_serviceを使用
     from api.routes.main_routes import session_service
 
-    # テストルートにもsession_serviceを渡す
-    init_test_routes(data_dir, session_service)
-    init_performance_routes(data_dir)
-
     if session_service:
         session_controller = SessionController(session_service)
         session_bp = create_session_blueprint(session_controller)
@@ -46,8 +40,6 @@ def create_app(data_dir: str = "data"):
 
     # Blueprint登録
     app.register_blueprint(main_bp)
-    app.register_blueprint(test_bp)
-    app.register_blueprint(performance_bp)
     app.register_blueprint(cache_bp)
     app.register_blueprint(rainfall_bp)
 
@@ -61,8 +53,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 if __name__ == '__main__':
-    logger.info("土壌雨量指数計算API起動 - Blueprint-based Routing Architecture")
-    logger.info("アーキテクチャ: STEP 4B完了 - Blueprint分離")
+    logger.info("土壌雨量指数計算API起動 - 本番運用版")
     logger.info("利用可能エンドポイント:")
     logger.info("  メインAPI (main_bp):")
     logger.info("    GET  /")
@@ -72,19 +63,6 @@ if __name__ == '__main__':
     logger.info("    GET  /api/production-soil-rainfall-index")
     logger.info("    POST /api/production-soil-rainfall-index-with-urls")
     logger.info("    POST /api/test-session-with-local-bins")
-    logger.info("  テストAPI (test_bp):")
-    logger.info("    GET  /api/test-bin-data")
-    logger.info("    GET  /api/test-grib2-analysis")
-    logger.info("    GET  /api/test-soil-rainfall-index")
-    logger.info("    GET  /api/test-single-prefecture")
-    logger.info("    GET  /api/test-full-soil-rainfall-index")
-    logger.info("    GET  /api/test-full-parallel-soil-rainfall-index")
-    logger.info("  パフォーマンスAPI (performance_bp):")
-    logger.info("    GET  /api/test-performance-analysis")
-    logger.info("    GET  /api/test-performance-summary")
-    logger.info("    GET  /api/test-csv-optimization")
-    logger.info("    GET  /api/test-parallel-processing")
-    logger.info("    GET  /api/test-optimization-analysis")
     logger.info("  キャッシュAPI (cache_bp):")
     logger.info("    GET    /api/cache/list")
     logger.info("    GET    /api/cache/stats")

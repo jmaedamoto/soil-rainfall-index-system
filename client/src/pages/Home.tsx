@@ -96,25 +96,6 @@ const Home: React.FC = () => {
         >
           本番運用（セッション版）⚡
         </Link>
-
-        <Link
-          to="/dashboard"
-          style={{
-            display: 'inline-block',
-            padding: '15px 30px',
-            backgroundColor: '#1976D2',
-            color: 'white',
-            textDecoration: 'none',
-            borderRadius: '8px',
-            fontSize: '18px',
-            fontWeight: 'bold',
-            transition: 'background-color 0.3s'
-          }}
-          onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#1565C0'}
-          onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#1976D2'}
-        >
-          開発ダッシュボード
-        </Link>
       </div>
       
       <div style={{ 
