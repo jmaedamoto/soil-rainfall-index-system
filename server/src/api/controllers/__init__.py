@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-APIコントローラー層
+APIコントローラー層 - 本番運用版
 """
 
-from .soil_rainfall_controller import SoilRainfallController
-
-__all__ = [
-    'SoilRainfallController'
-]
+__all__ = []

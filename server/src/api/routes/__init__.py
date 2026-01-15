@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-APIルーティング層
+APIルーティング層 - 本番運用版
 """
 
-from .soil_rainfall_routes import soil_rainfall_bp
-
-__all__ = [
-    'soil_rainfall_bp'
-]
+__all__ = []
