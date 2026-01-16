@@ -289,8 +289,8 @@ class MainController:
                 return jsonify({
                     "status": "success",
                     "session_id": session_id,
-                    "swi_initial_time": swi_initial.isoformat(),
-                    "guidance_initial_time": guidance_initial.isoformat(),
+                    "swi_initial_time": swi_initial.isoformat() + 'Z',
+                    "guidance_initial_time": guidance_initial.isoformat() + 'Z',
                     "available_prefectures": available_prefs,
                     "available_times": available_times,
                     "cache_info": {
@@ -300,9 +300,9 @@ class MainController:
                     },
                     "used_urls": {
                         "swi_url": swi_url,
-                        "swi_initial_time": swi_initial.isoformat(),
+                        "swi_initial_time": swi_initial.isoformat() + 'Z',
                         "guidance_url": guidance_url,
-                        "guidance_initial_time": guidance_initial.isoformat()
+                        "guidance_initial_time": guidance_initial.isoformat() + 'Z'
                     }
                 })
 
@@ -312,9 +312,9 @@ class MainController:
             # 使用したURLとキャッシュ情報も返却
             result["used_urls"] = {
                 "swi_url": swi_url,
-                "swi_initial_time": swi_initial.isoformat(),
+                "swi_initial_time": swi_initial.isoformat() + 'Z',
                 "guidance_url": guidance_url,
-                "guidance_initial_time": guidance_initial.isoformat()
+                "guidance_initial_time": guidance_initial.isoformat() + 'Z'
             }
 
             result["cache_info"] = {
@@ -327,50 +327,6 @@ class MainController:
 
         except Exception as e:
             logger.error(f"本番テスト処理エラー: {e}")
-            return jsonify({
-                "status": "error",
-                "message": str(e)
-            }), 500
-
-    def test_full_soil_rainfall_index(self):
-        """開発環境用: ローカルbinファイルで完全データを取得（非セッション版）"""
-        try:
-            # テスト用binファイルパス
-            swi_file = os.path.join(self.data_dir,
-                                    "Z__C_RJTD_20230602000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin")
-            guidance_file = os.path.join(self.data_dir,
-                                         "guid_msm_grib2_20230602000000_rmax00.bin")
-
-            # ファイル存在確認
-            if not os.path.exists(swi_file):
-                return jsonify({
-                    "status": "error",
-                    "message": f"SWIテストファイルが見つかりません: {swi_file}"
-                }), 404
-
-            if not os.path.exists(guidance_file):
-                return jsonify({
-                    "status": "error",
-                    "message": f"ガイダンステストファイルが見つかりません: {guidance_file}"
-                }), 404
-
-            logger.info(f"テスト用binファイルで完全データ取得開始")
-            logger.info(f"  SWI: {swi_file}")
-            logger.info(f"  ガイダンス: {guidance_file}")
-
-            # ファイルベースでメイン処理実行（完全データ）
-            result = self.main_service.main_process_from_files(swi_file, guidance_file)
-
-            # 完全データを返す
-            result["status"] = "success"
-            result["note"] = "テストデータ使用: Z__C_RJTD_20230602000000_*.bin (2023年6月2日)"
-
-            return jsonify(result)
-
-        except Exception as e:
-            logger.error(f"テスト完全データ取得エラー: {e}")
-            import traceback
-            traceback.print_exc()
             return jsonify({
                 "status": "error",
                 "message": str(e)
@@ -435,8 +391,8 @@ class MainController:
                 return jsonify({
                     "status": "success",
                     "session_id": session_id,
-                    "swi_initial_time": swi_initial_time,
-                    "guidance_initial_time": guidance_initial_time,
+                    "swi_initial_time": swi_initial_time + 'Z' if not swi_initial_time.endswith('Z') else swi_initial_time,
+                    "guidance_initial_time": guidance_initial_time + 'Z' if not guidance_initial_time.endswith('Z') else guidance_initial_time,
                     "available_prefectures": available_prefs,
                     "available_times": available_times,
                     "cache_info": None,  # テストモードではキャッシュなし

@@ -99,9 +99,9 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
 
     sortedTimes.forEach(ft => {
       const ftTimeJST = new Date(initialTimeJST.getTime() + ft * 60 * 60 * 1000);
-      const ftHour = ftTimeJST.getHours();
+      const ftHour = ftTimeJST.getUTCHours();
       const periodStartTime = new Date(ftTimeJST.getTime() - 3 * 60 * 60 * 1000);
-      const dateStr = `${periodStartTime.getMonth() + 1}月${periodStartTime.getDate()}日`;
+      const dateStr = `${periodStartTime.getUTCMonth() + 1}月${periodStartTime.getUTCDate()}日`;
 
       let dateGroup = dateGroups.find(g => g.date === dateStr);
       if (!dateGroup) {
@@ -334,6 +334,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                           position: 'relative'
                         }}
                         onClick={() => {
+                          console.log(`[AreaRiskBarChart] 時刻セル クリック - FT: ${hourInfo.ft}, 時: ${hourInfo.hour}`);
                           if (onTimeSelect) {
                             onTimeSelect(hourInfo.ft);
                           }

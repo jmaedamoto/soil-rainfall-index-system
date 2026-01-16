@@ -149,6 +149,7 @@ class SessionController:
             mesh_coords = {}
             prefectures = session['prefectures']
 
+            sample_count = 0
             for pref_code, prefecture in prefectures.items():
                 for area in prefecture["areas"]:
                     for mesh in area["meshes"]:
@@ -158,6 +159,15 @@ class SessionController:
                             if risk_point["ft"] == ft:
                                 risk_value = risk_point["value"]
                                 break
+
+                        # 最初の3メッシュのデータをログ出力
+                        if sample_count < 3:
+                            logger.info(f"[get_risk_at_time] FT={ft}, Mesh={mesh['code']}, Risk={risk_value}, Timeline={mesh['risk_3hour_max_timeline'][:3]}")
+                            sample_count += 1
+
+                        # メッシュ50357712の詳細ログ
+                        if mesh['code'] == '50357712':
+                            logger.info(f"[get_risk_at_time] ★特定メッシュ★ FT={ft}, Mesh={mesh['code']}, Risk={risk_value}, Timeline={mesh['risk_3hour_max_timeline'][:5]}")
 
                         mesh_risks[mesh["code"]] = risk_value
                         mesh_coords[mesh["code"]] = {
