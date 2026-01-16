@@ -252,8 +252,109 @@ dist/assets/index-CEVENH_f.js   697.53 kB │ gzip: 220.82 kB
 - 全モジュールの正常なトランスパイル
 - 開発環境と本番環境の完全な動作保証
 
+
 ---
-**最終更新**: 2026年1月10日
-**バージョン**: 8.4.0（大規模リファクタリング・TypeScriptビルド最適化完了版）
+
+## 🎉 **2026年1月16日 重大バグ修正とUI改善**
+
+### ✅ **セッションベースAPI地図表示の3時間オフセット問題を解決**
+
+セッションベースAPIで地図を表示する際、選択した時刻より3時間先のデータが表示される重大なバグを修正しました。
+
+#### **問題の詳細**
+
+**症状**:
+- セッションベースAPIで地図を表示すると、選択時刻より3時間先のデータが表示される
+- 例: 9:00を選択 → 12:00のデータが表示される
+- 時刻表示は正しいが、地図に表示されるリスクレベルが3時間ずれていた
+
+**検証方法**:
+- 特定メッシュ(50357712)のデバッグログを追跡
+- 計算時: `[(0, 0), (3, 2), (6, 3)]` ← 正しい
+- セッション取得時: `[{'ft': 0, 'value': 2}, ...]` ← FT=0に誤った値
+
+#### **根本原因**
+
+`calc_3hour_max_risk_from_hourly`関数のグループ化ロジックに欠陥：
+
+1. guidance_data_3hがFT=3から始まるため、rain_1hourはFT=[1,2,3,...]となる
+2. calc_swi_hourlyがFT=0の初期値を追加するため、risk_hourlyは[(0,初期値),(1,...),(2,...),...]となる
+3. 単純に3つずつグループ化すると(0,1,2), (3,4,5)となり、FT=0のグループにFT=2の値が混入
+4. 結果: FT=0にFT=3のリスク値が誤って割り当てられる
+
+**デバッグログの証拠**:
+```
+[DEBUG] Mesh 50357712 rain_1hour FTs: [1, 2, 3, 4, 5, 6]  ← FT=0がない
+[DEBUG] Mesh 50357712 swi_hourly: [(0, 160.0), (1, 160.2), (2, 198.2), ...]  ← FT=0追加
+[DEBUG] Mesh 50357712 risk_hourly: [(0, 0), (1, 0), (2, 2), (3, 0), ...]
+[DEBUG] Mesh 50357712 risk_3hour_max: [(0, 2), (3, 2), ...]  ← FT=0に誤った値2
+```
+
+#### **修正内容**
+
+**server/services/calculation_service.py** - `calc_3hour_max_risk_from_hourly`関数:
+```python
+# FT=0の初期値を単独処理
+if risk_hourly[0].ft == 0:
+    risk_3hour_max.append(Risk(ft=0, value=risk_hourly[0].value))
+    remaining = risk_hourly[1:]
+
+# 残りを3つずつグループ化（FT=1,2,3 → FT=3として保存）
+for i in range(0, len(remaining), 3):
+    group = remaining[i:i+3]
+    max_risk = max(r.value for r in group)
+    ft_end = group[-1].ft  # 終了時刻を代表値とする
+    risk_3hour_max.append(Risk(ft=ft_end, value=max_risk))
+```
+
+**server/src/api/controllers/main_controller.py**:
+- production_soil_rainfall_index_with_urls: UTC時刻にZ suffixを追加してJST変換を正確化
+
+**client/src/components/charts/AreaRiskBarChart.tsx**:
+- 時刻計算をgetUTC*メソッドに変更してタイムゾーン問題を解消
+
+**server/src/api/controllers/session_controller.py**:
+- デバッグログ追加: リスク値取得時の詳細ログ
+
+#### **修正結果**
+
+- 修正前: `[(0, 2), (3, 2), (6, 2), ...]` ← FT=0に誤った値
+- 修正後: `[(0, 0), (3, 2), (6, 2), ...]` ← FT=0に正しい初期値
+- ✅ 地図表示が選択時刻と完全に一致することを確認
+
+### ✅ **地図縮小時のメッシュ表示問題を解決**
+
+地図を縮小すると1km×1kmメッシュが表示されなくなる問題を修正しました。
+
+#### **原因**
+- 最小ズームレベルが6に設定されていた
+- 1km×1kmメッシュはズームレベルが低いと画面上で非常に小さくなり、Canvas Rendererが描画しない
+
+#### **修正内容**
+
+**client/src/components/map/SoilRainfallMap.tsx**:
+```typescript
+// 最小ズームレベルを6→8に変更
+minZoom={8}
+maxZoom={14}
+```
+
+**client/src/components/map/SimpleCanvasLayer.tsx**:
+```typescript
+// Canvas Rendererの設定を最適化
+const canvasRenderer = L.canvas({
+  padding: 1.0,   // 画面外も広めに描画（0.5→1.0）
+  tolerance: 0    // ピクセル許容誤差を0にして確実に描画
+});
+```
+
+#### **修正結果**
+- ✅ 最小ズームレベル8までメッシュが確実に表示される
+- ✅ ズームレベル8未満には縮小できないため、メッシュが消える問題を根本的に解決
+- ✅ 関西6府県全体を適切な詳細度で表示可能
+
+---
+**最終更新**: 2026年1月16日
+**バージョン**: 8.5.0（重大バグ修正・地図表示最適化完了版）
 **作成者**: Claude (Anthropic)
-**プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・セッションベースAPI・型安全性強化版）
+**プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・セッションベースAPI・時刻表示修正版）

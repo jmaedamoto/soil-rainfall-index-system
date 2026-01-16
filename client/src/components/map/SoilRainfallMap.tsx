@@ -182,14 +182,22 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
     return `${jstDate.getUTCFullYear()}/${jstDate.getUTCMonth() + 1}/${jstDate.getUTCDate()} ${String(jstDate.getUTCHours()).padStart(2, '0')}:${String(jstDate.getUTCMinutes()).padStart(2, '0')}`;
   };
 
-  // 現在選択されている時刻を計算
-  const getCurrentTime = () => {
+  // 現在選択されている時刻を計算（useMemoでメモ化）
+  const currentTimeDisplay = useMemo(() => {
+    console.log(`[SoilRainfallMap.currentTimeDisplay] selectedTime: ${selectedTime}, swiInitialTime: ${swiInitialTime}`);
     if (!swiInitialTime) return 'N/A';
+    // swiInitialTimeはUTC時刻（例: 2023-06-02T00:00:00Z）
     const swiDate = new Date(swiInitialTime);
-    const jstDate = new Date(swiDate.getTime() + 9 * 60 * 60 * 1000);
-    const currentDate = new Date(jstDate.getTime() + selectedTime * 60 * 60 * 1000);
-    return `${currentDate.getUTCFullYear()}/${currentDate.getUTCMonth() + 1}/${currentDate.getUTCDate()} ${String(currentDate.getUTCHours()).padStart(2, '0')}:${String(currentDate.getUTCMinutes()).padStart(2, '0')}`;
-  };
+    // FT時間を加算（まだUTC）
+    const currentUtcMs = swiDate.getTime() + selectedTime * 60 * 60 * 1000;
+    // JSTに変換（UTC + 9時間）
+    const currentJstMs = currentUtcMs + 9 * 60 * 60 * 1000;
+    const currentDate = new Date(currentJstMs);
+    // getUTC*()を使用（currentJstMsはJST時刻を表すミリ秒値）
+    const result = `${currentDate.getUTCFullYear()}/${currentDate.getUTCMonth() + 1}/${currentDate.getUTCDate()} ${String(currentDate.getUTCHours()).padStart(2, '0')}:${String(currentDate.getUTCMinutes()).padStart(2, '0')}`;
+    console.log(`[SoilRainfallMap.currentTimeDisplay] 計算結果: ${result} (JST表示)`);
+    return result;
+  }, [selectedTime, swiInitialTime]);
 
   return (
     <div style={{ height: '600px', width: '100%', position: 'relative' }}>
@@ -226,7 +234,7 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
             borderTop: '1px solid #ddd'
           }}>
             <span style={{ color: '#666', fontWeight: 'bold' }}>現在表示時刻:</span>{' '}
-            <span style={{ color: '#D32F2F', fontWeight: 'bold' }}>{getCurrentTime()}</span>
+            <span style={{ color: '#D32F2F', fontWeight: 'bold' }}>{currentTimeDisplay}</span>
             <span style={{ color: '#666', marginLeft: '8px' }}>(FT+{selectedTime}h)</span>
           </div>
         </div>
@@ -238,7 +246,7 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
         style={{ height: '100%', width: '100%' }}
         bounds={bounds || undefined}
         keyboard={false}
-        minZoom={6}
+        minZoom={8}
         maxZoom={14}
       >
         {/* 純白地図ベース */}
