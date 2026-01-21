@@ -33,7 +33,7 @@ ExcelのVBA（Visual Basic for Applications）で実装されていた土壌雨�
 ## 技術仕様
 
 ### 開発環境
-- **バックエンド**: Python 3.8+ + Flask
+- **バックエンド**: Python 3.9+ + Flask
 - **フロントエンド**: React 18 + TypeScript + Vite
 - **主要ライブラリ**:
   - `requests` (HTTPクライアント)
@@ -410,7 +410,53 @@ export default defineConfig({
 - ✅ `/dosya/` 配下でのルーティングが正常に動作
 
 ---
-**最終更新**: 2026年1月20日
-**バージョン**: 8.6.0（本番環境デプロイ対応版）
+
+## 🚀 **2026年1月21日 本番環境デプロイ修正**
+
+### ✅ **React Routerベースパス対応**
+
+本番環境で「No routes matched location "/dosya/"」エラーが発生する問題を修正しました。
+
+#### **問題**
+- Viteの`base`設定（`/dosya/`）とReact Routerのルーティングが連携していなかった
+- `/dosya/`にアクセスすると、React Routerが`/dosya/`というパスを認識できずエラー
+
+#### **修正内容**
+
+**client/src/main.tsx** - BrowserRouterにbasename設定を追加:
+```typescript
+<BrowserRouter basename={import.meta.env.BASE_URL}>
+```
+
+**client/src/vite-env.d.ts** - Vite型定義ファイルを新規作成:
+```typescript
+/// <reference types="vite/client" />
+```
+
+#### **効果**
+- ✅ 本番環境（`/dosya/`）でルーティングが正常に動作
+- ✅ 開発環境（`/`）でも引き続き正常に動作
+- ✅ `import.meta.env.BASE_URL`により環境に応じて自動切り替え
+
+### ✅ **Python 3.9互換性対応**
+
+本番環境のPythonが3.9に変更されたため、ライブラリバージョンを調整しました。
+
+#### **修正内容**
+
+**server/requirements.txt**:
+| パッケージ | 旧バージョン | 新バージョン |
+|-----------|-------------|-------------|
+| sphinx | 8.1.3 | 7.4.7 |
+
+※ Sphinx 8.xはPython 3.10+が必要なため、7.4.7にダウングレード
+
+#### **備考**
+- 開発環境のPythonダウングレードは必須ではない（ライブラリがPython 3.9+対応のため）
+- 本番環境固有の問題発見のため、開発環境も3.9に揃えることを推奨
+
+---
+**最終更新**: 2026年1月21日
+**バージョン**: 8.7.0（本番環境デプロイ修正版）
 **作成者**: Claude (Anthropic)
 **プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・セッションベースAPI・本番環境対応版）
