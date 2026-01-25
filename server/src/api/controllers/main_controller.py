@@ -14,7 +14,7 @@ sys.path.append(project_root)
 
 from services.main_service import MainService
 from services.cache_service import get_cache_service
-from src.config.config_service import ConfigService
+from config.config_service import ConfigService
 
 
 logger = logging.getLogger(__name__)
@@ -36,24 +36,49 @@ class MainController:
             "message": "土壌雨量指数計算システム API",
             "architecture": "Refactored Service Layer Architecture",
             "version": "4.0.0",
-            "endpoints": [
-                "GET  /",
-                "GET  /api/health",
-                "GET  /api/data-check",
-                "POST /api/soil-rainfall-index",
-                "GET  /api/production-soil-rainfall-index",
-                "GET  /api/test-bin-data",
-                "GET  /api/test-grib2-analysis",
-                "GET  /api/test-soil-rainfall-index",
-                "GET  /api/test-single-prefecture",
-                "GET  /api/test-full-soil-rainfall-index",
-                "GET  /api/test-performance-analysis",
-                "GET  /api/test-performance-summary",
-                "GET  /api/test-csv-optimization",
-                "GET  /api/test-parallel-processing",
-                "GET  /api/test-full-parallel-soil-rainfall-index",
-                "GET  /api/test-optimization-analysis"
-            ]
+            "endpoints": {
+                "main": [
+                    "GET  /",
+                    "GET  /health",
+                    "GET  /data-check",
+                    "POST /soil-rainfall-index",
+                    "GET  /production-soil-rainfall-index",
+                    "POST /production-soil-rainfall-index-with-urls",
+                    "POST /test-session-with-local-bins"
+                ],
+                "cache": [
+                    "GET    /cache/list",
+                    "GET    /cache/stats",
+                    "GET    /cache/<cache_key>",
+                    "GET    /cache/<cache_key>/exists",
+                    "DELETE /cache/<cache_key>",
+                    "POST   /cache/cleanup"
+                ],
+                "rainfall": [
+                    "GET  /rainfall-forecast",
+                    "POST /rainfall-adjustment"
+                ],
+                "session": [
+                    "GET    /session/<session_id>",
+                    "GET    /session/<session_id>/prefecture/<prefecture_code>",
+                    "GET    /session/<session_id>/risk-at-time?ft=<ft>",
+                    "GET    /session/<session_id>/mesh/<mesh_code>",
+                    "GET    /session/<session_id>/rainfall-data",
+                    "POST   /session/<session_id>/recalculate",
+                    "DELETE /session/<session_id>",
+                    "GET    /sessions",
+                    "GET    /sessions/stats",
+                    "POST   /sessions/cleanup"
+                ],
+                "test": [
+                    "GET  /test-bin-data",
+                    "GET  /test-grib2-analysis",
+                    "GET  /test-soil-rainfall-index",
+                    "GET  /test-single-prefecture",
+                    "GET  /test-full-soil-rainfall-index",
+                    "GET  /test-full-parallel-soil-rainfall-index"
+                ]
+            }
         })
     
     def health_check(self):

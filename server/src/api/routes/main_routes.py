@@ -26,37 +26,32 @@ def root():
     """ルートエンドポイント"""
     return main_controller.root()
 
-@main_bp.route('/api/health', methods=['GET'])
+@main_bp.route('/health', methods=['GET'])
 def health_check():
     """ヘルスチェックエンドポイント"""
     return main_controller.health_check()
 
-@main_bp.route('/api/data-check', methods=['GET'])
+@main_bp.route('/data-check', methods=['GET'])
 def data_check():
     """データファイル確認エンドポイント"""
     return main_controller.data_check()
 
-@main_bp.route('/api/soil-rainfall-index', methods=['POST'])
+@main_bp.route('/soil-rainfall-index', methods=['POST'])
 def soil_rainfall_index():
     """メイン処理エンドポイント（URL ベース）"""
     return main_controller.soil_rainfall_index()
 
-@main_bp.route('/api/production-soil-rainfall-index', methods=['GET'])
+@main_bp.route('/production-soil-rainfall-index', methods=['GET'])
 def production_soil_rainfall_index():
     """本番テスト用エンドポイント（GET メソッド）"""
     return main_controller.production_soil_rainfall_index()
 
-@main_bp.route('/api/production-soil-rainfall-index-with-urls', methods=['POST'])
+@main_bp.route('/production-soil-rainfall-index-with-urls', methods=['POST'])
 def production_soil_rainfall_index_with_urls():
     """本番テスト用エンドポイント（SWIとガイダンスの初期時刻を個別指定）"""
     return main_controller.production_soil_rainfall_index_with_urls()
 
-@main_bp.route('/api/test-full-soil-rainfall-index', methods=['GET'])
-def test_full_soil_rainfall_index():
-    """開発環境用: ローカルbinファイルで完全データを取得"""
-    return main_controller.test_full_soil_rainfall_index()
-
-@main_bp.route('/api/test-session-with-local-bins', methods=['POST'])
+@main_bp.route('/test-session-with-local-bins', methods=['POST'])
 def test_session_with_local_bins():
     """開発環境用: ローカルbinファイルでセッションベースAPIをテスト"""
     return main_controller.test_session_with_local_bins()

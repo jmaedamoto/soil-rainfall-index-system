@@ -13,7 +13,7 @@ from .data_service import DataService
 from .calculation_service import CalculationService
 from .cache_service import get_cache_service
 from .response_builder import ResponseBuilder
-from src.config.config_service import ConfigService
+from config.config_service import ConfigService
 
 
 logger = logging.getLogger(__name__)
@@ -28,32 +28,32 @@ class MainService:
         self.calculation_service = CalculationService()
         self.cache_service = get_cache_service()
         self.config_service = ConfigService()
-    
+
     def main_process_from_files(self, swi_file: str, guidance_file: str) -> Dict[str, Any]:
         """ファイルベースのメイン処理（テスト用）"""
         try:
             start_time = time.time()
             logger.info("GRIB2ファイル解析開始")
-            
+
             # GRIB2データ解析
             grib2_start = time.time()
             base_info, swi_grib2 = self.grib2_service.unpack_swi_grib2_from_file(swi_file)
             _, guidance_grib2 = self.grib2_service.unpack_guidance_grib2_from_file(guidance_file)
             grib2_time = time.time() - grib2_start
-            
+
             logger.info(f"GRIB2解析完了: {grib2_time:.2f}秒")
             logger.info(f"初期時刻: {base_info.initial_date}")
             logger.info(f"SWIデータ数: {len(swi_grib2['swi'])}")
             logger.info(f"ガイダンスデータ数: {len(guidance_grib2['data'])}")
-            
+
             # 地域データ構築
             logger.info("地域データ構築開始")
             area_start = time.time()
             prefectures = self.data_service.prepare_areas()
             area_time = time.time() - area_start
-            
+
             logger.info(f"地域データ構築完了: {area_time:.2f}秒")
-            
+
             # メッシュ計算処理
             logger.info("メッシュ計算処理開始")
             calc_start = time.time()
@@ -89,7 +89,7 @@ class MainService:
 
             risk_time = time.time() - risk_start
             logger.info(f"リスクタイムライン・集約計算完了: {risk_time:.2f}秒")
-            
+
             # 結果構築（ResponseBuilderを使用）
             total_time = time.time() - start_time
 
@@ -99,16 +99,16 @@ class MainService:
             )
             result["status"] = "success"
             result["note"] = "フル版: ローカルbinファイルからの実データ（全メッシュ処理）"
-            
+
             logger.info(f"総処理時間: {total_time:.2f}秒")
             logger.info(f"処理速度: {total_meshes/total_time:.0f} meshes/second")
-            
+
             return result
-            
+
         except Exception as e:
             logger.error(f"メイン処理エラー: {e}")
             raise
-    
+
     def main_process_from_urls(self, initial_time: datetime) -> Dict[str, Any]:
         """URL ベースのメイン処理"""
         try:
@@ -278,13 +278,13 @@ class MainService:
             logger.info(f"{key}: {len(guidance_grib2[key])}件 → {len(filtered_data)}件に絞り込み")
 
         return filtered_grib2
-    
+
     def _process_data(self, base_info, swi_grib2, guidance_grib2, initial_time: datetime) -> Dict[str, Any]:
         """共通データ処理部分"""
         try:
             # 地域データ構築
             prefectures = self.data_service.prepare_areas()
-            
+
             # メッシュ計算処理
             total_meshes = 0
             for prefecture in prefectures:
@@ -294,7 +294,7 @@ class MainService:
                             mesh, swi_grib2, guidance_grib2
                         )
                         total_meshes += 1
-            
+
             # リスクタイムライン・集約計算
             for prefecture in prefectures:
                 # エリアごとのリスクタイムライン計算
@@ -307,10 +307,10 @@ class MainService:
 
                 # 府県全体の集約計算
                 self.calculation_service.calc_prefecture_aggregates(prefecture)
-            
+
             # 結果構築（ResponseBuilderを使用）
             return ResponseBuilder.build_prefecture_response(prefectures, initial_time)
-            
+
         except Exception as e:
             logger.error(f"データ処理エラー: {e}")
             raise

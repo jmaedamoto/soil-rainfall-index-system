@@ -27,7 +27,7 @@ class SessionController:
         """
         セッション情報取得
 
-        GET /api/session/<session_id>
+        GET /session/<session_id>
         """
         try:
             info = self.session_service.get_session_info(session_id)
@@ -56,7 +56,7 @@ class SessionController:
         """
         府県データ取得（危険度時系列のみ）
 
-        GET /api/session/<session_id>/prefecture/<prefecture_code>
+        GET /session/<session_id>/prefecture/<prefecture_code>
 
         Returns:
             - 府県名、コード
@@ -126,7 +126,7 @@ class SessionController:
         """
         指定時刻の全メッシュリスク値取得
 
-        GET /api/session/<session_id>/risk-at-time?ft=<ft>
+        GET /session/<session_id>/risk-at-time?ft=<ft>
         """
         try:
             ft = request.args.get('ft', type=int)
@@ -194,7 +194,7 @@ class SessionController:
         """
         メッシュ詳細データ取得
 
-        GET /api/session/<session_id>/mesh/<mesh_code>
+        GET /session/<session_id>/mesh/<mesh_code>
         """
         try:
             session = self.session_service.get_session(session_id)
@@ -247,7 +247,7 @@ class SessionController:
         """
         セッション削除
 
-        DELETE /api/session/<session_id>
+        DELETE /session/<session_id>
         """
         try:
             success = self.session_service.delete_session(session_id)
@@ -277,7 +277,7 @@ class SessionController:
         """
         セッション一覧取得（デバッグ用）
 
-        GET /api/sessions
+        GET /sessions
         """
         try:
             sessions = self.session_service.list_sessions()
@@ -300,7 +300,7 @@ class SessionController:
         """
         セッション統計情報取得
 
-        GET /api/sessions/stats
+        GET /sessions/stats
         """
         try:
             stats = self.session_service.get_stats()
@@ -322,7 +322,7 @@ class SessionController:
         """
         期限切れセッションクリーンアップ
 
-        POST /api/sessions/cleanup
+        POST /sessions/cleanup
         """
         try:
             deleted_count = self.session_service.cleanup_expired_sessions()
@@ -345,7 +345,7 @@ class SessionController:
         """
         雨量調整用の雨量データ取得
 
-        GET /api/session/<session_id>/rainfall-data
+        GET /session/<session_id>/rainfall-data
 
         Returns:
             - 市町村別雨量タイムライン
@@ -442,7 +442,7 @@ class SessionController:
         """
         雨量調整後の再計算（セッションベース・最適化版）
 
-        POST /api/session/<session_id>/recalculate
+        POST /session/<session_id>/recalculate
 
         Request Body:
             {

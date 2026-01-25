@@ -18,13 +18,13 @@ logger = logging.getLogger(__name__)
 
 class DataService:
     """データ処理サービス"""
-    
+
     def __init__(self, data_dir: str = "data"):
         self.data_dir = data_dir
         self.cache = {}
         self.cache_timestamp = None
         self.cache_ttl = 300  # 5分キャッシュ
-    
+
     def meshcode_to_coordinate(self, code: str) -> Tuple[float, float]:
         """メッシュコードから緯度経度を計算（単一メッシュ用）"""
         try:
@@ -100,7 +100,7 @@ class DataService:
             except Exception:
                 indices.append((0, 0))
         return indices
-    
+
     def parse_boundary_value(self, value) -> int:
         """境界値をパース"""
         if (pd.isna(value) or
@@ -111,7 +111,7 @@ class DataService:
             return int(float(str(value).strip()))
         except ValueError:
             return 9999
-    
+
     def get_dosyakei_bound(self, dosyakei_data: pd.DataFrame, meshcode: str) -> int:
         """土砂災害境界値を取得"""
         try:
@@ -119,17 +119,17 @@ class DataService:
             row = dosyakei_data[dosyakei_data['GRIDNO'].astype(str) == meshcode]
             if row.empty:
                 return 999
-            
+
             level_00 = row['LEVEL3_00'].iloc[0]
             if pd.isna(level_00) or level_00 >= 999:
                 return 999
-            
+
             return int(level_00)
-            
+
         except Exception as e:
             logger.error(f"土砂災害境界値取得エラー: {meshcode} - {e}")
             return 999
-    
+
     def load_csv_data(self, prefecture_code: str) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], Optional[pd.DataFrame]]:
         """CSVデータ読み込み（dosha, dosyakei, VBA SWI data）"""
         dosha_file = os.path.join(self.data_dir, f"dosha_{prefecture_code}.csv")
@@ -161,20 +161,20 @@ class DataService:
                 logger.error(f"Error loading {vba_swi_file}: {e}")
 
         return dosha_data, dosyakei_data, vba_swi_data
-    
+
     def prepare_areas(self) -> List[Prefecture]:
         """地域データ構築（最適化版）"""
         # キャッシュチェック
         current_time = time.time()
-        if (self.cache_timestamp and 
-            current_time - self.cache_timestamp < self.cache_ttl and 
+        if (self.cache_timestamp and
+            current_time - self.cache_timestamp < self.cache_ttl and
             'prefectures' in self.cache):
             logger.info("キャッシュからデータを取得")
             return self.cache['prefectures']
-        
+
         logger.info("CSVファイルからデータを構築中...")
         start_time = time.time()
-        
+
         # 全てのCSVデータを事前読み込み
         csv_loading_start = time.time()
         all_dosha_data = {}
@@ -189,23 +189,23 @@ class DataService:
                 all_dosyakei_data[pref_code] = dosyakei_data
             if vba_swi_data is not None:
                 all_vba_swi_data[pref_code] = vba_swi_data
-        
+
         csv_loading_time = time.time() - csv_loading_start
         logger.info(f"CSV読み込み時間: {csv_loading_time:.2f}秒")
-        
+
         # メッシュ処理
         mesh_processing_start = time.time()
         prefectures = []
-        
+
         for pref_code, pref_name in PREFECTURES_MASTER.items():
             if pref_code not in all_dosha_data:
                 logger.warning(f"Skipping {pref_code}: no dosha data")
                 continue
-            
+
             dosha_data = all_dosha_data[pref_code]
             dosyakei_data = all_dosyakei_data.get(pref_code)
             vba_swi_data = all_vba_swi_data.get(pref_code)
-            
+
             # pandas vectorized operations を使用
             # 第1列: 二次細分名、第2列: 市町村名、第3列: メッシュコード
             subdivision_names = dosha_data.iloc[:, 0].astype(str).str.strip().values
@@ -213,11 +213,11 @@ class DataService:
             mesh_codes = dosha_data.iloc[:, 2].astype(str).values
             advisary_bounds = dosha_data.iloc[:, 3].apply(self.parse_boundary_value).values
             warning_bounds = dosha_data.iloc[:, 4].apply(self.parse_boundary_value).values
-            
+
             # 座標計算をベクトル化（最適化: 一括処理）
             coords = self.meshcode_to_coordinate_vectorized(mesh_codes.tolist())
             indices = self.meshcode_to_index_vectorized(mesh_codes.tolist())
-            
+
             # dosyakei境界値を一括取得（最適化: O(n²)→O(n)）
             if dosyakei_data is not None:
                 # ディクショナリルックアップテーブル作成（pandasベクトル演算）
@@ -267,7 +267,7 @@ class DataService:
                         }
                 except Exception as e:
                     logger.warning(f"VBA座標ルックアップテーブル作成エラー: {e}")
-            
+
             # メッシュオブジェクト一括作成（最適化: zip使用で効率化）
             # OrderedDictを使用してCSV出現順を保持
             meshes = []
@@ -338,7 +338,7 @@ class DataService:
                     subdivision_dict[subdiv_name] = subdivision
 
                 subdivision_dict[subdiv_name].areas.append(area)
-            
+
             # 座標範囲を高速計算
             area_min_x = 0
             area_max_y = 0
@@ -347,7 +347,7 @@ class DataService:
                 all_y = [mesh.y for mesh in meshes]
                 area_min_x = min(all_x)
                 area_max_y = max(all_y)
-            
+
             # Prefecture dataclass instance creation
             prefecture = Prefecture(
                 name=pref_name,
@@ -357,29 +357,29 @@ class DataService:
                 area_max_y=area_max_y,
                 secondary_subdivisions=list(subdivision_dict.values())
             )
-            
+
             prefectures.append(prefecture)
             logger.info(f"Prepared {pref_code}: {len(prefecture.secondary_subdivisions)} subdivisions, "
                        f"{len(prefecture.areas)} areas, {len(meshes)} meshes")
-        
+
         mesh_processing_time = time.time() - mesh_processing_start
         total_time = time.time() - start_time
-        
+
         total_meshes = sum(
-            len(area.meshes) 
-            for pref in prefectures 
+            len(area.meshes)
+            for pref in prefectures
             for area in pref.areas
         )
-        
+
         logger.info(f"データ構築完了:")
         logger.info(f"  CSV読み込み時間: {csv_loading_time:.2f}秒")
         logger.info(f"  メッシュ処理時間: {mesh_processing_time:.2f}秒")
         logger.info(f"  総時間: {total_time:.2f}秒")
         logger.info(f"  総メッシュ数: {total_meshes}")
         logger.info(f"  処理速度: {total_meshes/total_time:.0f} meshes/second")
-        
+
         # キャッシュに保存
         self.cache['prefectures'] = prefectures
         self.cache_timestamp = current_time
-        
+
         return prefectures

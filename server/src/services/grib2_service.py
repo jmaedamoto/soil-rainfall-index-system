@@ -11,9 +11,6 @@ import sys
 from datetime import datetime, timedelta
 
 from models import BaseInfo, SwiTimeSeries, GuidanceTimeSeries
-
-# 設定サービスのインポート（パス追加）
-sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src'))
 from config.config_service import ConfigService
 
 
@@ -22,19 +19,19 @@ logger = logging.getLogger(__name__)
 
 class Grib2Service:
     """GRIB2データ処理サービス"""
-    
+
     def __init__(self):
         self.session = requests.Session()
         self.config = ConfigService()
         # 設定ファイルからproxy設定を取得
         self._setup_proxy()
-    
+
     def _setup_proxy(self):
         """設定ファイルからproxy設定をセットアップ"""
         proxy_config = self.config.get_proxy_config()
         http_proxy = proxy_config.get('http')
         https_proxy = proxy_config.get('https') or http_proxy
-        
+
         if http_proxy:
             proxies = {
                 'http': http_proxy,
@@ -44,14 +41,14 @@ class Grib2Service:
             logger.info(f"Proxy設定: HTTP={http_proxy}, HTTPS={https_proxy}")
         else:
             logger.info("Proxy設定なし（直接接続）")
-    
+
     def download_file(self, url: str) -> Optional[bytes]:
         """ファイルダウンロード（設定ファイル対応）"""
         grib2_config = self.config.get_grib2_config()
         timeout = grib2_config['download_timeout']
         retry_count = grib2_config['retry_count']
         retry_delay = grib2_config['retry_delay']
-        
+
         # プロキシ設定を取得
         proxy_config = self.config.get_proxy_config()
         proxies = None
@@ -60,7 +57,7 @@ class Grib2Service:
                 'http': proxy_config.get('http'),
                 'https': proxy_config.get('https') or proxy_config.get('http')
             }
-        
+
         for attempt in range(retry_count):
             try:
                 if attempt > 0:
@@ -69,17 +66,17 @@ class Grib2Service:
                     time.sleep(retry_delay)
                 else:
                     logger.info(f"ダウンロード開始: {url}")
-                
+
                 if proxies:
                     logger.debug(f"Proxy経由でアクセス: {proxies}")
-                
+
                 response = self.session.get(url, stream=True, timeout=timeout, proxies=proxies)
                 response.raise_for_status()
-                
+
                 content_length = len(response.content)
                 logger.info(f"ダウンロード完了: {url} ({content_length:,} bytes)")
                 return response.content
-                
+
             except requests.exceptions.ProxyError as e:
                 logger.error(f"Proxyエラー (試行 {attempt+1}/{retry_count}): {url} - {e}")
                 if attempt == retry_count - 1:
@@ -98,9 +95,9 @@ class Grib2Service:
                 logger.error(f"ダウンロードエラー (試行 {attempt+1}/{retry_count}): {url} - {e}")
                 if attempt == retry_count - 1:
                     return None
-        
+
         return None
-    
+
     def get_dat(self, bin_data: bytes, i: int, j: int) -> int:
         """Big-Endianバイナリデータ読み取り（最適化版）"""
         if i + j > len(bin_data):
@@ -126,7 +123,7 @@ class Grib2Service:
                 return result
         except struct.error:
             return 0
-    
+
     def unpack_info(self, data: bytes, position: int) -> Tuple[BaseInfo, int, int]:
         """GRIB2ファイルのヘッダー情報を解析"""
         try:
@@ -174,11 +171,11 @@ class Grib2Service:
             )
 
             return base_info, position, total_size
-            
+
         except Exception as e:
             logger.error(f"GRIB2ヘッダー解析エラー: {e}")
             raise
-    
+
     def unpack_runlength(self, data: bytes, bit_num: int, level_num: int, level_max: int,
                          grid_num: int, level: List[int], s_position: int,
                          e_position: int) -> List[float]:
@@ -304,7 +301,7 @@ class Grib2Service:
         self._runlength_end_position = position
 
         return run_length
-    
+
     def unpack_data(self, data: bytes, position: int, grid_num: int,
                     data_type: int, level: List[int], ref_val: float) -> List[float]:
         """GRIB2データ値解析（VBA版line-by-line完全対応）"""
@@ -316,10 +313,10 @@ class Grib2Service:
                 level_max = self.get_dat(data, position + 12, 2)  # VBA: position + 13, 2
                 level_num = self.get_dat(data, position + 14, 2)  # VBA: position + 15, 2
                 fct = self.get_dat(data, position + 16, 1)        # VBA: position + 17, 1 基準値係数
-                
+
                 # VBA: ReDim level(level_num)
                 level = [0] * (level_num + 1)  # VBAの1ベース配列に対応
-                
+
                 # VBA: For i = 1 To level_max (level_numではなくlevel_maxまで！)
                 for i in range(1, level_max + 1):
                     # VBA: level(i) = get_dat(buf, position + 16 + 2 * i, 2)
@@ -328,32 +325,32 @@ class Grib2Service:
                     if val >= 65536 / 2:  # VBAは浮動小数点除算
                         val = val - 65536 / 2
                     level[i] = int(val)
-                
+
                 position += section_size
-                
+
                 # セクション6: ビットマップ（スキップ）
                 section_size = self.get_dat(data, position, 4)
                 position += section_size
-                
+
                 # セクション7: データ
                 section_size = self.get_dat(data, position, 4)
                 s_position = position + 5  # VBA版の position + 6 - 1 (0ベース)
                 e_position = position + section_size
-                
+
                 data_values = self.unpack_runlength(
                     data, bit_num, level_num, level_max, grid_num,
                     level, s_position, e_position
                 )
-                
+
                 # VBA版では ref_val を使わずに直接値を返す
                 return [float(val) if val < 9999 else float('nan') for val in data_values]
             else:
                 return [float('nan')] * grid_num
-                
+
         except Exception as e:
             logger.error(f"データ展開エラー: {e}")
             return [float('nan')] * grid_num
-    
+
     def unpack_swi_grib2_from_file(self, file_path: str) -> Tuple[BaseInfo, List[float]]:
         """土壌雨量指数ファイル解析（ファイルパス版）"""
         try:
@@ -363,18 +360,18 @@ class Grib2Service:
         except Exception as e:
             logger.error(f"SWI GRIB2ファイル読み込みエラー: {e}")
             raise
-    
+
     def unpack_swi_grib2(self, data: bytes) -> Tuple[BaseInfo, Dict[str, Any]]:
         """土壌雨量指数データ解析（VBA line-by-line完全対応）"""
         try:
             # VBA: base_info = unpack_info(position, total_size, buf)
             base_info, position, total_size = self.unpack_info(data, 0)
-            
+
             # VBAの変数に対応
             swi_data = None
             first_tunk = None
             second_tunk = None
-            
+
             # VBA: Do While total_size - position > 4
             while total_size - position > 4:
                 # VBA: section_size = get_dat(buf, position + 1, 4)
@@ -385,7 +382,7 @@ class Grib2Service:
                 data_sub_type = self.get_dat(data, position + 24, 4)  # 0ベース調整
                 # VBA: position = position + section_size
                 position += section_size
-                
+
                 # VBA: If data_type = 200 Then
                 if data_type == 200:
                     # VBA: swi = unpack_data(position, buf, base_info.grid_num)
@@ -408,7 +405,7 @@ class Grib2Service:
                     # VBA: MsgBox... Stop
                     logger.error(f"VBA停止条件: 不明データタイプ data_type={data_type}, sub_type={data_sub_type}")
                     break
-                    
+
             # VBA: unpack_swi_grib2.base_info = base_info, 等
             result = {
                 'base_info': base_info,
@@ -416,34 +413,34 @@ class Grib2Service:
                 'first_tunk': first_tunk or [],
                 'second_tunk': second_tunk or []
             }
-            
+
             return base_info, result
-            
+
         except Exception as e:
             logger.error(f"SWI GRIB2解析エラー: {e}")
             raise
-    
+
     def _skip_data_sections(self, data: bytes, position: int) -> Tuple[List[float], int]:
         """データセクションをスキップ（セクション5,6,7の位置計算のみ）"""
         try:
             section5_size = self.get_dat(data, position, 4)
-            section6_size = self.get_dat(data, position + section5_size, 4)  
+            section6_size = self.get_dat(data, position + section5_size, 4)
             section7_size = self.get_dat(data, position + section5_size + section6_size, 4)
-            
+
             next_position = position + section5_size + section6_size + section7_size
             return [], next_position  # 空の配列を返す
-            
+
         except Exception as e:
             logger.error(f"データセクションスキップエラー: {e}")
             raise
-    
+
     def _unpack_data_section(self, data: bytes, position: int, grid_num: int) -> Tuple[List[float], int]:
         """データセクションの解析（VBA版完全対応）"""
         try:
             # セクション5からレベル配列を読み取り
             section5_size = self.get_dat(data, position, 4)
             level_max = self.get_dat(data, position + 12, 2)
-            
+
             # VBAと同様にレベル配列を構築
             level = []
             for i in range(1, level_max + 1):
@@ -451,30 +448,30 @@ class Grib2Service:
                 if val >= 32768:  # 符号付き16bit処理
                     val = val - 65536
                 level.append(val)
-            
+
             # レベル配列のデバッグ出力
             logger.warning(f"レベル配列構築: level_max={level_max}, len(level)={len(level)}")
             if len(level) > 14:
                 logger.warning(f"level[13]={level[12]} level[14]={level[13]} (期待値680,700)")
             logger.warning(f"level配列例: {level[:5]} ... {level[-5:] if len(level) > 5 else level}")
-            
+
             # VBAのunpack_dataに完全対応（正しいlevel配列を渡す）
             data_values = self.unpack_data(data, position, grid_num, 200, level, 0.0)
-            
+
             # position の更新は unpack_data 内で行われるので、
             # セクションサイズを計算して位置を更新
             section5_size = self.get_dat(data, position, 4)
-            section6_size = self.get_dat(data, position + section5_size, 4)  
+            section6_size = self.get_dat(data, position + section5_size, 4)
             section7_size = self.get_dat(data, position + section5_size + section6_size, 4)
-            
+
             next_position = position + section5_size + section6_size + section7_size
-            
+
             return data_values, next_position
-            
+
         except Exception as e:
             logger.error(f"データセクション解析エラー: {e}")
             raise
-    
+
     def unpack_guidance_grib2_from_file(self, file_path: str) -> Tuple[BaseInfo, List[List[float]]]:
         """降水量予測ファイル解析（ファイルパス版）"""
         try:
@@ -484,7 +481,7 @@ class Grib2Service:
         except Exception as e:
             logger.error(f"Guidance GRIB2ファイル読み込みエラー: {e}")
             raise
-    
+
     def unpack_guidance_grib2(self, data: bytes) -> Tuple[BaseInfo, Dict[str, Any]]:
         """降水量予測データ解析（1時間雨量・3時間雨量の両方取得）"""
         try:
@@ -558,26 +555,26 @@ class Grib2Service:
         except Exception as e:
             logger.error(f"Guidance GRIB2解析エラー: {e}")
             raise
-    
+
     def _skip_data_section(self, data: bytes, position: int) -> int:
         """データセクションをスキップ"""
         try:
             # セクション5をスキップ
             section_size = self.get_dat(data, position, 4)
             position += section_size
-            
+
             # セクション6をスキップ
             if position < len(data) - 4:
                 bitmap_size = self.get_dat(data, position, 4)
                 position += bitmap_size
-            
+
             # セクション7をスキップ
             if position < len(data) - 4:
                 section7_size = self.get_dat(data, position, 4)
                 position += section7_size
-            
+
             return position
-            
+
         except Exception as e:
             logger.error(f"データセクションスキップエラー: {e}")
             return position

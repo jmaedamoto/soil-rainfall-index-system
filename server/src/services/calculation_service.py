@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class CalculationService:
     """VBA Module.basの完全再現によるCalculationService"""
-    
+
     # VBA タンクモデルパラメータ (完全同一)
     l1, l2, l3, l4 = 15.0, 60.0, 15.0, 15.0
     a1, a2, a3, a4 = 0.1, 0.15, 0.05, 0.01
@@ -57,7 +57,7 @@ class CalculationService:
             logger.error(f"Error in get_data_num_from_vba_coordinates for ({vba_x}, {vba_y}): {e}")
             return 1  # エラー時のデフォルト値
 
-    def vba_coordinates_to_latlon(self, vba_x: int, vba_y: int) -> tuple[float, float]:
+    def vba_coordinates_to_latlon(self, vba_x: int, vba_y: int) -> tuple:
         """
         VBA座標から緯度経度を計算
         メッシュコード変換ロジックに基づく
@@ -76,44 +76,44 @@ class CalculationService:
         """
         # VBA: q1 = 0, q2 = 0, q3 = 0
         q1 = q2 = q3 = 0.0
-        
+
         # VBA: If s1 > l1 Then q1 = q1 + a1 * (s1 - l1)
         if s1 > self.l1:
             q1 = q1 + self.a1 * (s1 - self.l1)
-            
+
         # VBA: If s1 > l2 Then q1 = q1 + a2 * (s1 - l2)
         if s1 > self.l2:
             q1 = q1 + self.a2 * (s1 - self.l2)
-            
+
         # VBA: If s2 > l3 Then q2 = a3 * (s2 - l3)
         if s2 > self.l3:
             q2 = self.a3 * (s2 - self.l3)
-            
+
         # VBA: If s3 > l4 Then q3 = a4 * (s3 - l4)
         if s3 > self.l4:
             q3 = self.a4 * (s3 - self.l4)
-        
+
         # VBA: s1_new = (1 - b1 * t) * s1 - q1 * t + r
         s1_new = (1 - self.b1 * t) * s1 - q1 * t + r
-        
+
         # VBA: s2_new = (1 - b2 * t) * s2 - q2 * t + b1 * s1 * t
         s2_new = (1 - self.b2 * t) * s2 - q2 * t + self.b1 * s1 * t
 
         # VBA: s3_new = (1 - b3 * t) * s3 - q3 * t + b2 * s2 * t
         s3_new = (1 - self.b3 * t) * s3 - q3 * t + self.b2 * s2 * t
-        
+
         # VBA: If s1_new < 0 Then s1_new = 0
         if s1_new < 0:
             s1_new = 0
-            
+
         # VBA: If s2_new < 0 Then s2_new = 0
         if s2_new < 0:
             s2_new = 0
-            
+
         # VBA: If s3_new < 0 Then s3_new = 0
         if s3_new < 0:
             s3_new = 0
-        
+
         return s1_new, s2_new, s3_new
 
     def calc_rain_timelapse(self, mesh: Mesh, guidance_grib2: Dict[str, Any], data_key: str = 'data') -> List[GuidanceTimeSeries]:
@@ -367,34 +367,34 @@ class CalculationService:
 
             # VBA配列は1-based、Pythonは0-basedなので変換
             python_swi_index = swi_index - 1
-            
+
             if (python_swi_index >= len(swi_grib2['swi']) or
                 python_swi_index >= len(swi_grib2['first_tunk']) or
                 python_swi_index >= len(swi_grib2['second_tunk'])):
                 return []
-            
+
             # VBA: swi = swi_grib2.swi(swi_index) / 10
             swi = swi_grib2['swi'][python_swi_index] / 10
-            
+
             # VBA: first_tunk = swi_grib2.first_tunk(swi_index) / 10
             first_tunk = swi_grib2['first_tunk'][python_swi_index] / 10
-            
+
             # VBA: second_tunk = swi_grib2.second_tunk(swi_index) / 10
             second_tunk = swi_grib2['second_tunk'][python_swi_index] / 10
-            
+
             # VBA: third_tunk = swi - first_tunk - second_tunk
             third_tunk = swi - first_tunk - second_tunk
-            
+
             # guidance_indexは上で既に計算済み
             python_guidance_index = guidance_index - 1
-            
+
             # VBA: ReDim swi_time_siries(UBound(guidance_grib2.data) + 1)
             swi_time_series = []
-            
+
             # VBA: swi_time_siries(1).ft = 0
             # VBA: swi_time_siries(1).value = swi
             swi_time_series.append(SwiTimeSeries(ft=0, value=swi))
-            
+
             # VBA: tmp_f = 0, tmp_s = 0, tmp_t = 0 (VBAでは初期化)
             # しかし実際には初期タンク値が使用される
             current_first_tunk = first_tunk
@@ -422,9 +422,9 @@ class CalculationService:
                     current_first_tunk = tmp_f
                     current_second_tunk = tmp_s
                     current_third_tunk = tmp_t
-            
+
             return swi_time_series
-            
+
         except Exception as e:
             logger.error(f"SWI calculation error for mesh {mesh.code}: {e}")
             return []
@@ -659,7 +659,7 @@ class CalculationService:
             for area in areas:
                 # VBA: prefectures(i).areas(j).risk_timeline = calc_risk_timeline(prefectures(i).areas(j).meshes)
                 area.risk_timeline = self.calc_risk_timeline(area.meshes)
-                
+
         except Exception as e:
             logger.error(f"Area calculations error: {e}")
 

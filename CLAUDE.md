@@ -115,145 +115,6 @@ dist/assets/index-CEVENH_f.js   697.53 kB │ gzip: 220.82 kB
 - 開発環境と本番環境の完全な動作保証
 
 ---
-**最終更新**: 2026年1月10日
-**バージョン**: 8.4.0（大規模リファクタリング・TypeScriptビルド最適化完了版）
-**作成者**: Claude (Anthropic)
-**プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・セッションベースAPI・型安全性強化版）
-
----
-
-## 🎉 **2026年1月10日 大規模リファクタリング完了**
-
-### ✅ **コード簡素化とユーティリティ抽出**
-
-プロジェクト全体の保守性向上と可読性改善のため、大規模なリファクタリングを実施しました。
-
-#### **主な改善内容**
-
-**1. TypeScriptビルドエラー修正**
-- RISK_COLORSのインデックスアクセスに型アサーションを追加
-- CalculationResult型のインポート追加
-- LightweightPrefectureDataとPrefectureの型互換性確保
-
-**修正ファイル**:
-- `client/src/components/map/SimpleCanvasLayer.tsx`
-  - 型安全なRISK_COLORSアクセス実装
-  ```typescript
-  color: RISK_COLORS[riskValue as keyof typeof RISK_COLORS]
-  ```
-
-- `client/src/services/mockProductionApi.ts`
-  - 必要な型定義のインポート追加
-  ```typescript
-  import { LightweightCalculationResult, CalculationResult } from '../types/api';
-  ```
-
-- `client/src/pages/ProductionSession.tsx`
-  - 適切な型キャストによる互換性確保
-  ```typescript
-  prefectures={Object.values(prefectureRiskData).filter(p => p !== undefined) as PrefectureType[]}
-  ```
-
-#### **ビルド結果**
-
-```bash
-✓ 208 modules transformed.
-✓ built in 4.49s
-
-dist/index.html                  0.48 kB │ gzip:   0.36 kB
-dist/assets/index-DWNIHwSk.css  15.92 kB │ gzip:   6.60 kB
-dist/assets/index-CEVENH_f.js   697.53 kB │ gzip: 220.82 kB
-```
-
-**成果**:
-- ✅ 全TypeScriptエラー解消
-- ✅ プロダクションビルド成功
-- ✅ 型安全性の向上
-- ✅ コード品質の改善
-
-#### **技術的特徴**
-
-**型安全性の強化**:
-- `as keyof typeof` パターンによる安全なディクショナリアクセス
-- 適切な型アサーションによる互換性確保
-- TypeScript strict mode対応
-
-**ビルド最適化**:
-- バンドルサイズ: 697KB (gzip: 220KB)
-- 全モジュールの正常なトランスパイル
-- 開発環境と本番環境の完全な動作保証
-
----
-**最終更新**: 2026年1月10日
-**バージョン**: 8.4.0（大規模リファクタリング・TypeScriptビルド最適化完了版）
-**作成者**: Claude (Anthropic)
-**プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・セッションベースAPI・型安全性強化版）
-
----
-
-## 🎉 **2026年1月10日 大規模リファクタリング完了**
-
-### ✅ **コード簡素化とユーティリティ抽出**
-
-プロジェクト全体の保守性向上と可読性改善のため、大規模なリファクタリングを実施しました。
-
-#### **主な改善内容**
-
-**1. TypeScriptビルドエラー修正**
-- RISK_COLORSのインデックスアクセスに型アサーションを追加
-- CalculationResult型のインポート追加
-- LightweightPrefectureDataとPrefectureの型互換性確保
-
-**修正ファイル**:
-- `client/src/components/map/SimpleCanvasLayer.tsx`
-  - 型安全なRISK_COLORSアクセス実装
-  ```typescript
-  color: RISK_COLORS[riskValue as keyof typeof RISK_COLORS]
-  ```
-
-- `client/src/services/mockProductionApi.ts`
-  - 必要な型定義のインポート追加
-  ```typescript
-  import { LightweightCalculationResult, CalculationResult } from '../types/api';
-  ```
-
-- `client/src/pages/ProductionSession.tsx`
-  - 適切な型キャストによる互換性確保
-  ```typescript
-  prefectures={Object.values(prefectureRiskData).filter(p => p !== undefined) as PrefectureType[]}
-  ```
-
-#### **ビルド結果**
-
-```bash
-✓ 208 modules transformed.
-✓ built in 4.49s
-
-dist/index.html                  0.48 kB │ gzip:   0.36 kB
-dist/assets/index-DWNIHwSk.css  15.92 kB │ gzip:   6.60 kB
-dist/assets/index-CEVENH_f.js   697.53 kB │ gzip: 220.82 kB
-```
-
-**成果**:
-- ✅ 全TypeScriptエラー解消
-- ✅ プロダクションビルド成功
-- ✅ 型安全性の向上
-- ✅ コード品質の改善
-
-#### **技術的特徴**
-
-**型安全性の強化**:
-- `as keyof typeof` パターンによる安全なディクショナリアクセス
-- 適切な型アサーションによる互換性確保
-- TypeScript strict mode対応
-
-**ビルド最適化**:
-- バンドルサイズ: 697KB (gzip: 220KB)
-- 全モジュールの正常なトランスパイル
-- 開発環境と本番環境の完全な動作保証
-
-
----
 
 ## 🎉 **2026年1月16日 重大バグ修正とUI改善**
 
@@ -456,7 +317,77 @@ export default defineConfig({
 - 本番環境固有の問題発見のため、開発環境も3.9に揃えることを推奨
 
 ---
-**最終更新**: 2026年1月21日
-**バージョン**: 8.7.0（本番環境デプロイ修正版）
+
+## 🚀 **2026年1月25日 サーバー構造リファクタリング**
+
+### ✅ **フォルダ構造の整理**
+
+本番環境デプロイ時にPythonがモジュールを発見できない問題を解決するため、フォルダ構造を整理しました。
+
+#### **問題**
+- `server/models/` と `server/src/models/` に同名フォルダが存在
+- `server/services/` と `server/src/services/` に同名フォルダが存在
+- Pythonが`src/`内の空フォルダを参照してモジュールが見つからないエラー
+
+#### **修正内容**
+
+**フォルダ構造の統一**:
+```
+server/
+├── app.py          # エントリーポイント
+├── wsgi.py         # WSGI エントリーポイント
+└── src/
+    ├── api/
+    │   ├── controllers/  # APIコントローラー
+    │   └── routes/       # ルーティング定義
+    ├── config/           # 設定サービス
+    ├── models/           # データモデル (移動済み)
+    ├── services/         # ビジネスロジック (移動済み)
+    └── utils/            # ユーティリティ
+```
+
+- `server/models/*` → `server/src/models/` に移動
+- `server/services/*` → `server/src/services/` に移動
+- 古い重複フォルダを削除
+
+### ✅ **APIエンドポイントプレフィックスの変更**
+
+本番環境でリバースプロキシが `/api` を付与するため、Python側のエンドポイントから `/api` プレフィックスを削除しました。
+
+#### **変更前後**
+| 変更前 | 変更後 |
+|--------|--------|
+| `/api/health` | `/health` |
+| `/api/cache/list` | `/cache/list` |
+| `/api/session/<id>` | `/session/<id>` |
+| `/api/rainfall-forecast` | `/rainfall-forecast` |
+
+#### **設定の一元化**
+
+`app.py` にAPIプレフィックス設定を集約：
+```python
+# API設定（エンドポイントプレフィックスの一元管理）
+API_PREFIX = ''  # 環境側で /api を付与する場合は空文字列
+```
+
+プレフィックスを変更したい場合は、この1箇所を変更するだけで全エンドポイントに反映されます。
+
+#### **修正ファイル**
+- `server/app.py` - API_PREFIX設定追加、Blueprint登録の統一
+- `server/src/api/routes/main_routes.py` - `/api` プレフィックス削除
+- `server/src/api/routes/cache_routes.py` - `/api` プレフィックス削除
+- `server/src/api/routes/rainfall_routes.py` - `/api` プレフィックス削除
+- `server/src/api/routes/test_routes.py` - `/api` プレフィックス削除
+- `server/src/api/controllers/main_controller.py` - エンドポイント一覧更新
+- `server/src/api/controllers/session_controller.py` - ドキュメント文字列更新
+
+#### **効果**
+- ✅ 本番環境でモジュールが正しく読み込まれる
+- ✅ エンドポイント設定が1箇所で管理可能
+- ✅ リバースプロキシとの連携が容易
+
+---
+**最終更新**: 2026年1月25日
+**バージョン**: 8.8.0（サーバー構造リファクタリング版）
 **作成者**: Claude (Anthropic)
 **プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・セッションベースAPI・本番環境対応版）

@@ -33,7 +33,7 @@ class SwiTimeSeries:
 @dataclass
 class GuidanceTimeSeries:
     """ガイダンス時系列データ（降水量）"""
-    ft: int  # 予測時間（時間）  
+    ft: int  # 予測時間（時間）
     value: float  # 降水量値
 
 
@@ -127,7 +127,7 @@ class Prefecture:
 # 都道府県マスターデータ
 PREFECTURES_MASTER = {
     'shiga': '滋賀県',
-    'kyoto': '京都府', 
+    'kyoto': '京都府',
     'osaka': '大阪府',
     'hyogo': '兵庫県',
     'nara': '奈良県',
