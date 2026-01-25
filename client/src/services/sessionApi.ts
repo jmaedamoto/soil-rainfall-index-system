@@ -5,20 +5,13 @@ import type {
   RiskAtTimeResponse,
   MeshDetailResponse
 } from '../types/api';
-
-// API Base URL
-const getApiBaseUrl = () => {
-  if (process.env.NODE_ENV === 'production') {
-    return '/api';
-  }
-  return 'http://localhost:5000/api';
-};
+import { API_BASE_URL } from '../config/apiConfig';
 
 class SessionAPIClient {
   private apiBaseUrl: string;
 
   constructor() {
-    this.apiBaseUrl = getApiBaseUrl();
+    this.apiBaseUrl = API_BASE_URL;
   }
 
   /**

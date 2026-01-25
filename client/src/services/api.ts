@@ -1,14 +1,10 @@
 import axios from 'axios';
 import { CalculationParams, CalculationResult, HealthStatus, LightweightCalculationResult } from '../types/api';
 import { mockProductionApi } from './mockProductionApi';
-
-// APIベースURL（環境に応じて自動設定）
-const API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? '/api'  // 本番環境：同一オリジンの相対パス
-  : 'http://localhost:5000/api';  // 開発環境：localhost指定
+import { API_BASE_URL } from '../config/apiConfig';
 
 // モックモードフラグ（開発環境でのみ有効）
-export const USE_MOCK_PRODUCTION_API = process.env.NODE_ENV !== 'production' && true;
+export const USE_MOCK_PRODUCTION_API = !import.meta.env.PROD && true;
 
 // Axiosインスタンスの作成
 const apiClient = axios.create({
