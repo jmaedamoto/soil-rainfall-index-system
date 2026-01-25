@@ -222,7 +222,13 @@ class MainController:
             }), 500
 
     def production_soil_rainfall_index_with_urls(self):
-        """本番テスト用エンドポイント（SWIとガイダンスの初期時刻を個別指定）"""
+        """
+        本番用エンドポイント（SWIとガイダンスの初期時刻を個別指定）
+
+        重複計算防止機能:
+        - 同じ条件のリクエストが既に計算中の場合、待機して完了を待つ
+        - 計算完了後のベースセッションIDを共有して返す
+        """
         try:
             data = request.get_json()
             if not data:
@@ -266,7 +272,7 @@ class MainController:
                     "message": f"guidance_initial日時形式エラー: {e}"
                 }), 400
 
-            logger.info(f"本番テスト実行: SWI初期時刻={swi_initial}, ガイダンス初期時刻={guidance_initial}")
+            logger.info(f"本番処理開始: SWI初期時刻={swi_initial}, ガイダンス初期時刻={guidance_initial}")
 
             # 設定ファイルからURL構築
             swi_url = self.config_service.build_swi_url(swi_initial)
@@ -278,80 +284,150 @@ class MainController:
                 guidance_initial.isoformat()
             )
 
-            # キャッシュ存在確認
-            cache_exists = self.cache_service.exists(cache_key)
-            cache_metadata = None
-            if cache_exists:
-                cache_metadata = self.cache_service.get_metadata(cache_key)
+            # ========================================
+            # 重複計算防止: ロック機構
+            # ========================================
 
-            # メイン処理実行（個別URLを使用、use_cache=True でキャッシュ有効）
-            result = self.main_service.main_process_from_separate_urls(
-                swi_url, guidance_url, use_cache=True)
+            # 既に計算中かチェック
+            if self.cache_service.is_calculation_in_progress(cache_key):
+                logger.info(f"計算中検出、待機開始: {cache_key}")
 
-            # セッションサービスが有効な場合、セッション作成して軽量レスポンスを返す
-            if self.session_service:
-                # セッション作成
-                session_id = self.session_service.create_session(
-                    result['prefectures'],
-                    swi_initial.isoformat(),
-                    guidance_initial.isoformat(),
-                    datetime.now().isoformat()
+                # 計算完了を待機（最大5分）
+                success, base_session_id = self.cache_service.wait_for_calculation(
+                    cache_key, timeout_seconds=300, poll_interval=2.0
                 )
 
-                # 利用可能な時刻を抽出（最初のメッシュから）
-                available_times = []
-                first_pref = next(iter(result['prefectures'].values()))
-                if first_pref['areas'] and first_pref['areas'][0]['meshes']:
-                    first_mesh = first_pref['areas'][0]['meshes'][0]
-                    available_times = sorted(set(
-                        [point['ft'] for point in first_mesh['risk_3hour_max_timeline']] +
-                        [point['ft'] for point in first_mesh['risk_hourly_timeline']]
-                    ))
+                if success and base_session_id and self.session_service:
+                    # ベースセッションが存在するか確認
+                    session = self.session_service.get_session(base_session_id)
+                    if session:
+                        logger.info(f"既存セッション再利用: {base_session_id}")
 
-                # 軽量レスポンスを返す
-                available_prefs = list(result['prefectures'].keys())
+                        # 利用可能な時刻を抽出
+                        available_times = []
+                        first_pref = next(iter(session['prefectures'].values()))
+                        if first_pref['areas'] and first_pref['areas'][0]['meshes']:
+                            first_mesh = first_pref['areas'][0]['meshes'][0]
+                            available_times = sorted(set(
+                                [point['ft'] for point in first_mesh.get('risk_3hour_max_timeline', [])] +
+                                [point['ft'] for point in first_mesh.get('risk_hourly_timeline', [])]
+                            ))
 
-                return jsonify({
-                    "status": "success",
-                    "session_id": session_id,
-                    "swi_initial_time": swi_initial.isoformat() + 'Z',
-                    "guidance_initial_time": guidance_initial.isoformat() + 'Z',
-                    "available_prefectures": available_prefs,
-                    "available_times": available_times,
-                    "cache_info": {
-                        "cache_key": cache_key,
-                        "cache_hit": cache_exists,
-                        "cache_metadata": cache_metadata
-                    },
-                    "used_urls": {
-                        "swi_url": swi_url,
+                        return jsonify({
+                            "status": "success",
+                            "session_id": base_session_id,
+                            "swi_initial_time": swi_initial.isoformat() + 'Z',
+                            "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+                            "available_prefectures": list(session['prefectures'].keys()),
+                            "available_times": available_times,
+                            "cache_info": {
+                                "cache_key": cache_key,
+                                "cache_hit": True,
+                                "waited_for_calculation": True
+                            },
+                            "used_urls": {
+                                "swi_url": swi_url,
+                                "swi_initial_time": swi_initial.isoformat() + 'Z',
+                                "guidance_url": guidance_url,
+                                "guidance_initial_time": guidance_initial.isoformat() + 'Z'
+                            }
+                        })
+
+                # 待機失敗（タイムアウトまたはセッション不在）→ 自分で計算を試みる
+                logger.warning(f"待機失敗、自身で計算を試みます: {cache_key}")
+
+            # 計算ロック取得を試みる
+            lock_acquired = self.cache_service.acquire_calculation_lock(cache_key)
+            session_id = None
+
+            try:
+                # キャッシュ存在確認
+                cache_exists = self.cache_service.exists(cache_key)
+                cache_metadata = None
+                if cache_exists:
+                    cache_metadata = self.cache_service.get_metadata(cache_key)
+
+                # メイン処理実行（個別URLを使用、use_cache=True でキャッシュ有効）
+                result = self.main_service.main_process_from_separate_urls(
+                    swi_url, guidance_url, use_cache=True)
+
+                # セッションサービスが有効な場合、セッション作成して軽量レスポンスを返す
+                if self.session_service:
+                    # ベースセッション作成
+                    session_id = self.session_service.create_session(
+                        result['prefectures'],
+                        swi_initial.isoformat(),
+                        guidance_initial.isoformat(),
+                        datetime.now().isoformat()
+                    )
+
+                    # ロック解放時にベースセッションIDを保存
+                    if lock_acquired:
+                        self.cache_service.release_calculation_lock(cache_key, session_id)
+
+                    # 利用可能な時刻を抽出（最初のメッシュから）
+                    available_times = []
+                    first_pref = next(iter(result['prefectures'].values()))
+                    if first_pref['areas'] and first_pref['areas'][0]['meshes']:
+                        first_mesh = first_pref['areas'][0]['meshes'][0]
+                        available_times = sorted(set(
+                            [point['ft'] for point in first_mesh['risk_3hour_max_timeline']] +
+                            [point['ft'] for point in first_mesh['risk_hourly_timeline']]
+                        ))
+
+                    # 軽量レスポンスを返す
+                    available_prefs = list(result['prefectures'].keys())
+
+                    return jsonify({
+                        "status": "success",
+                        "session_id": session_id,
                         "swi_initial_time": swi_initial.isoformat() + 'Z',
-                        "guidance_url": guidance_url,
-                        "guidance_initial_time": guidance_initial.isoformat() + 'Z'
-                    }
-                })
+                        "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+                        "available_prefectures": available_prefs,
+                        "available_times": available_times,
+                        "cache_info": {
+                            "cache_key": cache_key,
+                            "cache_hit": cache_exists,
+                            "cache_metadata": cache_metadata
+                        },
+                        "used_urls": {
+                            "swi_url": swi_url,
+                            "swi_initial_time": swi_initial.isoformat() + 'Z',
+                            "guidance_url": guidance_url,
+                            "guidance_initial_time": guidance_initial.isoformat() + 'Z'
+                        }
+                    })
 
-            # セッションサービスが無効な場合、従来通り全データを返す
-            result["status"] = "success"
+                # セッションサービスが無効な場合、従来通り全データを返す
+                if lock_acquired:
+                    self.cache_service.release_calculation_lock(cache_key)
 
-            # 使用したURLとキャッシュ情報も返却
-            result["used_urls"] = {
-                "swi_url": swi_url,
-                "swi_initial_time": swi_initial.isoformat() + 'Z',
-                "guidance_url": guidance_url,
-                "guidance_initial_time": guidance_initial.isoformat() + 'Z'
-            }
+                result["status"] = "success"
 
-            result["cache_info"] = {
-                "cache_key": cache_key,
-                "cache_hit": cache_exists,
-                "cache_metadata": cache_metadata
-            }
+                # 使用したURLとキャッシュ情報も返却
+                result["used_urls"] = {
+                    "swi_url": swi_url,
+                    "swi_initial_time": swi_initial.isoformat() + 'Z',
+                    "guidance_url": guidance_url,
+                    "guidance_initial_time": guidance_initial.isoformat() + 'Z'
+                }
 
-            return jsonify(result)
+                result["cache_info"] = {
+                    "cache_key": cache_key,
+                    "cache_hit": cache_exists,
+                    "cache_metadata": cache_metadata
+                }
+
+                return jsonify(result)
+
+            except Exception as e:
+                # エラー時はロックを解放
+                if lock_acquired:
+                    self.cache_service.release_calculation_lock(cache_key)
+                raise
 
         except Exception as e:
-            logger.error(f"本番テスト処理エラー: {e}")
+            logger.error(f"本番処理エラー: {e}")
             return jsonify({
                 "status": "error",
                 "message": str(e)

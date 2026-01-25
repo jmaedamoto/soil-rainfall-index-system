@@ -6,14 +6,16 @@
 - キャッシュキー生成（SWI初期時刻 + ガイダンス初期時刻）
 - 自動TTL管理（デフォルト7日）
 - メタデータ管理
+- 計算中ロック機能（重複計算防止）
 """
 
 import gzip
 import json
 import logging
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Tuple
 import os
 
 logger = logging.getLogger(__name__)
@@ -331,14 +333,211 @@ class CacheService:
             "ttl_days": self.default_ttl_days
         }
 
+    # ========================================
+    # 計算中ロック機能（重複計算防止）
+    # ========================================
+
+    def _get_lock_path(self, cache_key: str) -> Path:
+        """計算中ロックファイルパス取得（.calculating.json）"""
+        return self.cache_dir / f"{cache_key}.calculating.json"
+
+    def is_calculation_in_progress(self, cache_key: str) -> bool:
+        """
+        計算中かどうか確認
+
+        Args:
+            cache_key: キャッシュキー
+
+        Returns:
+            計算中の場合True
+        """
+        lock_path = self._get_lock_path(cache_key)
+        if not lock_path.exists():
+            return False
+
+        # ロックファイルのタイムアウトチェック（10分）
+        try:
+            with open(lock_path, 'r', encoding='utf-8') as f:
+                lock_data = json.load(f)
+            started_at = datetime.fromisoformat(lock_data['started_at'])
+            if datetime.now() - started_at > timedelta(minutes=10):
+                # タイムアウト: 古いロックを削除
+                logger.warning(f"計算ロックタイムアウト: {cache_key}")
+                self.release_calculation_lock(cache_key)
+                return False
+            return True
+        except Exception as e:
+            logger.error(f"ロックファイル読み込みエラー: {cache_key} - {e}")
+            return False
+
+    def acquire_calculation_lock(self, cache_key: str) -> bool:
+        """
+        計算ロックを取得
+
+        Args:
+            cache_key: キャッシュキー
+
+        Returns:
+            ロック取得成功: True、既にロック中: False
+        """
+        lock_path = self._get_lock_path(cache_key)
+
+        # 既にロック中かチェック
+        if self.is_calculation_in_progress(cache_key):
+            logger.info(f"計算ロック取得失敗（既にロック中）: {cache_key}")
+            return False
+
+        try:
+            lock_data = {
+                "cache_key": cache_key,
+                "started_at": datetime.now().isoformat(),
+                "base_session_id": None  # 計算完了後に設定
+            }
+            with open(lock_path, 'w', encoding='utf-8') as f:
+                json.dump(lock_data, f, ensure_ascii=False, indent=2)
+
+            logger.info(f"計算ロック取得成功: {cache_key}")
+            return True
+
+        except Exception as e:
+            logger.error(f"計算ロック取得エラー: {cache_key} - {e}")
+            return False
+
+    def release_calculation_lock(self, cache_key: str, base_session_id: str = None):
+        """
+        計算ロックを解放
+
+        Args:
+            cache_key: キャッシュキー
+            base_session_id: 計算完了後のベースセッションID（オプション）
+        """
+        lock_path = self._get_lock_path(cache_key)
+
+        if base_session_id:
+            # ベースセッションIDを保存してからロック解放
+            try:
+                if lock_path.exists():
+                    with open(lock_path, 'r', encoding='utf-8') as f:
+                        lock_data = json.load(f)
+                    lock_data['base_session_id'] = base_session_id
+                    lock_data['completed_at'] = datetime.now().isoformat()
+                    with open(lock_path, 'w', encoding='utf-8') as f:
+                        json.dump(lock_data, f, ensure_ascii=False, indent=2)
+                    logger.info(f"ベースセッションID保存: {cache_key} -> {base_session_id}")
+            except Exception as e:
+                logger.error(f"ベースセッションID保存エラー: {cache_key} - {e}")
+
+        # ロックファイルは削除せず、completed_atがあれば完了とみなす
+        # これにより、待機中のリクエストがベースセッションIDを取得可能
+        logger.info(f"計算ロック解放: {cache_key}")
+
+    def get_base_session_id(self, cache_key: str) -> Optional[str]:
+        """
+        計算完了後のベースセッションIDを取得
+
+        Args:
+            cache_key: キャッシュキー
+
+        Returns:
+            ベースセッションID、未完了または存在しない場合None
+        """
+        lock_path = self._get_lock_path(cache_key)
+
+        if not lock_path.exists():
+            return None
+
+        try:
+            with open(lock_path, 'r', encoding='utf-8') as f:
+                lock_data = json.load(f)
+            return lock_data.get('base_session_id')
+        except Exception as e:
+            logger.error(f"ベースセッションID取得エラー: {cache_key} - {e}")
+            return None
+
+    def wait_for_calculation(
+        self,
+        cache_key: str,
+        timeout_seconds: int = 300,
+        poll_interval: float = 1.0
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        計算完了を待機
+
+        Args:
+            cache_key: キャッシュキー
+            timeout_seconds: タイムアウト秒数（デフォルト5分）
+            poll_interval: ポーリング間隔秒数
+
+        Returns:
+            (成功フラグ, ベースセッションID)
+            - 計算完了: (True, session_id)
+            - タイムアウト: (False, None)
+        """
+        logger.info(f"計算完了待機開始: {cache_key} (timeout={timeout_seconds}s)")
+        start_time = time.time()
+
+        while time.time() - start_time < timeout_seconds:
+            # ベースセッションIDが設定されているか確認
+            base_session_id = self.get_base_session_id(cache_key)
+            if base_session_id:
+                elapsed = time.time() - start_time
+                logger.info(f"計算完了検出: {cache_key} ({elapsed:.1f}秒待機)")
+                return True, base_session_id
+
+            # 計算中でなければ（異常終了など）待機終了
+            if not self.is_calculation_in_progress(cache_key):
+                logger.warning(f"計算中ステータス消失: {cache_key}")
+                return False, None
+
+            time.sleep(poll_interval)
+
+        logger.warning(f"計算完了待機タイムアウト: {cache_key}")
+        return False, None
+
+    def cleanup_calculation_locks(self, max_age_minutes: int = 30) -> int:
+        """
+        古い計算ロックファイルを削除
+
+        Args:
+            max_age_minutes: 削除対象の経過時間（分）
+
+        Returns:
+            削除したロックファイル数
+        """
+        deleted_count = 0
+        cutoff_time = datetime.now() - timedelta(minutes=max_age_minutes)
+
+        for lock_path in self.cache_dir.glob("*.calculating.json"):
+            try:
+                with open(lock_path, 'r', encoding='utf-8') as f:
+                    lock_data = json.load(f)
+                started_at = datetime.fromisoformat(lock_data['started_at'])
+                if started_at < cutoff_time:
+                    lock_path.unlink()
+                    deleted_count += 1
+                    logger.info(f"古い計算ロック削除: {lock_path.name}")
+            except Exception as e:
+                logger.error(f"計算ロッククリーンアップエラー: {lock_path} - {e}")
+
+        return deleted_count
+
 
 # シングルトンインスタンス
 _cache_service_instance = None
+
+# デフォルトキャッシュディレクトリ（開発環境用）
+DEFAULT_CACHE_DIR = "cache"
+# 本システム用サブフォルダ名
+DOSYA_SUBFOLDER = "dosya"
 
 
 def get_cache_service() -> CacheService:
     """
     CacheServiceシングルトン取得
+
+    環境変数 CACHE_DIR でキャッシュルートを指定可能。
+    - 未設定の場合: "cache" (開発環境用、そのまま使用)
+    - 本番環境: "/var/cache/myapp" を設定 → "/var/cache/myapp/dosya" を使用
 
     Returns:
         CacheServiceインスタンス
@@ -346,6 +545,14 @@ def get_cache_service() -> CacheService:
     global _cache_service_instance
 
     if _cache_service_instance is None:
-        _cache_service_instance = CacheService()
+        cache_root = os.environ.get("CACHE_DIR")
+        if cache_root:
+            # 本番環境: 共有ルート配下の dosya サブフォルダを使用
+            cache_dir = os.path.join(cache_root, DOSYA_SUBFOLDER)
+        else:
+            # 開発環境: デフォルトの cache フォルダを使用
+            cache_dir = DEFAULT_CACHE_DIR
+        logger.info(f"キャッシュディレクトリ設定: {cache_dir}")
+        _cache_service_instance = CacheService(cache_dir=cache_dir)
 
     return _cache_service_instance

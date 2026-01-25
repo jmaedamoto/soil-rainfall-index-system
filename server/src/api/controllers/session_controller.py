@@ -440,7 +440,7 @@ class SessionController:
 
     def recalculate_with_adjusted_rainfall(self, session_id: str):
         """
-        雨量調整後の再計算（セッションベース・最適化版）
+        雨量調整後の再計算（フォークセッション方式）
 
         POST /session/<session_id>/recalculate
 
@@ -453,13 +453,13 @@ class SessionController:
             }
 
         Returns:
-            - セッションを更新（調整対象メッシュのみ）
+            - 新しいフォークセッションを作成（ベースセッションは変更しない）
             - 初期時刻のメッシュリスクのみ返す（軽量レスポンス）
 
-        最適化:
-            - GRIB2解析をスキップ（セッションの既存データを使用）
-            - 調整対象メッシュのみ処理
-            - 辞書形式のまま処理（Prefectureオブジェクト変換なし）
+        フォークセッション方式:
+            - ベースセッション（計算結果）は複数ユーザーで共有可能
+            - 雨量編集時はフォークセッション（差分のみ）を作成
+            - 各ユーザーの編集は独立し、相互に干渉しない
         """
         try:
             # セッション取得
@@ -479,9 +479,17 @@ class SessionController:
                     "error": "Missing 'adjustments' in request body"
                 }), 400
 
-            logger.info(f"Session {session_id}: 雨量調整再計算開始")
+            logger.info(f"Session {session_id}: 雨量調整再計算開始（フォーク方式）")
 
-            # セッションから既存の辞書形式データを取得
+            # ベースセッションIDを特定
+            if session.get('is_fork'):
+                base_session_id = session.get('base_session_id')
+                logger.info(f"フォークセッションからの再編集: base={base_session_id}")
+            else:
+                base_session_id = session_id
+                logger.info(f"ベースセッションからの初回編集: base={base_session_id}")
+
+            # セッションからprefecturesを取得（フォークの場合はマージ済み）
             existing_prefectures_dict = session['prefectures']
 
             # adjustmentsを配列形式から辞書形式に変換
@@ -499,9 +507,9 @@ class SessionController:
             from models import Mesh, SwiTimeSeries, Risk
             calculation_service = CalculationService()
 
-            # 調整対象メッシュを特定
+            # 再計算済みメッシュを保存する辞書
+            recalculated_meshes = {}
             adjusted_mesh_count = 0
-            adjusted_area_set = set()
 
             # 各府県・市町村・メッシュを走査して雨量調整を適用
             for pref_code, pref_dict in existing_prefectures_dict.items():
@@ -509,20 +517,21 @@ class SessionController:
                     area_key = f"{pref_dict['name']}_{area_dict['name']}"
 
                     if area_key in adjustments:
-                        adjusted_area_set.add(area_key)
                         adjusted_rain = adjustments[area_key]
 
                         # この市町村の全メッシュを処理
                         for mesh_dict in area_dict['meshes']:
+                            mesh_code = mesh_dict['code']
+
                             # 雨量timelineを調整
-                            mesh_dict['rain_timeline'] = [
+                            new_rain_timeline = [
                                 {"ft": ft, "value": adjusted_rain[ft]}
                                 for ft in sorted(adjusted_rain.keys())
                             ]
 
                             # 調整された3時間雨量から1時間雨量を推定
                             rain_1hour_estimated = []
-                            for rain_point in mesh_dict['rain_timeline']:
+                            for rain_point in new_rain_timeline:
                                 ft_3h = rain_point['ft']
                                 rain_3h = rain_point['value']
                                 rain_1h_avg = rain_3h / 3.0
@@ -537,7 +546,7 @@ class SessionController:
                             # 一時的なMeshオブジェクトを作成してSWI・リスクを再計算
                             temp_mesh = Mesh(
                                 area_name=area_dict['name'],
-                                code=mesh_dict['code'],
+                                code=mesh_code,
                                 lon=mesh_dict['lon'],
                                 lat=mesh_dict['lat'],
                                 x=0, y=0,
@@ -553,7 +562,7 @@ class SessionController:
                                 rain_1hour_max=[],
                                 rain_3hour=[
                                     SwiTimeSeries(ft=p['ft'], value=p['value'])
-                                    for p in mesh_dict['rain_timeline']
+                                    for p in new_rain_timeline
                                 ],
                                 risk_hourly=[],
                                 risk_3hour_max=[]
@@ -562,56 +571,45 @@ class SessionController:
                             # SWI・リスク再計算
                             calculation_service.recalculate_swi_and_risk(temp_mesh)
 
-                            # 結果を辞書に戻す
-                            mesh_dict['swi_timeline'] = [
-                                {"ft": s.ft, "value": s.value} for s in temp_mesh.swi
-                            ]
-                            mesh_dict['risk_3hour_max_timeline'] = [
-                                {"ft": r.ft, "value": r.value} for r in temp_mesh.risk_3hour_max
-                            ]
+                            # 再計算結果を保存（フォークセッション用）
+                            recalculated_meshes[mesh_code] = {
+                                'rain_timeline': new_rain_timeline,
+                                'swi_timeline': [
+                                    {"ft": s.ft, "value": s.value} for s in temp_mesh.swi
+                                ],
+                                'risk_3hour_max_timeline': [
+                                    {"ft": r.ft, "value": r.value} for r in temp_mesh.risk_3hour_max
+                                ]
+                            }
 
                             adjusted_mesh_count += 1
 
             logger.info(f"調整メッシュ数: {adjusted_mesh_count}件")
 
-            # 調整された市町村のリスクタイムラインを再集計
-            for pref_code, pref_dict in existing_prefectures_dict.items():
-                for area_dict in pref_dict['areas']:
-                    area_key = f"{pref_dict['name']}_{area_dict['name']}"
+            # フォークセッションを作成
+            fork_session_id = self.session_service.create_fork_session(
+                base_session_id=base_session_id,
+                adjustments=adjustments_raw,  # 元の形式で保存
+                recalculated_meshes=recalculated_meshes
+            )
 
-                    if area_key in adjusted_area_set:
-                        # この市町村の全メッシュからリスクタイムラインを集計
-                        area_dict['risk_timeline'] = self._aggregate_area_risk_timeline(
-                            area_dict['meshes']
-                        )
+            if fork_session_id is None:
+                return jsonify({
+                    "status": "error",
+                    "error": "Failed to create fork session",
+                    "session_id": session_id
+                }), 500
 
-            # 調整された市町村を含む二次細分の集約を更新
-            for pref_code, pref_dict in existing_prefectures_dict.items():
-                for subdiv_dict in pref_dict.get('secondary_subdivisions', []):
-                    # この二次細分に調整された市町村が含まれるか確認
-                    subdiv_areas = subdiv_dict.get('area_names', [])
-                    if subdiv_areas and any(f"{pref_dict['name']}_{area_name}" in adjusted_area_set for area_name in subdiv_areas):
-                        # 二次細分のリスクタイムラインを再集計
-                        subdiv_dict['risk_timeline'] = self._aggregate_subdivision_risk_timeline(
-                            pref_dict, subdiv_areas
-                        )
-
-                # 府県全体のリスクタイムラインを更新
-                if any(area_key.startswith(pref_dict['name']) for area_key in adjusted_area_set):
-                    pref_dict['prefecture_risk_timeline'] = self._aggregate_prefecture_risk_timeline(
-                        pref_dict
-                    )
-
-            # セッションを更新
-            self.session_service.sessions[session_id]["prefectures"] = existing_prefectures_dict
-            self.session_service.sessions[session_id]["adjusted"] = True
-
-            logger.info(f"Session {session_id}: セッション更新完了")
+            logger.info(f"フォークセッション作成完了: {fork_session_id}")
 
             # 軽量レスポンス: 初期時刻（FT=0）のメッシュリスクと座標を返す
+            # フォークセッションから取得（マージ済み）
+            fork_session = self.session_service.get_session(fork_session_id)
+            merged_prefectures = fork_session['prefectures']
+
             mesh_risks = {}
             mesh_coords = {}
-            for pref_code, pref_dict in existing_prefectures_dict.items():
+            for pref_code, pref_dict in merged_prefectures.items():
                 for area_dict in pref_dict["areas"]:
                     for mesh_dict in area_dict["meshes"]:
                         risk_timeline = mesh_dict.get("risk_3hour_max_timeline", [])
@@ -629,7 +627,9 @@ class SessionController:
 
             return jsonify({
                 "status": "success",
-                "session_id": session_id,
+                "session_id": fork_session_id,  # 新しいフォークセッションID
+                "base_session_id": base_session_id,
+                "is_fork": True,
                 "adjusted": True,
                 "ft": 0,
                 "mesh_risks": mesh_risks,
