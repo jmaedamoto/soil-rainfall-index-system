@@ -399,9 +399,9 @@ API_PREFIX = ''  # 環境側で /api を付与する場合は空文字列
 | 環境 | 環境変数 CACHE_DIR | 実際のキャッシュフォルダ |
 |------|-------------------|------------------------|
 | 開発環境 | 未設定 | `cache` (相対パス) |
-| 本番環境 | `/var/cache/myapp` | `/var/cache/myapp/dosya` |
+| 本番環境 | `/var/cache/myapp/dosya` | `/var/cache/myapp/dosya` |
 
-本番環境では共有キャッシュルート（`/var/cache/myapp`）を環境変数に設定すると、本システムは自動的に`dosya`サブフォルダを使用します。
+本番環境では`wsgi.py`内で`CACHE_DIR`環境変数を設定しています。
 
 #### **修正ファイル**
 - `server/src/services/cache_service.py` - 環境変数`CACHE_DIR`対応
@@ -491,7 +491,79 @@ API_PREFIX = ''  # 環境側で /api を付与する場合は空文字列
 - `server/src/api/controllers/session_controller.py` - フォーク方式での再計算
 
 ---
-**最終更新**: 2026年1月25日
-**バージョン**: 8.9.0（重複計算防止・フォークセッション版）
+
+## 🚀 **2026年1月27日 本番環境修正・日時選択UI改善**
+
+### ✅ **WSGIエントリーポイント修正**
+
+mod_wsgi環境でモジュールが見つからない問題を修正しました。
+
+#### **問題**
+`from app import create_app` が `sys.path.insert` より前に配置されていたため、Pythonパスにモジュールを追加する前にインポートが実行されていた。
+
+#### **修正内容**
+
+**server/wsgi.py**:
+- インポート順序を修正（`sys.path.insert`の後に`from app import create_app`を配置）
+- `data_dir`を絶対パスに変更
+
+### ✅ **CACHE_DIR設定の簡素化**
+
+環境変数`CACHE_DIR`の設定方法を簡素化しました。
+
+#### **変更前後**
+
+| 項目 | 変更前 | 変更後 |
+|------|--------|--------|
+| wsgi.py設定 | `/var/cache/myapp` | `/var/cache/myapp/dosya` |
+| cache_service.py | `CACHE_DIR + "/dosya"` を計算 | `CACHE_DIR` をそのまま使用 |
+
+#### **修正ファイル**
+- `server/wsgi.py` - CACHE_DIRを`/var/cache/myapp/dosya`に変更
+- `server/src/services/cache_service.py` - `DOSYA_SUBFOLDER`定数とサブフォルダ追加ロジックを削除
+
+### ✅ **日時選択UIの改善**
+
+セッションベースクライアントの日時選択を、十年前からの任意の日時（3時間刻み）が選択可能なUIに変更しました。
+
+#### **変更前**
+- 過去24時間のみ選択可能
+- 6時間刻み（0, 6, 12, 18時）
+- 5つのオプションのみのドロップダウン
+
+#### **変更後**
+- 2015年1月1日から現在まで選択可能
+- 3時間刻み（0, 3, 6, 9, 12, 15, 18, 21時）
+- 日付入力（カレンダー）+ 時刻ドロップダウンのUI
+
+#### **実装詳細**
+
+**client/src/pages/ProductionSession.tsx**:
+```typescript
+// 日付と時刻を個別に管理（JST）
+const [swiDate, setSwiDate] = useState<string>('');
+const [swiHour, setSwiHour] = useState<number>(0);
+
+// 時刻オプション（3時間刻み）
+const timeHourOptions = [0, 3, 6, 9, 12, 15, 18, 21];
+
+// 日付と時刻からISO文字列（UTC）を生成
+const buildIsoString = (date: string, hour: number): string => {
+  const jstDate = new Date(`${date}T${hour}:00:00+09:00`);
+  return jstDate.toISOString();
+};
+```
+
+#### **UI構成**
+- 日付: `<input type="date">` (min="2015-01-01")
+- 時刻: `<select>` (8オプション: 00:00, 03:00, ... 21:00)
+- UTC時刻の参考表示
+
+#### **修正ファイル**
+- `client/src/pages/ProductionSession.tsx` - 日時選択UIを日付+時刻方式に変更
+
+---
+**最終更新**: 2026年1月27日
+**バージョン**: 8.10.0（本番環境修正・日時選択UI改善版）
 **作成者**: Claude (Anthropic)
 **プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・セッションベースAPI・本番環境対応版）

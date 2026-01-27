@@ -38,29 +38,58 @@ const ProductionSession: React.FC = () => {
   const [isRainfallModalOpen, setIsRainfallModalOpen] = useState(false);
   const [rainfallData, setRainfallData] = useState<Record<string, any> | null>(null);
 
-  // 初期時刻の候補を生成（6時間ごと: 0, 6, 12, 18時）
-  const generateTimeOptions = () => {
-    const options: string[] = [];
-    const now = new Date();
+  // 時刻オプション（3時間刻み: 0, 3, 6, 9, 12, 15, 18, 21時）
+  const timeHourOptions = [0, 3, 6, 9, 12, 15, 18, 21];
 
-    // 過去24時間分の6時間刻み時刻を生成
-    for (let i = 0; i < 5; i++) {
-      const time = new Date(now.getTime() - i * 6 * 60 * 60 * 1000);
-      const hour = Math.floor(time.getHours() / 6) * 6;
-      time.setHours(hour, 0, 0, 0);
-      options.push(time.toISOString());
-    }
+  // 日付と時刻を個別に管理（JST）
+  const [swiDate, setSwiDate] = useState<string>('');
+  const [swiHour, setSwiHour] = useState<number>(0);
+  const [guidanceDate, setGuidanceDate] = useState<string>('');
+  const [guidanceHour, setGuidanceHour] = useState<number>(0);
 
-    return options;
+  // 日付と時刻からISO文字列（UTC）を生成
+  const buildIsoString = (date: string, hour: number): string => {
+    if (!date) return '';
+    // 入力はJSTなので、UTCに変換（-9時間）
+    const jstDate = new Date(`${date}T${hour.toString().padStart(2, '0')}:00:00+09:00`);
+    return jstDate.toISOString();
   };
 
+  // 日付・時刻変更時にISO文字列を更新
   useEffect(() => {
-    // デフォルトの初期時刻を設定（テストデータ: 2023-06-02 00:00:00）
-    const defaultTime = '2023-06-02T00:00:00Z';
+    const iso = buildIsoString(swiDate, swiHour);
+    if (iso) setSwiInitialTime(iso);
+  }, [swiDate, swiHour]);
 
-    setSwiInitialTime(defaultTime);
-    setGuidanceInitialTime(defaultTime);
+  useEffect(() => {
+    const iso = buildIsoString(guidanceDate, guidanceHour);
+    if (iso) setGuidanceInitialTime(iso);
+  }, [guidanceDate, guidanceHour]);
+
+  useEffect(() => {
+    // デフォルトの日付・時刻を設定（現在時刻から最新の3時間刻み）
+    const now = new Date();
+    // JSTに変換
+    const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const year = jstNow.getUTCFullYear();
+    const month = (jstNow.getUTCMonth() + 1).toString().padStart(2, '0');
+    const day = jstNow.getUTCDate().toString().padStart(2, '0');
+    const hour = Math.floor(jstNow.getUTCHours() / 3) * 3;
+
+    const defaultDate = `${year}-${month}-${day}`;
+    setSwiDate(defaultDate);
+    setSwiHour(hour);
+    setGuidanceDate(defaultDate);
+    setGuidanceHour(hour);
   }, []);
+
+  // meshRisksAtTime監視用
+  useEffect(() => {
+    console.log(`[meshRisksAtTime変更検知] メッシュ数: ${Object.keys(meshRisksAtTime).length}`);
+    if (Object.keys(meshRisksAtTime).length > 0) {
+      console.log(`[meshRisksAtTime変更検知] サンプル値:`, Object.entries(meshRisksAtTime).slice(0, 5));
+    }
+  }, [meshRisksAtTime]);
 
   const loadData = async () => {
     if (!swiInitialTime || !guidanceInitialTime) {
@@ -107,8 +136,15 @@ const ProductionSession: React.FC = () => {
   const loadRiskAtTime = async (session: string, ft: number) => {
     // セッションAPIを使用して指定時刻のリスク値を取得
     try {
+      console.log(`[loadRiskAtTime] セッションID: ${session}, FT: ${ft}`);
       const response = await sessionApiClient.getRiskAtTime(session, ft);
+      console.log(`[loadRiskAtTime] APIレスポンス:`, response);
+
       if (response.status === 'success') {
+        console.log(`[loadRiskAtTime] メッシュリスク数: ${Object.keys(response.mesh_risks).length}`);
+        console.log(`[loadRiskAtTime] メッシュ座標数: ${Object.keys(response.mesh_coords).length}`);
+        console.log(`[loadRiskAtTime] サンプルリスク値:`, Object.entries(response.mesh_risks).slice(0, 3));
+
         setMeshRisksAtTime(response.mesh_risks);
         setMeshCoords(response.mesh_coords);
       }
@@ -183,8 +219,6 @@ const ProductionSession: React.FC = () => {
     }
   };
 
-  const timeOptions = generateTimeOptions();
-
   // 日時フォーマット関数（JST表示）
   const formatDateTime = (isoString: string) => {
     const date = new Date(isoString);
@@ -193,10 +227,13 @@ const ProductionSession: React.FC = () => {
   };
 
   const handleTimeChange = async (newTime: number) => {
-    console.log(`[ProductionSession] handleTimeChange: ${selectedTime} -> ${newTime}`);
+    console.log(`[handleTimeChange] 時刻変更: ${selectedTime} -> ${newTime}`);
 
     // 同じ時刻が選択された場合は何もしない
-    if (newTime === selectedTime) return;
+    if (newTime === selectedTime) {
+      console.log(`[handleTimeChange] 同じ時刻のためスキップ`);
+      return;
+    }
 
     // ローディング状態を即座に設定
     setIsTimeChanging(true);
@@ -204,10 +241,15 @@ const ProductionSession: React.FC = () => {
     try {
       // 状態更新
       setSelectedTime(newTime);
+      console.log(`[handleTimeChange] selectedTime更新: ${newTime}`);
 
       // セッションIDがあれば、新しい時刻のメッシュリスク値を読み込み
       if (sessionId) {
+        console.log(`[handleTimeChange] loadRiskAtTime呼び出し開始`);
         await loadRiskAtTime(sessionId, newTime);
+        console.log(`[handleTimeChange] loadRiskAtTime呼び出し完了`);
+      } else {
+        console.warn(`[handleTimeChange] sessionIDが未設定`);
       }
     } finally {
       // ローディング解除
@@ -275,17 +317,31 @@ const ProductionSession: React.FC = () => {
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
               SWI初期時刻（土壌雨量指数）
             </label>
-            <select
-              value={swiInitialTime}
-              onChange={(e) => setSwiInitialTime(e.target.value)}
-              style={{ width: '100%', padding: '8px', fontSize: '14px' }}
-            >
-              {timeOptions.map(time => (
-                <option key={time} value={time}>
-                  {formatDateTime(time)}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <input
+                type="date"
+                value={swiDate}
+                onChange={(e) => setSwiDate(e.target.value)}
+                min="2015-01-01"
+                style={{ flex: 2, padding: '8px', fontSize: '14px' }}
+              />
+              <select
+                value={swiHour}
+                onChange={(e) => setSwiHour(Number(e.target.value))}
+                style={{ flex: 1, padding: '8px', fontSize: '14px' }}
+              >
+                {timeHourOptions.map(hour => (
+                  <option key={hour} value={hour}>
+                    {hour.toString().padStart(2, '0')}:00
+                  </option>
+                ))}
+              </select>
+            </div>
+            {swiInitialTime && (
+              <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                UTC: {swiInitialTime}
+              </div>
+            )}
           </div>
 
           {/* ガイダンス初期時刻選択 */}
@@ -293,17 +349,31 @@ const ProductionSession: React.FC = () => {
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
               ガイダンス初期時刻（降水量予測）
             </label>
-            <select
-              value={guidanceInitialTime}
-              onChange={(e) => setGuidanceInitialTime(e.target.value)}
-              style={{ width: '100%', padding: '8px', fontSize: '14px' }}
-            >
-              {timeOptions.map(time => (
-                <option key={time} value={time}>
-                  {formatDateTime(time)}
-                </option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <input
+                type="date"
+                value={guidanceDate}
+                onChange={(e) => setGuidanceDate(e.target.value)}
+                min="2015-01-01"
+                style={{ flex: 2, padding: '8px', fontSize: '14px' }}
+              />
+              <select
+                value={guidanceHour}
+                onChange={(e) => setGuidanceHour(Number(e.target.value))}
+                style={{ flex: 1, padding: '8px', fontSize: '14px' }}
+              >
+                {timeHourOptions.map(hour => (
+                  <option key={hour} value={hour}>
+                    {hour.toString().padStart(2, '0')}:00
+                  </option>
+                ))}
+              </select>
+            </div>
+            {guidanceInitialTime && (
+              <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                UTC: {guidanceInitialTime}
+              </div>
+            )}
           </div>
         </div>
 
@@ -463,6 +533,7 @@ const ProductionSession: React.FC = () => {
                 selectedTime={selectedTime}
                 selectedPrefecture={selectedPrefecture}
                 swiInitialTime={sessionInfo.swi_initial_time}
+                guidanceInitialTime={sessionInfo.guidance_initial_time}
               />
 
               <div style={{ marginTop: '30px' }}>

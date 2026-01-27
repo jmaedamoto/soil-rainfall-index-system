@@ -527,17 +527,15 @@ _cache_service_instance = None
 
 # デフォルトキャッシュディレクトリ（開発環境用）
 DEFAULT_CACHE_DIR = "cache"
-# 本システム用サブフォルダ名
-DOSYA_SUBFOLDER = "dosya"
 
 
 def get_cache_service() -> CacheService:
     """
     CacheServiceシングルトン取得
 
-    環境変数 CACHE_DIR でキャッシュルートを指定可能。
-    - 未設定の場合: "cache" (開発環境用、そのまま使用)
-    - 本番環境: "/var/cache/myapp" を設定 → "/var/cache/myapp/dosya" を使用
+    環境変数 CACHE_DIR でキャッシュディレクトリを指定可能。
+    - 未設定の場合: "cache" (開発環境用)
+    - 本番環境: 環境変数で指定されたディレクトリをそのまま使用
 
     Returns:
         CacheServiceインスタンス
@@ -547,8 +545,8 @@ def get_cache_service() -> CacheService:
     if _cache_service_instance is None:
         cache_root = os.environ.get("CACHE_DIR")
         if cache_root:
-            # 本番環境: 共有ルート配下の dosya サブフォルダを使用
-            cache_dir = os.path.join(cache_root, DOSYA_SUBFOLDER)
+            # 本番環境: 環境変数で指定されたディレクトリをそのまま使用
+            cache_dir = cache_root
         else:
             # 開発環境: デフォルトの cache フォルダを使用
             cache_dir = DEFAULT_CACHE_DIR

@@ -40,7 +40,11 @@ export class MockProductionAPI {
       );
 
       console.log('  ✅ 完全テストデータ取得完了');
-      console.log('  府県数:', Object.keys(response.data.prefectures).length);
+      console.log('  レスポンスデータ:', response.data);
+
+      if (response.data.prefectures) {
+        console.log('  府県数:', Object.keys(response.data.prefectures).length);
+      }
       console.log('  初期時刻:', response.data.initial_time);
 
       return response.data;
