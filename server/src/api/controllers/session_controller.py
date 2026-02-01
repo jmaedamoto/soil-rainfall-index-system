@@ -511,13 +511,35 @@ class SessionController:
             recalculated_meshes = {}
             adjusted_mesh_count = 0
 
+            # 二次細分名 → 市町村名リストのマッピングを構築
+            subdiv_to_areas = {}
+            for pref_code, pref_dict in existing_prefectures_dict.items():
+                pref_name = pref_dict['name']
+                for subdiv in pref_dict.get('secondary_subdivisions', []):
+                    subdiv_key = f"{pref_name}_{subdiv['name']}"
+                    subdiv_to_areas[subdiv_key] = {
+                        'pref_name': pref_name,
+                        'area_names': subdiv.get('area_names', [])
+                    }
+
+            # 二次細分キーの調整を市町村キーに展開
+            expanded_adjustments = dict(adjustments)
+            for subdiv_key, subdiv_rain in list(adjustments.items()):
+                if subdiv_key in subdiv_to_areas:
+                    info = subdiv_to_areas[subdiv_key]
+                    for area_name in info['area_names']:
+                        area_key = f"{info['pref_name']}_{area_name}"
+                        if area_key not in expanded_adjustments:
+                            expanded_adjustments[area_key] = subdiv_rain
+                            logger.info(f"二次細分 {subdiv_key} → 市町村 {area_key} に展開")
+
             # 各府県・市町村・メッシュを走査して雨量調整を適用
             for pref_code, pref_dict in existing_prefectures_dict.items():
                 for area_dict in pref_dict['areas']:
                     area_key = f"{pref_dict['name']}_{area_dict['name']}"
 
-                    if area_key in adjustments:
-                        adjusted_rain = adjustments[area_key]
+                    if area_key in expanded_adjustments:
+                        adjusted_rain = expanded_adjustments[area_key]
 
                         # この市町村の全メッシュを処理
                         for mesh_dict in area_dict['meshes']:
@@ -579,7 +601,10 @@ class SessionController:
                                 ],
                                 'risk_3hour_max_timeline': [
                                     {"ft": r.ft, "value": r.value} for r in temp_mesh.risk_3hour_max
-                                ]
+                                ],
+                                'risk_hourly_timeline': [
+                                    {"ft": r.ft, "value": r.value} for r in temp_mesh.risk_hourly
+                                ] if temp_mesh.risk_hourly else []
                             }
 
                             adjusted_mesh_count += 1

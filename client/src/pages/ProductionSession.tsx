@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { apiClient_, USE_MOCK_PRODUCTION_API } from '../services/api';
+import { apiClient_ } from '../services/api';
 import { sessionApiClient } from '../services/sessionApi';
 import SoilRainfallMap from '../components/map/SoilRainfallMap';
 import AreaRiskBarChart from '../components/charts/AreaRiskBarChart';
 import CacheInfo from '../components/CacheInfo';
 import RainfallAdjustmentModalSession from '../components/RainfallAdjustmentModalSession';
-import { LightweightPrefectureData, Mesh, LightweightCalculationResult, CalculationResult, Prefecture as PrefectureType } from '../types/api';
+import { LightweightPrefectureData, LightweightCalculationResult, Prefecture as PrefectureType } from '../types/api';
 
 const ProductionSession: React.FC = () => {
   // セッション情報
@@ -18,9 +18,6 @@ const ProductionSession: React.FC = () => {
   // 地図表示用の時刻別リスク値（全メッシュ）
   const [meshRisksAtTime, setMeshRisksAtTime] = useState<Record<string, number>>({});
   const [meshCoords, setMeshCoords] = useState<Record<string, { lat: number; lon: number }>>({});
-
-  // モックモード用: 全データをキャッシュ
-  const [cachedFullData, setCachedFullData] = useState<CalculationResult | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [loadingPrefecture, setLoadingPrefecture] = useState<string | null>(null);
@@ -576,12 +573,31 @@ const ProductionSession: React.FC = () => {
           swiInitial={swiInitialTime}
           guidanceInitial={guidanceInitialTime}
           dataSource="test"
-          onSessionRecalculated={(meshRisks, meshCoords) => {
-            // セッションが更新されたので、メッシュリスクと座標を更新
-            setMeshRisksAtTime(meshRisks);
-            setMeshCoords(meshCoords);
+          onSessionRecalculated={async (newSessionId, _meshRisks, _newMeshCoords) => {
+            // フォークセッションIDに切り替え（以降の時刻変更で編集済みデータを取得するため）
+            setSessionId(newSessionId);
             setIsAdjustedData(true);
-            setSelectedTime(0); // FT=0に戻す
+            // 府県リスクデータキャッシュをクリア（ベースセッションのデータが古いため）
+            setPrefectureRiskData({});
+
+            // 現在選択中の時刻のリスクデータをフォークセッションから読み込み
+            // （FT=0は初期状態で雨量変更前と同じため、選択中時刻を維持する）
+            await loadRiskAtTime(newSessionId, selectedTime);
+
+            // 選択中の府県をフォークセッションから再読み込み
+            if (selectedPrefecture) {
+              try {
+                const response = await sessionApiClient.getPrefectureData(newSessionId, selectedPrefecture);
+                if (response.status === 'success') {
+                  setPrefectureRiskData(prev => ({
+                    ...prev,
+                    [selectedPrefecture]: response.prefecture
+                  }));
+                }
+              } catch (err) {
+                console.error('府県データ再読み込みエラー:', err);
+              }
+            }
           }}
         />
       )}

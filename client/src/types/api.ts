@@ -68,34 +68,6 @@ export interface CacheInfo {
   cache_metadata: CacheMetadata | null;
 }
 
-export interface CalculationResult {
-  status: 'success' | 'error';
-  calculation_time: string;     // 計算時刻（ISO8601）
-  initial_time: string;         // 初期時刻（ISO8601） - 後方互換性
-  swi_initial_time?: string;    // SWI初期時刻（ISO8601）
-  guid_initial_time?: string;   // ガイダンス初期時刻（ISO8601）
-  prefectures: Record<string, Prefecture>;  // 都道府県データ
-  used_urls?: {                 // 本番API使用時のGRIB2 URL（デバッグ用）
-    swi_url: string;
-    swi_initial_time: string;
-    guidance_url: string;
-    guidance_initial_time: string;
-  };
-  cache_info?: CacheInfo;       // キャッシュ情報
-  statistics?: {                // テストAPI使用時の統計情報
-    total_meshes: number;
-    processed_meshes: number;
-    success_rate: string;
-  };
-  note?: string;                // テストAPI使用時の説明
-}
-
-export interface CalculationParams {
-  initial?: string;        // 初期時刻（ISO8601形式） - 後方互換性
-  swi_initial?: string;    // SWI初期時刻（ISO8601形式）
-  guid_initial?: string;   // ガイダンス初期時刻（ISO8601形式）
-}
-
 export interface HealthStatus {
   status: 'success' | 'error';
   message?: string;
@@ -129,23 +101,6 @@ export const RISK_LABELS = {
 
 // リスクタイムライン表示モード
 export type RiskTimelineViewMode = 'municipality' | 'subdivision' | 'prefecture-all';
-
-// 雨量調整機能用の型定義
-
-export interface AreaRainfallForecast {
-  status: 'success' | 'error';
-  swi_initial_time: string;         // SWI初期時刻（ISO8601）
-  guidance_initial_time: string;    // ガイダンス初期時刻（ISO8601）
-  area_rainfall: Record<string, TimeSeriesPoint[]>;  // 市町村別雨量時系列
-  subdivision_rainfall?: Record<string, TimeSeriesPoint[]>;  // 二次細分別雨量時系列
-}
-
-export interface RainfallAdjustmentRequest {
-  swi_initial: string;              // SWI初期時刻（ISO8601）
-  guidance_initial: string;         // ガイダンス初期時刻（ISO8601）
-  area_adjustments: Record<string, Record<number, number>>;  // 市町村別調整後雨量
-  subdivision_adjustments?: Record<string, Record<number, number>>;  // 二次細分別調整後雨量
-}
 
 // セッションベースAPI用の型定義
 

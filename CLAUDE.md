@@ -563,7 +563,120 @@ const buildIsoString = (date: string, hour: number): string => {
 - `client/src/pages/ProductionSession.tsx` - 日時選択UIを日付+時刻方式に変更
 
 ---
-**最終更新**: 2026年1月27日
-**バージョン**: 8.10.0（本番環境修正・日時選択UI改善版）
+
+## 🚀 **2026年2月1日 コード簡素化・フォークセッション改善**
+
+### ✅ **クライアントコード大幅簡素化**
+
+使用されていないページ・サービス・型定義を削除し、セッションベースAPIに一本化しました。
+
+#### **削除されたファイル**
+
+| ファイル | 理由 |
+|---------|------|
+| `client/src/pages/Home.tsx` | 未使用ページ（ルーティングから削除済み） |
+| `client/src/pages/Production.tsx` | セッションベースAPIに統合済み |
+| `client/src/components/RainfallAdjustmentModal.tsx` | セッション版に統合済み |
+| `client/src/hooks/useSessionState.ts` | 未使用フック |
+| `client/src/services/mockProductionApi.ts` | モックモード廃止 |
+| `client/src/services/rainfallApi.ts` | 未使用サービス |
+| `client/src/utils/rainfallDataUtils.ts` | 未使用ユーティリティ |
+
+#### **簡素化されたファイル**
+
+**client/src/App.tsx**:
+- ルーティングを`/`→`ProductionSession`の1ルートに簡素化
+- `Home`、`Production`のインポート削除
+
+**client/src/services/api.ts**:
+- `USE_MOCK_PRODUCTION_API`フラグ削除
+- モックモード分岐の全コード削除
+- 未使用メソッド削除（`calculateSoilRainfallIndex`、`testFullCalculation`、`testCalculationWithTime`、`calculateProductionSoilRainfallIndex`、`getPerformanceAnalysis`、`getCSVOptimizationTest`、`getDataCheck`）
+- `calculateProductionSoilRainfallIndexWithUrls`のみ残存
+
+**client/src/types/api.ts**:
+- `CalculationResult`、`CalculationParams`型削除
+- `AreaRainfallForecast`、`RainfallAdjustmentRequest`型削除
+
+#### **成果**
+- 約2,000行のコード削減
+- セッションベースAPIへの完全移行
+- モックモードの廃止による保守性向上
+
+### ✅ **フォークセッション切り替えの改善**
+
+雨量調整後、フォークセッションに正しく切り替わるよう改善しました。
+
+#### **問題**
+雨量編集の再計算後、クライアントがベースセッションIDを保持したままになり、編集結果が地図や時刻変更に反映されなかった。
+
+#### **修正内容**
+
+**client/src/components/RainfallAdjustmentModalSession.tsx**:
+- `onSessionRecalculated`コールバックに`sessionId`パラメータを追加
+- 再計算結果のフォークセッションIDを親コンポーネントに返すよう変更
+
+**client/src/pages/ProductionSession.tsx**:
+- `onSessionRecalculated`でフォークセッションIDに切り替え（`setSessionId(newSessionId)`）
+- 府県リスクデータキャッシュをクリアし、フォークセッションから再読み込み
+- 選択中の時刻を維持（FT=0に戻さない）
+
+### ✅ **GRIB2データのローカルフォールバック機能**
+
+リモートサーバーからのGRIB2データダウンロード失敗時に、ローカルのbinファイルにフォールバックする機能を追加しました。
+
+#### **修正内容**
+
+**server/src/services/main_service.py**:
+- `main_process_from_separate_urls`に`fallback_swi_path`と`fallback_guidance_path`パラメータを追加
+- リモートダウンロード失敗時にローカルファイルを読み込むフォールバック処理
+
+**server/src/api/controllers/main_controller.py**:
+- 開発環境用ローカルbinファイルパスを設定
+- 本番環境ではファイルが存在しないため無効（安全設計）
+
+### ✅ **二次細分区域の雨量調整展開**
+
+二次細分区域単位で雨量調整した場合、配下の市町村すべてに自動展開されるよう改善しました。
+
+#### **修正内容**
+
+**server/src/api/controllers/session_controller.py**:
+- 二次細分名→市町村名リストのマッピングを構築
+- 二次細分キーの調整を配下の市町村キーに展開
+- 展開されたキーで各メッシュの雨量調整を適用
+
+### ✅ **フォークセッションのリスクタイムライン再集約**
+
+メッシュの雨量調整後、エリア・二次細分・府県レベルのリスクタイムラインが正しく再集約されるよう修正しました。
+
+#### **問題**
+フォークセッションでメッシュを再計算後、上位レベル（エリア・二次細分・府県）のリスクタイムラインがベースセッションの値のまま更新されなかった。
+
+#### **修正内容**
+
+**server/src/services/session_service.py** - `_merge_fork_with_base`メソッド:
+- 再計算済みメッシュの`risk_hourly_timeline`をマージデータに反映
+- エリア別リスクタイムライン再集約（配下メッシュの最大値）
+- 二次細分別リスクタイムライン再集約（配下エリアの最大値）
+- 府県全体リスクタイムライン再集約（全エリアの最大値）
+
+**server/src/api/controllers/session_controller.py**:
+- 再計算結果に`risk_hourly_timeline`を追加
+
+#### **修正ファイル一覧**
+- `client/src/App.tsx` - ルーティング簡素化
+- `client/src/components/RainfallAdjustmentModalSession.tsx` - セッションID返却追加
+- `client/src/pages/ProductionSession.tsx` - フォークセッション切り替え改善
+- `client/src/services/api.ts` - 未使用コード削除
+- `client/src/types/api.ts` - 未使用型定義削除
+- `server/src/api/controllers/main_controller.py` - ローカルフォールバック追加
+- `server/src/api/controllers/session_controller.py` - 二次細分展開・risk_hourly追加
+- `server/src/services/main_service.py` - フォールバックパラメータ追加
+- `server/src/services/session_service.py` - リスクタイムライン再集約
+
+---
+**最終更新**: 2026年2月1日
+**バージョン**: 8.11.0（コード簡素化・フォークセッション改善版）
 **作成者**: Claude (Anthropic)
 **プロジェクト**: 土壌雨量指数計算システム（VBA完全互換・セッションベースAPI・本番環境対応版）

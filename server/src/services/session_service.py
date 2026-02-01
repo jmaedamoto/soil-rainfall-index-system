@@ -236,6 +236,58 @@ class SessionService:
                             'swi_timeline', mesh.get('swi_timeline', []))
                         mesh['rain_timeline'] = recalc_data.get(
                             'rain_timeline', mesh.get('rain_timeline', []))
+                        if 'risk_hourly_timeline' in recalc_data:
+                            mesh['risk_hourly_timeline'] = recalc_data['risk_hourly_timeline']
+
+        # メッシュ更新後、エリア・二次細分・府県のリスクタイムラインを再集約
+        if recalculated_meshes:
+            for pref_code, prefecture in merged_prefectures.items():
+                # エリア別リスクタイムライン再集約
+                for area in prefecture.get('areas', []):
+                    ft_max_risk = {}
+                    for mesh in area.get('meshes', []):
+                        for risk_point in mesh.get('risk_3hour_max_timeline', []):
+                            ft = risk_point['ft']
+                            value = risk_point['value']
+                            if ft not in ft_max_risk or value > ft_max_risk[ft]:
+                                ft_max_risk[ft] = value
+                    if ft_max_risk:
+                        area['risk_timeline'] = [
+                            {"ft": ft, "value": ft_max_risk[ft]}
+                            for ft in sorted(ft_max_risk.keys())
+                        ]
+
+                # 二次細分別リスクタイムライン再集約
+                for subdiv in prefecture.get('secondary_subdivisions', []):
+                    ft_max_risk = {}
+                    for area_name in subdiv.get('area_names', []):
+                        area = next(
+                            (a for a in prefecture['areas'] if a['name'] == area_name), None)
+                        if area:
+                            for rt in area.get('risk_timeline', []):
+                                ft = rt['ft']
+                                value = rt['value']
+                                if ft not in ft_max_risk or value > ft_max_risk[ft]:
+                                    ft_max_risk[ft] = value
+                    if ft_max_risk:
+                        subdiv['risk_timeline'] = [
+                            {"ft": ft, "value": ft_max_risk[ft]}
+                            for ft in sorted(ft_max_risk.keys())
+                        ]
+
+                # 府県全体リスクタイムライン再集約
+                ft_max_risk = {}
+                for area in prefecture.get('areas', []):
+                    for rt in area.get('risk_timeline', []):
+                        ft = rt['ft']
+                        value = rt['value']
+                        if ft not in ft_max_risk or value > ft_max_risk[ft]:
+                            ft_max_risk[ft] = value
+                if ft_max_risk:
+                    prefecture['prefecture_risk_timeline'] = [
+                        {"ft": ft, "value": ft_max_risk[ft]}
+                        for ft in sorted(ft_max_risk.keys())
+                    ]
 
         # マージ結果を返す
         return {

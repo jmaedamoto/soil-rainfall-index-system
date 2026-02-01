@@ -9,7 +9,7 @@ interface RainfallAdjustmentModalSessionProps {
   swiInitial: string;
   guidanceInitial: string;
   dataSource: 'test' | 'production';
-  onSessionRecalculated: (meshRisks: Record<string, number>, meshCoords: Record<string, { lat: number; lon: number }>) => void;
+  onSessionRecalculated: (sessionId: string, meshRisks: Record<string, number>, meshCoords: Record<string, { lat: number; lon: number }>) => void;
 }
 
 interface CellSelection {
@@ -318,7 +318,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
       );
 
       // 軽量レスポンス（meshRisksとmeshCoords）を親コンポーネントに返す
-      onSessionRecalculated(result.mesh_risks, result.mesh_coords);
+      onSessionRecalculated(result.session_id, result.mesh_risks, result.mesh_coords);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : '再計算に失敗しました');

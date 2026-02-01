@@ -1,10 +1,6 @@
 import axios from 'axios';
-import { CalculationParams, CalculationResult, HealthStatus, LightweightCalculationResult } from '../types/api';
-import { mockProductionApi } from './mockProductionApi';
+import { HealthStatus, LightweightCalculationResult } from '../types/api';
 import { API_BASE_URL } from '../config/apiConfig';
-
-// モックモードフラグ（開発環境でのみ有効）
-export const USE_MOCK_PRODUCTION_API = !import.meta.env.PROD && true;
 
 // Axiosインスタンスの作成
 const apiClient = axios.create({
@@ -41,7 +37,7 @@ export class SoilRainfallAPIClient {
     try {
       const response = await apiClient.get('/health');
       const data = response.data;
-      
+
       // サーバーレスポンスをそのまま返す
       return {
         status: data.status,
@@ -55,120 +51,19 @@ export class SoilRainfallAPIClient {
   }
 
   /**
-   * 土壌雨量指数計算の実行
-   */
-  async calculateSoilRainfallIndex(params: CalculationParams): Promise<CalculationResult> {
-    const response = await apiClient.post<CalculationResult>('/soil-rainfall-index', params);
-    return response.data;
-  }
-
-  /**
-   * テスト用フル計算（開発用）
-   */
-  async testFullCalculation(): Promise<CalculationResult> {
-    const response = await apiClient.get<CalculationResult>('/test-full-soil-rainfall-index');
-    return response.data;
-  }
-
-  /**
-   * テスト用計算（時刻指定対応版）
-   */
-  async testCalculationWithTime(params: CalculationParams): Promise<CalculationResult> {
-    // テスト用エンドポイントでは時刻指定は無視し、固定データを返す
-    console.log('テスト環境での時刻指定パラメータ:', params);
-    const response = await apiClient.get<CalculationResult>('/test-full-soil-rainfall-index');
-    return response.data;
-  }
-
-  /**
-   * 本番用土壌雨量指数計算（時刻指定対応）
-   */
-  async calculateProductionSoilRainfallIndex(params?: { initial?: string }): Promise<CalculationResult> {
-    // モックモードの場合はテストデータを返す
-    if (USE_MOCK_PRODUCTION_API) {
-      return mockProductionApi.calculateProductionSoilRainfallIndex(params);
-    }
-
-    // 通常モード: 実際のAPIを呼び出す
-    const queryParams = params?.initial ? `?initial=${encodeURIComponent(params.initial)}` : '';
-    const response = await apiClient.get<CalculationResult>(`/production-soil-rainfall-index${queryParams}`);
-    return response.data;
-  }
-
-  /**
    * 本番用土壌雨量指数計算（SWIとガイダンスの初期時刻を個別指定）
    * セッションベースAPIを使用し、軽量レスポンスを返す
+   * リモートダウンロード失敗時はサーバー側でローカルbinファイルにフォールバック
    */
   async calculateProductionSoilRainfallIndexWithUrls(params: {
     swi_initial: string;
     guidance_initial: string;
   }): Promise<LightweightCalculationResult> {
-    // モックモードの場合はテストデータを返す
-    if (USE_MOCK_PRODUCTION_API) {
-      // セッションベース用のモックメソッドを呼び出す
-      return await mockProductionApi.calculateProductionSoilRainfallIndexWithUrlsSession(params);
-    }
-
-    // 通常モード: セッションベースAPIを呼び出す
     const response = await apiClient.post<LightweightCalculationResult>(
       '/production-soil-rainfall-index-with-urls',
       params
     );
     return response.data;
-  }
-
-  /**
-   * 利用可能な時刻を抽出（ヘルパー関数）
-   */
-  private extractAvailableTimes(result: CalculationResult): number[] {
-    const firstPref = Object.values(result.prefectures)[0];
-    if (!firstPref?.areas?.[0]?.meshes?.[0]) return [];
-
-    const firstMesh = firstPref.areas[0].meshes[0];
-    const times = new Set<number>();
-
-    firstMesh.risk_3hour_max_timeline?.forEach(point => times.add(point.ft));
-
-    return Array.from(times).sort((a, b) => a - b);
-  }
-
-  /**
-   * パフォーマンス分析（デバッグ用）
-   */
-  async getPerformanceAnalysis(): Promise<any> {
-    try {
-      const response = await apiClient.get('/test-performance-analysis');
-      return response.data;
-    } catch (error) {
-      console.log('パフォーマンス分析エンドポイントが利用できません');
-      return null;
-    }
-  }
-
-  /**
-   * CSV最適化テスト（デバッグ用）
-   */
-  async getCSVOptimizationTest(): Promise<any> {
-    try {
-      const response = await apiClient.get('/test-csv-optimization');
-      return response.data;
-    } catch (error) {
-      console.log('CSV最適化テストエンドポイントが利用できません');
-      return null;
-    }
-  }
-
-  /**
-   * データチェック
-   */
-  async getDataCheck(): Promise<any> {
-    try {
-      const response = await apiClient.get('/data-check');
-      return response.data;
-    } catch (error) {
-      console.log('データチェックエンドポイントが利用できません');
-      return null;
-    }
   }
 }
 

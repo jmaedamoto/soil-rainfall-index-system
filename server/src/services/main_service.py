@@ -143,7 +143,9 @@ class MainService:
         self,
         swi_url: str,
         guidance_url: str,
-        use_cache: bool = True
+        use_cache: bool = True,
+        fallback_swi_path: Optional[str] = None,
+        fallback_guidance_path: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         個別URLベースのメイン処理（SWIとガイダンスのURLを個別指定）
@@ -152,6 +154,8 @@ class MainService:
             swi_url: SWI GRIB2データURL
             guidance_url: ガイダンスGRIB2データURL
             use_cache: キャッシュ使用フラグ（デフォルト: True）
+            fallback_swi_path: リモート失敗時のローカルSWIファイルパス
+            fallback_guidance_path: リモート失敗時のローカルガイダンスファイルパス
 
         Returns:
             処理結果JSON
@@ -162,12 +166,20 @@ class MainService:
 
             # GRIB2データダウンロード・解析
             swi_data_bytes = self.grib2_service.download_file(swi_url)
+            if not swi_data_bytes and fallback_swi_path:
+                logger.warning(f"リモートダウンロード失敗、ローカルフォールバック: {fallback_swi_path}")
+                with open(fallback_swi_path, 'rb') as f:
+                    swi_data_bytes = f.read()
             if not swi_data_bytes:
-                raise Exception(f"SWIファイルダウンロード失敗: {swi_url}")
+                raise Exception(f"SWIファイル取得失敗: {swi_url}")
 
             guidance_data_bytes = self.grib2_service.download_file(guidance_url)
+            if not guidance_data_bytes and fallback_guidance_path:
+                logger.warning(f"リモートダウンロード失敗、ローカルフォールバック: {fallback_guidance_path}")
+                with open(fallback_guidance_path, 'rb') as f:
+                    guidance_data_bytes = f.read()
             if not guidance_data_bytes:
-                raise Exception(f"ガイダンスファイルダウンロード失敗: {guidance_url}")
+                raise Exception(f"ガイダンスファイル取得失敗: {guidance_url}")
 
             # データ解析
             base_info, swi_grib2 = self.grib2_service.unpack_swi_grib2(
