@@ -33,7 +33,6 @@ const ProductionSession: React.FC = () => {
 
   // 雨量調整モーダルの状態
   const [isRainfallModalOpen, setIsRainfallModalOpen] = useState(false);
-  const [rainfallData, setRainfallData] = useState<Record<string, any> | null>(null);
 
   // 時刻オプション（3時間刻み: 0, 3, 6, 9, 12, 15, 18, 21時）
   const timeHourOptions = [0, 3, 6, 9, 12, 15, 18, 21];
@@ -414,62 +413,10 @@ const ProductionSession: React.FC = () => {
         {/* 雨量調整ボタン */}
         {sessionInfo && (
           <button
-            onClick={async () => {
-              // セッションベース雨量調整を開く
+            onClick={() => {
+              // モーダルを開くだけ（データ取得はモーダル側で1回のみ行う）
               if (sessionId) {
-                // セッションから雨量データを取得
-                try {
-                  const data = await sessionApiClient.getRainfallData(sessionId);
-                  // Prefecture型の形式に変換
-                  const prefectureData: Record<string, any> = {};
-
-                  // 府県別にグループ化
-                  const prefGroups: Record<string, any> = {};
-
-                  // 市町村データから府県を初期化
-                  Object.keys(data.area_rainfall).forEach(key => {
-                    const [prefName] = key.split('_');
-                    if (!prefGroups[prefName]) {
-                      prefGroups[prefName] = {
-                        name: prefName,
-                        code: prefName.toLowerCase(),
-                        areas: [],
-                        secondary_subdivisions: []
-                      };
-                    }
-                  });
-
-                  // 市町村データを追加
-                  Object.entries(data.area_rainfall).forEach(([key, timeline]) => {
-                    const [prefName, areaName] = key.split('_');
-                    if (prefGroups[prefName]) {
-                      prefGroups[prefName].areas.push({
-                        name: areaName,
-                        meshes: [{
-                          rain_timeline: timeline
-                        }]
-                      });
-                    }
-                  });
-
-                  // 二次細分データを追加
-                  Object.entries(data.subdivision_rainfall).forEach(([key, timeline]) => {
-                    const [prefName, subdivName] = key.split('_');
-                    if (prefGroups[prefName]) {
-                      prefGroups[prefName].secondary_subdivisions.push({
-                        name: subdivName,
-                        rain_3hour_timeline: timeline
-                      });
-                    }
-                  });
-
-                  Object.assign(prefectureData, prefGroups);
-                  setRainfallData(prefectureData);
-                  setIsRainfallModalOpen(true);
-                } catch (err) {
-                  console.error('雨量データ取得エラー:', err);
-                  setError('雨量データの取得に失敗しました');
-                }
+                setIsRainfallModalOpen(true);
               }
             }}
             style={{

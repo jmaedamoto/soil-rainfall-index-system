@@ -140,6 +140,27 @@ class SessionService:
             f"recalculated: {len(recalculated_meshes)} meshes"
         )
 
+        # --- A案: fork作成時に一度だけベースとマージしてprefecturesを確定（materialize） ---
+        # これにより以後の get_session() で毎回マージを行わずに済む
+        try:
+            merged = self.get_session(fork_session_id)  # この1回だけ _merge_fork_with_base が走る
+            if merged is None:
+                logger.error(f"Failed to materialize fork session: {fork_session_id}")
+            else:
+                with self.lock:
+                    s = self.sessions.get(fork_session_id)
+                    if s is not None and s.get('is_fork') and 'prefectures' not in s:
+                        # マージ済みprefecturesを保存して、以後のget_sessionでマージを発生させない
+                        s['prefectures'] = merged['prefectures']
+                        s['materialized'] = True
+
+                        # 差分は以後不要なので捨ててメモリを節約
+                        s.pop('recalculated_meshes', None)
+                        logger.info(f"Fork session materialized: {fork_session_id}")
+        except Exception:
+            logger.exception(f"Exception while materializing fork session: {fork_session_id}")
+        # --- ここまで ---
+
         return fork_session_id
 
     def _get_raw_session(self, session_id: str) -> Optional[Dict[str, Any]]:
@@ -194,8 +215,11 @@ class SessionService:
             # 最終アクセス時刻更新
             session['last_accessed'] = datetime.now()
 
-            # フォークセッションの場合、ベースとマージ
+            # フォークセッションの場合
             if session.get('is_fork'):
+                # A案: forkが既にmaterialize済みなら、そのまま返す（毎回マージしない）
+                if 'prefectures' in session:
+                    return session
                 return self._merge_fork_with_base(session)
 
             return session
