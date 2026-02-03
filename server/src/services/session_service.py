@@ -247,6 +247,10 @@ class SessionService:
         # フォークの再計算済みメッシュを適用
         recalculated_meshes = fork_session.get('recalculated_meshes', {})
 
+        # 影響を受けたエリアを追跡（再集約の最適化用）
+        # キー: (pref_code, area_name), 値: area参照
+        affected_areas: Dict[tuple, Any] = {}
+
         for pref_code, prefecture in merged_prefectures.items():
             for area in prefecture.get('areas', []):
                 for mesh in area.get('meshes', []):
@@ -263,41 +267,64 @@ class SessionService:
                         if 'risk_hourly_timeline' in recalc_data:
                             mesh['risk_hourly_timeline'] = recalc_data['risk_hourly_timeline']
 
-        # メッシュ更新後、エリア・二次細分・府県のリスクタイムラインを再集約
-        if recalculated_meshes:
-            for pref_code, prefecture in merged_prefectures.items():
-                # エリア別リスクタイムライン再集約
-                for area in prefecture.get('areas', []):
-                    ft_max_risk = {}
-                    for mesh in area.get('meshes', []):
-                        for risk_point in mesh.get('risk_3hour_max_timeline', []):
-                            ft = risk_point['ft']
-                            value = risk_point['value']
-                            if ft not in ft_max_risk or value > ft_max_risk[ft]:
-                                ft_max_risk[ft] = value
-                    if ft_max_risk:
-                        area['risk_timeline'] = [
-                            {"ft": ft, "value": ft_max_risk[ft]}
-                            for ft in sorted(ft_max_risk.keys())
-                        ]
+                        # このエリアを影響リストに追加
+                        affected_areas[(pref_code, area.get('name'))] = area
 
-                # 二次細分別リスクタイムライン再集約
+        # メッシュ更新後、影響を受けたエリアのみリスクタイムラインを再集約
+        if affected_areas:
+            # 影響を受けた府県を特定
+            affected_prefs = set(pref_code for pref_code, _ in affected_areas.keys())
+
+            logger.info(
+                f"Optimized re-aggregation: {len(affected_areas)} areas in "
+                f"{len(affected_prefs)} prefectures (total meshes: {len(recalculated_meshes)})"
+            )
+
+            for (pref_code, area_name), area in affected_areas.items():
+                # このエリアのリスクタイムラインを再集約
+                ft_max_risk = {}
+                for mesh in area.get('meshes', []):
+                    for risk_point in mesh.get('risk_3hour_max_timeline', []):
+                        ft = risk_point['ft']
+                        value = risk_point['value']
+                        if ft not in ft_max_risk or value > ft_max_risk[ft]:
+                            ft_max_risk[ft] = value
+                if ft_max_risk:
+                    area['risk_timeline'] = [
+                        {"ft": ft, "value": ft_max_risk[ft]}
+                        for ft in sorted(ft_max_risk.keys())
+                    ]
+
+            # 影響を受けた府県のみ二次細分・府県タイムラインを再集約
+            for pref_code in affected_prefs:
+                prefecture = merged_prefectures[pref_code]
+
+                # この府県で影響を受けたエリア名のセット
+                affected_area_names = set(
+                    area_name for (pc, area_name) in affected_areas.keys()
+                    if pc == pref_code
+                )
+
+                # 二次細分別リスクタイムライン再集約（影響を受けたエリアを含む二次細分のみ）
                 for subdiv in prefecture.get('secondary_subdivisions', []):
-                    ft_max_risk = {}
-                    for area_name in subdiv.get('area_names', []):
-                        area = next(
-                            (a for a in prefecture['areas'] if a['name'] == area_name), None)
-                        if area:
-                            for rt in area.get('risk_timeline', []):
-                                ft = rt['ft']
-                                value = rt['value']
-                                if ft not in ft_max_risk or value > ft_max_risk[ft]:
-                                    ft_max_risk[ft] = value
-                    if ft_max_risk:
-                        subdiv['risk_timeline'] = [
-                            {"ft": ft, "value": ft_max_risk[ft]}
-                            for ft in sorted(ft_max_risk.keys())
-                        ]
+                    subdiv_area_names = set(subdiv.get('area_names', []))
+                    # この二次細分が影響を受けたエリアを含むかチェック
+                    if subdiv_area_names & affected_area_names:
+                        ft_max_risk = {}
+                        for area_name in subdiv.get('area_names', []):
+                            area = next(
+                                (a for a in prefecture['areas'] if a['name'] == area_name), None)
+                            if area:
+                                for rt in area.get('risk_timeline', []):
+                                    ft = rt['ft']
+                                    value = rt['value']
+                                    if ft not in ft_max_risk or value > ft_max_risk[ft]:
+                                        ft_max_risk[ft] = value
+                        if ft_max_risk:
+                            subdiv['risk_timeline'] = [
+                                {"ft": ft, "value": ft_max_risk[ft]}
+                                for ft in sorted(ft_max_risk.keys())
+                            ]
 
                 # 府県全体リスクタイムライン再集約
                 ft_max_risk = {}
