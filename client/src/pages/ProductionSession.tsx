@@ -63,10 +63,12 @@ const ProductionSession: React.FC = () => {
   }, [guidanceDate, guidanceHour]);
 
   useEffect(() => {
-    // デフォルトの日付・時刻を設定（現在時刻から最新の3時間刻み）
+    // デフォルトの日付・時刻を設定
+    // 気象庁のGRIB2ファイルはデータ時刻から約3時間後に作成されるため、
+    // 現在時刻から3時間前の直近3時間刻みをデフォルトに設定
     const now = new Date();
-    // JSTに変換
-    const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    // JSTに変換し、3時間前に戻す
+    const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000 - 3 * 60 * 60 * 1000);
     const year = jstNow.getUTCFullYear();
     const month = (jstNow.getUTCMonth() + 1).toString().padStart(2, '0');
     const day = jstNow.getUTCDate().toString().padStart(2, '0');
@@ -312,6 +314,18 @@ const ProductionSession: React.FC = () => {
       {/* データ取得コントロール */}
       <div style={{ marginBottom: '30px', backgroundColor: '#f5f5f5', padding: '20px', borderRadius: '8px' }}>
         <h2 style={{ marginTop: 0 }}>データ取得設定</h2>
+
+        <div style={{
+          backgroundColor: '#fff3cd',
+          padding: '10px 15px',
+          borderRadius: '4px',
+          marginBottom: '15px',
+          fontSize: '14px',
+          border: '1px solid #ffc107'
+        }}>
+          <strong>注意:</strong> 気象庁データはデータ時刻から約3時間後に利用可能になります。
+          最新時刻を選択するとエラーになる場合があります。
+        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
           {/* SWI初期時刻選択 */}
