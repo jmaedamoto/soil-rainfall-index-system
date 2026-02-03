@@ -36,11 +36,19 @@ class SessionAPIClient {
 
   /**
    * 指定時刻の全メッシュリスク値取得
+   * @param sessionId セッションID
+   * @param ft 予報時刻
+   * @param options.includeCoords 座標を含めるか（省略時true、初回のみtrueで2回目以降はfalse推奨）
    */
-  async getRiskAtTime(sessionId: string, ft: number): Promise<RiskAtTimeResponse> {
+  async getRiskAtTime(
+    sessionId: string,
+    ft: number,
+    options?: { includeCoords?: boolean }
+  ): Promise<RiskAtTimeResponse> {
+    const includeCoords = options?.includeCoords ?? true;
     const response = await axios.get<RiskAtTimeResponse>(
       `${this.apiBaseUrl}/session/${sessionId}/risk-at-time`,
-      { params: { ft } }
+      { params: { ft, include_coords: includeCoords } }
     );
     return response.data;
   }

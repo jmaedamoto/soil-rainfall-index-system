@@ -126,7 +126,11 @@ class SessionController:
         """
         指定時刻の全メッシュリスク値取得
 
-        GET /session/<session_id>/risk-at-time?ft=<ft>
+        GET /session/<session_id>/risk-at-time?ft=<ft>&include_coords=<true|false>
+
+        Parameters:
+            ft: 予報時刻（必須）
+            include_coords: 座標を含めるか（省略時true、初回のみtrueで2回目以降はfalse推奨）
         """
         try:
             ft = request.args.get('ft', type=int)
@@ -136,6 +140,10 @@ class SessionController:
                     "error": "Parameter 'ft' is required"
                 }), 400
 
+            # include_coords パラメータ（デフォルトtrue、後方互換性のため）
+            include_coords_str = request.args.get('include_coords', 'true').lower()
+            include_coords = include_coords_str == 'true'
+
             session = self.session_service.get_session(session_id)
             if session is None:
                 return jsonify({
@@ -144,9 +152,9 @@ class SessionController:
                     "session_id": session_id
                 }), 404
 
-            # 全府県の全メッシュからリスク値と座標を抽出（辞書形式）
+            # 全府県の全メッシュからリスク値を抽出（辞書形式）
             mesh_risks = {}
-            mesh_coords = {}
+            mesh_coords = {} if include_coords else None
             prefectures = session['prefectures']
 
             sample_count = 0
@@ -165,22 +173,26 @@ class SessionController:
                             logger.info(f"[get_risk_at_time] FT={ft}, Mesh={mesh['code']}, Risk={risk_value}, Timeline={mesh['risk_3hour_max_timeline'][:3]}")
                             sample_count += 1
 
-                        # メッシュ50357712の詳細ログ
-                        if mesh['code'] == '50357712':
-                            logger.info(f"[get_risk_at_time] ★特定メッシュ★ FT={ft}, Mesh={mesh['code']}, Risk={risk_value}, Timeline={mesh['risk_3hour_max_timeline'][:5]}")
-
                         mesh_risks[mesh["code"]] = risk_value
-                        mesh_coords[mesh["code"]] = {
-                            "lat": mesh["lat"],
-                            "lon": mesh["lon"]
-                        }
 
-            return jsonify({
+                        # 座標は必要な場合のみ収集
+                        if include_coords:
+                            mesh_coords[mesh["code"]] = {
+                                "lat": mesh["lat"],
+                                "lon": mesh["lon"]
+                            }
+
+            response_data = {
                 "status": "success",
                 "ft": ft,
-                "mesh_risks": mesh_risks,
-                "mesh_coords": mesh_coords
-            })
+                "mesh_risks": mesh_risks
+            }
+
+            # 座標は要求された場合のみ含める
+            if include_coords:
+                response_data["mesh_coords"] = mesh_coords
+
+            return jsonify(response_data)
 
         except Exception as e:
             logger.error(f"Risk at time error: {e}")

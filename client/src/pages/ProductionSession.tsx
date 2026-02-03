@@ -97,6 +97,7 @@ const ProductionSession: React.FC = () => {
       setLoading(true);
       setError(null);
       setIsAdjustedData(false); // 新規読み込みなので調整済みフラグをクリア
+      setMeshCoords({}); // 座標キャッシュをクリア（新しいセッションで再取得）
 
       // セッションベースAPIを呼び出し（軽量レスポンス）
       const result = await apiClient_.calculateProductionSoilRainfallIndexWithUrls({
@@ -132,17 +133,22 @@ const ProductionSession: React.FC = () => {
   const loadRiskAtTime = async (session: string, ft: number) => {
     // セッションAPIを使用して指定時刻のリスク値を取得
     try {
-      console.log(`[loadRiskAtTime] セッションID: ${session}, FT: ${ft}`);
-      const response = await sessionApiClient.getRiskAtTime(session, ft);
-      console.log(`[loadRiskAtTime] APIレスポンス:`, response);
+      // 座標が未取得の場合のみ座標を含める（初回のみ）
+      // 座標は固定データなので、2回目以降は転送を省略してデータ量を50%削減
+      const needCoords = Object.keys(meshCoords).length === 0;
+      console.log(`[loadRiskAtTime] セッションID: ${session}, FT: ${ft}, 座標取得: ${needCoords}`);
+
+      const response = await sessionApiClient.getRiskAtTime(session, ft, { includeCoords: needCoords });
+      console.log(`[loadRiskAtTime] APIレスポンス: mesh_risks=${Object.keys(response.mesh_risks).length}件`);
 
       if (response.status === 'success') {
-        console.log(`[loadRiskAtTime] メッシュリスク数: ${Object.keys(response.mesh_risks).length}`);
-        console.log(`[loadRiskAtTime] メッシュ座標数: ${Object.keys(response.mesh_coords).length}`);
-        console.log(`[loadRiskAtTime] サンプルリスク値:`, Object.entries(response.mesh_risks).slice(0, 3));
-
         setMeshRisksAtTime(response.mesh_risks);
-        setMeshCoords(response.mesh_coords);
+
+        // 座標は初回のみ更新
+        if (needCoords && response.mesh_coords) {
+          console.log(`[loadRiskAtTime] 座標キャッシュ: ${Object.keys(response.mesh_coords).length}件`);
+          setMeshCoords(response.mesh_coords);
+        }
       }
     } catch (err) {
       console.error(`メッシュリスク値読み込みエラー (FT=${ft}):`, err);
