@@ -73,3 +73,6 @@ review*.md
 server/profile_output.txt
 server/cache/*.json
 server/cache/*.calculating.json
+
+# GRIB2 binary data files (downloaded at runtime)
+server/data/*.bin
