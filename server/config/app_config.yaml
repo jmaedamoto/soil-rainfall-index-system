@@ -1,0 +1,54 @@
+# 土壌雨量指数計算システム設定ファイル
+
+# プロキシ設定
+proxy:
+  # 本番環境用プロキシ
+  http: "http://172.17.34.11:3128"
+  https: "http://172.17.34.11:3128"
+  
+  # 開発環境ではプロキシを無効にする場合は下記をコメントアウト
+  # http: null
+  # https: null
+
+# GRIB2データ取得設定
+grib2:
+  # データ取得元ベースURL
+  base_url: "http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn"
+
+  # SWI（土壌雨量指数）データパス
+  swi_path: "/swi10"
+
+  # ガイダンス（降水量予測）データパス
+  guidance_path: "/gdc"
+
+  # タイムアウト設定（秒）
+  download_timeout: 300
+
+  # 接続リトライ設定
+  retry_count: 3
+  retry_delay: 5
+
+# データディレクトリ設定
+data:
+  directory: "data"
+
+# キャッシュ設定
+cache:
+  # キャッシュディレクトリ
+  directory: "cache"
+
+  # TTL（有効期限）: 日数
+  ttl_days: 7
+
+  # gzip圧縮レベル（1-9）
+  # 1: 最速・低圧縮率, 6: バランス（推奨）, 9: 最高圧縮率・低速
+  compression_level: 6
+
+  # 自動クリーンアップ設定
+  auto_cleanup: true
+  cleanup_interval_hours: 24
+
+# ログ設定
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

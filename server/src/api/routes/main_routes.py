@@ -1,0 +1,57 @@
+# -*- coding: utf-8 -*-
+"""
+メインAPIルート (Blueprint)
+"""
+from flask import Blueprint
+from ..controllers.main_controller import MainController
+from services.session_service import SessionService
+
+# Blueprint作成
+main_bp = Blueprint('main', __name__)
+
+# コントローラーインスタンス（データディレクトリは後で設定）
+main_controller = None
+session_service = None
+
+def init_main_routes(data_dir: str = "data"):
+    """メインルートを初期化"""
+    global main_controller, session_service
+    # セッションサービスを作成（TTL: 1時間）
+    session_service = SessionService(ttl_hours=1)
+    # メインコントローラーにセッションサービスを渡す
+    main_controller = MainController(data_dir, session_service=session_service)
+
+@main_bp.route('/', methods=['GET'])
+def root():
+    """ルートエンドポイント"""
+    return main_controller.root()
+
+@main_bp.route('/health', methods=['GET'])
+def health_check():
+    """ヘルスチェックエンドポイント"""
+    return main_controller.health_check()
+
+@main_bp.route('/data-check', methods=['GET'])
+def data_check():
+    """データファイル確認エンドポイント"""
+    return main_controller.data_check()
+
+@main_bp.route('/soil-rainfall-index', methods=['POST'])
+def soil_rainfall_index():
+    """メイン処理エンドポイント（URL ベース）"""
+    return main_controller.soil_rainfall_index()
+
+@main_bp.route('/production-soil-rainfall-index', methods=['GET'])
+def production_soil_rainfall_index():
+    """本番テスト用エンドポイント（GET メソッド）"""
+    return main_controller.production_soil_rainfall_index()
+
+@main_bp.route('/production-soil-rainfall-index-with-urls', methods=['POST'])
+def production_soil_rainfall_index_with_urls():
+    """本番テスト用エンドポイント（SWIとガイダンスの初期時刻を個別指定）"""
+    return main_controller.production_soil_rainfall_index_with_urls()
+
+@main_bp.route('/test-session-with-local-bins', methods=['POST'])
+def test_session_with_local_bins():
+    """開発環境用: ローカルbinファイルでセッションベースAPIをテスト"""
+    return main_controller.test_session_with_local_bins()
