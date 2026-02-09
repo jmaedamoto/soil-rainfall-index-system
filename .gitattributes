@@ -1,0 +1,28 @@
+# Git attributes for soil-rainfall-index-system
+# mainブランチへのマージ時、以下のファイルはmain側を保持（開発用ファイルを除外）
+
+# 開発用バイナリファイル
+server/data/*.bin merge=ours
+
+# テスト・ベンチマークスクリプト
+test_*.py merge=ours
+*_test.py merge=ours
+server/test_*.py merge=ours
+server/benchmark_*.py merge=ours
+server/profile_*.py merge=ours
+
+# 開発用レポート・ドキュメント
+*_REPORT.md merge=ours
+*_PLAN.md merge=ours
+*_CHANGES.md merge=ours
+RAINFALL_ADJUSTMENT_FEATURE.md merge=ours
+client/README_MOCK_PRODUCTION.md merge=ours
+client/performance_test.html merge=ours
+docs/SESSION_CACHE_IMPROVEMENT_PLAN.md merge=ours
+measure_client_performance.py merge=ours
+
+# ローカル設定
+.claude/settings.local.json merge=ours
+
+# CLAUDE.md は手動マージ（本番用と開発用で内容が異なる）
+CLAUDE.md merge=ours
