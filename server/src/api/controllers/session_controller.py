@@ -514,14 +514,17 @@ class SessionController:
 
             logger.info(f"調整対象市町村数: {len(adjustments)}件")
 
-            # サービス初期化（SWI再計算のみ使用）
-            from services.calculation_service import CalculationService
-            from models import Mesh, SwiTimeSeries, Risk
-            calculation_service = CalculationService()
+            # NumPyベクトル化版サービス（高速）
+            from services.calculation_service_numpy import CalculationServiceNumpy
+            calculation_service_numpy = CalculationServiceNumpy()
 
             # 再計算済みメッシュを保存する辞書
             recalculated_meshes = {}
             adjusted_mesh_count = 0
+
+            # NumPy一括計算用のデータリスト
+            mesh_data_list = []
+            mesh_code_to_rain = {}  # mesh_code -> 調整済み雨量
 
             # 二次細分名 → 市町村名リストのマッピングを構築
             subdiv_to_areas = {}
@@ -545,7 +548,10 @@ class SessionController:
                             expanded_adjustments[area_key] = subdiv_rain
                             logger.info(f"二次細分 {subdiv_key} → 市町村 {area_key} に展開")
 
-            # 各府県・市町村・メッシュを走査して雨量調整を適用
+            # Step 1: 調整対象メッシュのデータを収集
+            import time
+            collect_start = time.time()
+
             for pref_code, pref_dict in existing_prefectures_dict.items():
                 for area_dict in pref_dict['areas']:
                     area_key = f"{pref_dict['name']}_{area_dict['name']}"
@@ -553,75 +559,54 @@ class SessionController:
                     if area_key in expanded_adjustments:
                         adjusted_rain = expanded_adjustments[area_key]
 
+                        # 雨量timelineを調整
+                        new_rain_timeline = [
+                            (ft, adjusted_rain[ft])
+                            for ft in sorted(adjusted_rain.keys())
+                        ]
+
                         # この市町村の全メッシュを処理
                         for mesh_dict in area_dict['meshes']:
                             mesh_code = mesh_dict['code']
 
-                            # 雨量timelineを調整
-                            new_rain_timeline = [
-                                {"ft": ft, "value": adjusted_rain[ft]}
-                                for ft in sorted(adjusted_rain.keys())
+                            # 初期SWI値を取得
+                            swi_timeline = mesh_dict.get('swi_timeline', [])
+                            initial_swi = swi_timeline[0]['value'] if swi_timeline else 100.0
+
+                            # NumPy一括計算用のデータを収集
+                            mesh_data_list.append({
+                                'mesh_code': mesh_code,
+                                'initial_swi': initial_swi,
+                                'advisory_bound': mesh_dict['advisary_bound'],
+                                'warning_bound': mesh_dict['warning_bound'],
+                                'dosyakei_bound': mesh_dict['dosyakei_bound'],
+                                'rain_3hour': new_rain_timeline
+                            })
+                            mesh_code_to_rain[mesh_code] = [
+                                {"ft": ft, "value": value}
+                                for ft, value in new_rain_timeline
                             ]
-
-                            # 調整された3時間雨量から1時間雨量を推定
-                            rain_1hour_estimated = []
-                            for rain_point in new_rain_timeline:
-                                ft_3h = rain_point['ft']
-                                rain_3h = rain_point['value']
-                                rain_1h_avg = rain_3h / 3.0
-
-                                for hour_offset in range(3):
-                                    ft_1h = ft_3h - 3 + hour_offset + 1
-                                    if ft_1h >= 0:
-                                        rain_1hour_estimated.append(
-                                            SwiTimeSeries(ft=ft_1h, value=rain_1h_avg)
-                                        )
-
-                            # 一時的なMeshオブジェクトを作成してSWI・リスクを再計算
-                            temp_mesh = Mesh(
-                                area_name=area_dict['name'],
-                                code=mesh_code,
-                                lon=mesh_dict['lon'],
-                                lat=mesh_dict['lat'],
-                                x=0, y=0,
-                                advisary_bound=mesh_dict['advisary_bound'],
-                                warning_bound=mesh_dict['warning_bound'],
-                                dosyakei_bound=mesh_dict['dosyakei_bound'],
-                                swi=[
-                                    SwiTimeSeries(ft=p['ft'], value=p['value'])
-                                    for p in mesh_dict.get('swi_timeline', [])
-                                ],
-                                swi_hourly=[],
-                                rain_1hour=rain_1hour_estimated,
-                                rain_1hour_max=[],
-                                rain_3hour=[
-                                    SwiTimeSeries(ft=p['ft'], value=p['value'])
-                                    for p in new_rain_timeline
-                                ],
-                                risk_hourly=[],
-                                risk_3hour_max=[]
-                            )
-
-                            # SWI・リスク再計算
-                            calculation_service.recalculate_swi_and_risk(temp_mesh)
-
-                            # 再計算結果を保存（フォークセッション用）
-                            recalculated_meshes[mesh_code] = {
-                                'rain_timeline': new_rain_timeline,
-                                'swi_timeline': [
-                                    {"ft": s.ft, "value": s.value} for s in temp_mesh.swi
-                                ],
-                                'risk_3hour_max_timeline': [
-                                    {"ft": r.ft, "value": r.value} for r in temp_mesh.risk_3hour_max
-                                ],
-                                'risk_hourly_timeline': [
-                                    {"ft": r.ft, "value": r.value} for r in temp_mesh.risk_hourly
-                                ] if temp_mesh.risk_hourly else []
-                            }
-
                             adjusted_mesh_count += 1
 
-            logger.info(f"調整メッシュ数: {adjusted_mesh_count}件")
+            collect_time = time.time() - collect_start
+            logger.info(f"データ収集: {adjusted_mesh_count}メッシュ, {collect_time:.3f}秒")
+
+            # Step 2: NumPy一括計算
+            calc_start = time.time()
+            if mesh_data_list:
+                numpy_results = calculation_service_numpy.recalculate_meshes_vectorized(mesh_data_list)
+
+                # 結果をrecalculated_meshesに格納
+                for mesh_code, result in numpy_results.items():
+                    recalculated_meshes[mesh_code] = {
+                        'rain_timeline': mesh_code_to_rain[mesh_code],
+                        'swi_timeline': result['swi_timeline'],
+                        'risk_3hour_max_timeline': result['risk_3hour_max_timeline'],
+                        'risk_hourly_timeline': result['risk_hourly_timeline']
+                    }
+
+            calc_time = time.time() - calc_start
+            logger.info(f"NumPy一括計算: {adjusted_mesh_count}メッシュ, {calc_time:.3f}秒")
 
             # フォークセッションを作成
             fork_session_id = self.session_service.create_fork_session(

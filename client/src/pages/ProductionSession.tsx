@@ -278,7 +278,7 @@ const ProductionSession: React.FC = () => {
 
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
-      <h1 style={{ marginBottom: '20px' }}>土壌雨量指数監視システム</h1>
+      <h1 style={{ marginBottom: '20px' }}>土壌雨量指数監視システム（本番環境 - セッションベース）</h1>
 
       {/* ローディング表示 */}
       {loading && (

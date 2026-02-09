@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>クライアント側パフォーマンステスト</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>クライアント側パフォーマンス計測</h1>
+    <button id="testBtn" onclick="runTest()">テストデータ取得テスト実行</button>
+    <div id="results"></div>
+
+    <script>
+        async function runTest() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<p>テスト実行中...</p>';
+
+            const perfStart = performance.now();
+            let apiCallStart, apiCallEnd, dataProcessStart, totalEnd;
+
+            try {
+                // API呼び出し開始
+                apiCallStart = performance.now();
+
+                const response = await fetch('http://localhost:5000/api/test-full-soil-rainfall-index', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                apiCallEnd = performance.now();
+                const apiDuration = (apiCallEnd - apiCallStart) / 1000;
+
+                // データ処理開始
+                dataProcessStart = performance.now();
+                const data = await response.json();
+                totalEnd = performance.now();
+
+                const dataParseDuration = (totalEnd - dataProcessStart) / 1000;
+                const totalDuration = (totalEnd - perfStart) / 1000;
+
+                // メッシュ数を計算
+                let meshCount = 0;
+                for (const prefKey in data.prefectures) {
+                    const pref = data.prefectures[prefKey];
+                    for (const area of pref.areas) {
+                        meshCount += area.meshes.length;
+                    }
+                }
+
+                // 結果表示
+                resultsDiv.innerHTML = `
+                    <h2>計測結果</h2>
+                    <table border="1" style="border-collapse: collapse;">
+                        <tr>
+                            <th style="padding: 8px;">項目</th>
+                            <th style="padding: 8px;">時間</th>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px;">API呼び出し（サーバー処理含む）</td>
+                            <td style="padding: 8px;"><strong>${apiDuration.toFixed(2)}秒</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px;">JSONパース</td>
+                            <td style="padding: 8px;">${dataParseDuration.toFixed(2)}秒</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px;"><strong>合計時間</strong></td>
+                            <td style="padding: 8px;"><strong>${totalDuration.toFixed(2)}秒</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px;">メッシュ数</td>
+                            <td style="padding: 8px;">${meshCount.toLocaleString()}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px;">データサイズ</td>
+                            <td style="padding: 8px;">${(JSON.stringify(data).length / 1024 / 1024).toFixed(2)} MB</td>
+                        </tr>
+                    </table>
+                    <p style="margin-top: 20px; color: green;">✓ テスト完了</p>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `<p style="color: red;">エラー: ${error.message}</p>`;
+                console.error('テストエラー:', error);
+            }
+        }
+    </script>
+</body>
+</html>

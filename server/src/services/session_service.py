@@ -234,6 +234,9 @@ class SessionService:
         Returns:
             マージされたセッションデータ
         """
+        import time
+        merge_start = time.time()
+
         base_session_id = fork_session.get('base_session_id')
         base_session = self.sessions.get(base_session_id)
 
@@ -241,17 +244,45 @@ class SessionService:
             logger.error(f"Base session not found for fork: {base_session_id}")
             return None
 
-        # ベースセッションのprefecturesをディープコピー
-        merged_prefectures = copy.deepcopy(base_session['prefectures'])
-
         # フォークの再計算済みメッシュを適用
         recalculated_meshes = fork_session.get('recalculated_meshes', {})
+        recalculated_mesh_codes = set(recalculated_meshes.keys())
+
+        # Step 1: 影響を受ける府県を特定（O(N)スキャンを避ける）
+        # メッシュコードから府県を逆引きするインデックスを構築
+        mesh_to_pref = {}
+        for pref_code, prefecture in base_session['prefectures'].items():
+            for area in prefecture.get('areas', []):
+                for mesh in area.get('meshes', []):
+                    mesh_code = mesh.get('code')
+                    if mesh_code in recalculated_mesh_codes:
+                        mesh_to_pref[mesh_code] = pref_code
+
+        affected_pref_codes = set(mesh_to_pref.values())
+        index_time = time.time() - merge_start
+        logger.info(f"[Merge] Index build: {index_time:.3f}s, affected prefs: {affected_pref_codes}")
+
+        # Step 2: 影響を受ける府県のみdeepcopy、それ以外は参照
+        copy_start = time.time()
+        merged_prefectures = {}
+        for pref_code, prefecture in base_session['prefectures'].items():
+            if pref_code in affected_pref_codes:
+                # この府県は変更されるのでdeepcopy
+                merged_prefectures[pref_code] = copy.deepcopy(prefecture)
+            else:
+                # この府県は変更されないので参照（コピーしない）
+                merged_prefectures[pref_code] = prefecture
+        copy_time = time.time() - copy_start
+        logger.info(f"[Merge] Selective deepcopy: {copy_time:.3f}s")
 
         # 影響を受けたエリアを追跡（再集約の最適化用）
         # キー: (pref_code, area_name), 値: area参照
         affected_areas: Dict[tuple, Any] = {}
 
-        for pref_code, prefecture in merged_prefectures.items():
+        # Step 3: 影響を受けた府県のメッシュのみ更新
+        update_start = time.time()
+        for pref_code in affected_pref_codes:
+            prefecture = merged_prefectures[pref_code]
             for area in prefecture.get('areas', []):
                 for mesh in area.get('meshes', []):
                     mesh_code = mesh.get('code')
@@ -270,7 +301,11 @@ class SessionService:
                         # このエリアを影響リストに追加
                         affected_areas[(pref_code, area.get('name'))] = area
 
+        update_time = time.time() - update_start
+        logger.info(f"[Merge] Mesh update: {update_time:.3f}s, updated areas: {len(affected_areas)}")
+
         # メッシュ更新後、影響を受けたエリアのみリスクタイムラインを再集約
+        reagg_start = time.time()
         if affected_areas:
             # 影響を受けた府県を特定
             affected_prefs = set(pref_code for pref_code, _ in affected_areas.keys())
@@ -339,6 +374,10 @@ class SessionService:
                         {"ft": ft, "value": ft_max_risk[ft]}
                         for ft in sorted(ft_max_risk.keys())
                     ]
+
+        reagg_time = time.time() - reagg_start
+        total_time = time.time() - merge_start
+        logger.info(f"[Merge] Re-aggregation: {reagg_time:.3f}s, Total merge: {total_time:.3f}s")
 
         # マージ結果を返す
         return {

@@ -301,12 +301,30 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
     try {
       const currentRainfall = viewMode === 'municipality' ? adjustedRainfall : adjustedSubdivisionRainfall;
+      const originalData = viewMode === 'municipality' ? originalRainfall : originalSubdivisionRainfall;
 
-      // 調整データを配列形式に変換
+      // 変更があったエリアのみを抽出して送信（パフォーマンス最適化）
       const adjustments: Record<string, Array<{ ft: number; value: number }>> = {};
       Object.entries(currentRainfall).forEach(([areaName, timeseries]) => {
-        adjustments[areaName] = timeseries;
+        const originalTimeseries = originalData[areaName];
+        if (originalTimeseries) {
+          // このエリアに変更があるかチェック
+          const hasChange = timeseries.some((point, index) =>
+            Math.abs(point.value - originalTimeseries[index].value) > 0.01
+          );
+          if (hasChange) {
+            adjustments[areaName] = timeseries;
+          }
+        }
       });
+
+      // 変更がない場合は何もせずに閉じる
+      if (Object.keys(adjustments).length === 0) {
+        onClose();
+        return;
+      }
+
+      console.log(`[Recalculate] Sending ${Object.keys(adjustments).length} modified areas`);
 
       // セッションベースAPI呼び出し
       const result = await sessionApiClient.recalculateWithAdjustedRainfall(
