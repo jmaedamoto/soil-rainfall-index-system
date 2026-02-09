@@ -61,7 +61,8 @@ server/parallel_test_result.json
 server/baseline_grib2_test.json
 server/optimized_grib2_test.json
 
-# Cache files (gzip compressed JSON)
+# Cache files
+server/cache/*.json
 server/cache/*.json.gz
 server/cache/*.meta.json
 !server/cache/.gitkeep

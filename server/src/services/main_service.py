@@ -161,27 +161,17 @@ class MainService:
             処理結果JSON
         """
         try:
-            # 開発ブランチ: 常にローカルファイルを使用（URLは読みに行かない）
-            # mainブランチにマージする際はこのブロックを削除してURL版に戻すこと
-            if fallback_swi_path and fallback_guidance_path:
-                logger.info(f"[DEV] ローカルファイル使用: {fallback_swi_path}")
-                logger.info(f"[DEV] ローカルファイル使用: {fallback_guidance_path}")
-                with open(fallback_swi_path, 'rb') as f:
-                    swi_data_bytes = f.read()
-                with open(fallback_guidance_path, 'rb') as f:
-                    guidance_data_bytes = f.read()
-            else:
-                # 本番: URLからダウンロード
-                logger.info(f"SWI URL: {swi_url}")
-                logger.info(f"Guidance URL: {guidance_url}")
+            logger.info(f"SWI URL: {swi_url}")
+            logger.info(f"Guidance URL: {guidance_url}")
 
-                swi_data_bytes = self.grib2_service.download_file(swi_url)
-                if not swi_data_bytes:
-                    raise Exception(f"SWIファイル取得失敗: {swi_url}")
+            # GRIB2データダウンロード
+            swi_data_bytes = self.grib2_service.download_file(swi_url)
+            if not swi_data_bytes:
+                raise Exception(f"SWIファイル取得失敗: {swi_url}")
 
-                guidance_data_bytes = self.grib2_service.download_file(guidance_url)
-                if not guidance_data_bytes:
-                    raise Exception(f"ガイダンスファイル取得失敗: {guidance_url}")
+            guidance_data_bytes = self.grib2_service.download_file(guidance_url)
+            if not guidance_data_bytes:
+                raise Exception(f"ガイダンスファイル取得失敗: {guidance_url}")
 
             # データ解析
             base_info, swi_grib2 = self.grib2_service.unpack_swi_grib2(
