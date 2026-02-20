@@ -51,7 +51,3 @@ def production_soil_rainfall_index_with_urls():
     """本番テスト用エンドポイント（SWIとガイダンスの初期時刻を個別指定）"""
     return main_controller.production_soil_rainfall_index_with_urls()
 
-@main_bp.route('/test-session-with-local-bins', methods=['POST'])
-def test_session_with_local_bins():
-    """開発環境用: ローカルbinファイルでセッションベースAPIをテスト"""
-    return main_controller.test_session_with_local_bins()

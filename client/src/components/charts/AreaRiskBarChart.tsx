@@ -334,7 +334,6 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                           position: 'relative'
                         }}
                         onClick={() => {
-                          console.log(`[AreaRiskBarChart] 時刻セル クリック - FT: ${hourInfo.ft}, 時: ${hourInfo.hour}`);
                           if (onTimeSelect) {
                             onTimeSelect(hourInfo.ft);
                           }

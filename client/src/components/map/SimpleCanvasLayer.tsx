@@ -64,22 +64,14 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
 
       // セッションモード: meshRisks + meshCoordsを使用
       if (currentMeshRisks && currentMeshCoords) {
-        console.log(`[SimpleCanvasLayer.drawMeshes] セッションモード - meshRisks: ${Object.keys(currentMeshRisks).length}, meshCoords: ${Object.keys(currentMeshCoords).length}`);
-
-        let drawnCount = 0;
-        let skippedNormalCount = 0;
-        let skippedNoCoordCount = 0;
-
         Object.entries(currentMeshRisks).forEach(([meshCode, riskValue]) => {
           // 危険度0は描画しない
           if (riskValue === RiskLevel.NORMAL) {
-            skippedNormalCount++;
             return;
           }
 
           const coords = currentMeshCoords[meshCode];
           if (!coords) {
-            skippedNoCoordCount++;
             return;
           }
 
@@ -98,10 +90,8 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
           });
 
           meshLayerGroup.addLayer(rectangle);
-          drawnCount++;
         });
 
-        console.log(`[SimpleCanvasLayer.drawMeshes] 描画完了 - 描画: ${drawnCount}, スキップ(通常): ${skippedNormalCount}, スキップ(座標なし): ${skippedNoCoordCount}`);
       }
       // 通常モード: meshesを使用
       else if (currentMeshes && currentMeshes.length > 0) {
@@ -180,14 +170,8 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
 
   // データ更新時の再描画
   useEffect(() => {
-    console.log(`[SimpleCanvasLayer] 再描画トリガー - selectedTime: ${selectedTime}, meshRisks数: ${meshRisks ? Object.keys(meshRisks).length : 0}, meshes数: ${meshes?.length || 0}`);
-
     if (drawFunctionRef.current) {
-      console.log(`[SimpleCanvasLayer] drawMeshes実行`);
       drawFunctionRef.current();
-      console.log(`[SimpleCanvasLayer] 描画完了`);
-    } else {
-      console.warn(`[SimpleCanvasLayer] drawFunctionRefが未初期化`);
     }
   }, [selectedTime, meshes, meshRisks, meshCoords, meshIntervals]);
 

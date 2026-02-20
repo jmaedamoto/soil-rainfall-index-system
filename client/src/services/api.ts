@@ -14,19 +14,7 @@ const apiClient = axios.create({
 // レスポンスインターセプター（エラーハンドリング）
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response) {
-      // サーバーエラーレスポンス
-      console.error('API Error:', error.response.status, error.response.data);
-    } else if (error.request) {
-      // ネットワークエラー
-      console.error('Network Error:', error.request);
-    } else {
-      // その他のエラー
-      console.error('Error:', error.message);
-    }
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 export class SoilRainfallAPIClient {

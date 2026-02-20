@@ -41,16 +41,6 @@ def create_session_blueprint(session_controller):
     def delete_session(session_id):
         return session_controller.delete_session(session_id)
 
-    # セッション一覧取得（デバッグ用）
-    @session_bp.route('/sessions', methods=['GET'])
-    def list_sessions():
-        return session_controller.list_sessions()
-
-    # セッション統計情報取得
-    @session_bp.route('/sessions/stats', methods=['GET'])
-    def get_session_stats():
-        return session_controller.get_session_stats()
-
     # 期限切れセッションクリーンアップ
     @session_bp.route('/sessions/cleanup', methods=['POST'])
     def cleanup_sessions():

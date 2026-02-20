@@ -43,8 +43,7 @@ class MainController:
                     "GET  /data-check",
                     "POST /soil-rainfall-index",
                     "GET  /production-soil-rainfall-index",
-                    "POST /production-soil-rainfall-index-with-urls",
-                    "POST /test-session-with-local-bins"
+                    "POST /production-soil-rainfall-index-with-urls"
                 ],
                 "cache": [
                     "GET    /cache/list",
@@ -66,17 +65,7 @@ class MainController:
                     "GET    /session/<session_id>/rainfall-data",
                     "POST   /session/<session_id>/recalculate",
                     "DELETE /session/<session_id>",
-                    "GET    /sessions",
-                    "GET    /sessions/stats",
                     "POST   /sessions/cleanup"
-                ],
-                "test": [
-                    "GET  /test-bin-data",
-                    "GET  /test-grib2-analysis",
-                    "GET  /test-soil-rainfall-index",
-                    "GET  /test-single-prefecture",
-                    "GET  /test-full-soil-rainfall-index",
-                    "GET  /test-full-parallel-soil-rainfall-index"
                 ]
             }
         })
@@ -442,87 +431,3 @@ class MainController:
                 "message": str(e)
             }), 500
 
-    def test_session_with_local_bins(self):
-        """開発環境用: ローカルbinファイルでセッションベースAPIをテスト"""
-        try:
-            # テスト用binファイルパス
-            swi_file = os.path.join(self.data_dir,
-                                    "Z__C_RJTD_20230602000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin")
-            guidance_file = os.path.join(self.data_dir,
-                                         "guid_msm_grib2_20230602000000_rmax00.bin")
-
-            # ファイル存在確認
-            if not os.path.exists(swi_file):
-                return jsonify({
-                    "status": "error",
-                    "message": f"SWIテストファイルが見つかりません: {swi_file}"
-                }), 404
-
-            if not os.path.exists(guidance_file):
-                return jsonify({
-                    "status": "error",
-                    "message": f"ガイダンステストファイルが見つかりません: {guidance_file}"
-                }), 404
-
-            logger.info(f"テスト用binファイルでセッション作成開始")
-            logger.info(f"  SWI: {swi_file}")
-            logger.info(f"  ガイダンス: {guidance_file}")
-
-            # ファイルベースでメイン処理実行
-            result = self.main_service.main_process_from_files(swi_file, guidance_file)
-
-            # セッションサービスが有効な場合、セッション作成
-            if self.session_service:
-                # テストデータの初期時刻を使用
-                swi_initial_time = result.get('initial_time', '2023-06-02T00:00:00')
-                guidance_initial_time = swi_initial_time  # 同じ時刻
-
-                # セッション作成
-                session_id = self.session_service.create_session(
-                    result['prefectures'],
-                    swi_initial_time,
-                    guidance_initial_time,
-                    datetime.now().isoformat()
-                )
-
-                # 利用可能な時刻を抽出
-                available_times = []
-                first_pref = next(iter(result['prefectures'].values()))
-                if first_pref['areas'] and first_pref['areas'][0]['meshes']:
-                    first_mesh = first_pref['areas'][0]['meshes'][0]
-                    available_times = sorted(set(
-                        [point['ft'] for point in first_mesh['risk_3hour_max_timeline']] +
-                        [point['ft'] for point in first_mesh['risk_hourly_timeline']]
-                    ))
-
-                # 軽量レスポンスを返す
-                available_prefs = list(result['prefectures'].keys())
-
-                return jsonify({
-                    "status": "success",
-                    "session_id": session_id,
-                    "swi_initial_time": swi_initial_time + 'Z' if not swi_initial_time.endswith('Z') else swi_initial_time,
-                    "guidance_initial_time": guidance_initial_time + 'Z' if not guidance_initial_time.endswith('Z') else guidance_initial_time,
-                    "available_prefectures": available_prefs,
-                    "available_times": available_times,
-                    "cache_info": None,  # テストモードではキャッシュなし
-                    "used_urls": {
-                        "swi_url": f"file://{swi_file}",
-                        "swi_initial_time": swi_initial_time,
-                        "guidance_url": f"file://{guidance_file}",
-                        "guidance_initial_time": guidance_initial_time
-                    }
-                })
-
-            # セッションサービスが無効な場合、全データを返す
-            result["status"] = "success"
-            return jsonify(result)
-
-        except Exception as e:
-            logger.error(f"テストセッション処理エラー: {e}")
-            import traceback
-            traceback.print_exc()
-            return jsonify({
-                "status": "error",
-                "message": str(e)
-            }), 500

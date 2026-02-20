@@ -324,8 +324,6 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
         return;
       }
 
-      console.log(`[Recalculate] Sending ${Object.keys(adjustments).length} modified areas`);
-
       // セッションベースAPI呼び出し
       const result = await sessionApiClient.recalculateWithAdjustedRainfall(
         sessionId,

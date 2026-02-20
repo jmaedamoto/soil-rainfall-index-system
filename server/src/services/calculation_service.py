@@ -534,11 +534,6 @@ class CalculationService:
                 initial_second_tunk = swi_grib2['second_tunk'][python_swi_index] / 10
                 initial_third_tunk = initial_swi - initial_first_tunk - initial_second_tunk
 
-                # メッシュ50357712のデバッグログ（計算前）
-                if mesh.code == '50357712':
-                    logger.info(f"[DEBUG] Mesh {mesh.code} rain_1hour FTs: {[r.ft for r in mesh.rain_1hour[:6]]}")
-                    logger.info(f"[DEBUG] Mesh {mesh.code} initial_swi: {initial_swi}, advisary: {mesh.advisary_bound}")
-
                 # 1時間ごとのSWI計算
                 mesh.swi_hourly = self.calc_swi_hourly(
                     initial_swi,
@@ -548,10 +543,6 @@ class CalculationService:
                     mesh.rain_1hour
                 )
 
-                # メッシュ50357712のデバッグログ（SWI計算後）
-                if mesh.code == '50357712':
-                    logger.info(f"[DEBUG] Mesh {mesh.code} swi_hourly: {[(s.ft, round(s.value, 1)) for s in mesh.swi_hourly[:6]]}")
-
                 # 1時間ごとの危険度計算
                 mesh.risk_hourly = self.calc_hourly_risk(
                     mesh.swi_hourly,
@@ -560,16 +551,8 @@ class CalculationService:
                     mesh.dosyakei_bound
                 )
 
-                # メッシュ50357712のデバッグログ（risk_hourly計算後）
-                if mesh.code == '50357712':
-                    logger.info(f"[DEBUG] Mesh {mesh.code} risk_hourly: {[(r.ft, r.value) for r in mesh.risk_hourly[:9]]}")
-
                 # 3時間ごとの最大危険度計算（1時間雨量ベース）
                 mesh.risk_3hour_max = self.calc_3hour_max_risk_from_hourly(mesh.risk_hourly)
-
-                # メッシュ50357712のデバッグログ（risk_3hour_max計算後）
-                if mesh.code == '50357712':
-                    logger.info(f"[DEBUG] Mesh {mesh.code} risk_3hour_max: {[(r.ft, r.value) for r in mesh.risk_3hour_max[:5]]}")
 
             return mesh
 

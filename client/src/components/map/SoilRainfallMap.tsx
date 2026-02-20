@@ -184,7 +184,6 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
 
   // 現在選択されている時刻を計算（useMemoでメモ化）
   const currentTimeDisplay = useMemo(() => {
-    console.log(`[SoilRainfallMap.currentTimeDisplay] selectedTime: ${selectedTime}, swiInitialTime: ${swiInitialTime}`);
     if (!swiInitialTime) return 'N/A';
     // swiInitialTimeはUTC時刻（例: 2023-06-02T00:00:00Z）
     const swiDate = new Date(swiInitialTime);
@@ -194,9 +193,7 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
     const currentJstMs = currentUtcMs + 9 * 60 * 60 * 1000;
     const currentDate = new Date(currentJstMs);
     // getUTC*()を使用（currentJstMsはJST時刻を表すミリ秒値）
-    const result = `${currentDate.getUTCFullYear()}/${currentDate.getUTCMonth() + 1}/${currentDate.getUTCDate()} ${String(currentDate.getUTCHours()).padStart(2, '0')}:${String(currentDate.getUTCMinutes()).padStart(2, '0')}`;
-    console.log(`[SoilRainfallMap.currentTimeDisplay] 計算結果: ${result} (JST表示)`);
-    return result;
+    return `${currentDate.getUTCFullYear()}/${currentDate.getUTCMonth() + 1}/${currentDate.getUTCDate()} ${String(currentDate.getUTCHours()).padStart(2, '0')}:${String(currentDate.getUTCMinutes()).padStart(2, '0')}`;
   }, [selectedTime, swiInitialTime]);
 
   return (

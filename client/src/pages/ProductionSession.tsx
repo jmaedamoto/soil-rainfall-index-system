@@ -81,14 +81,6 @@ const ProductionSession: React.FC = () => {
     setGuidanceHour(hour);
   }, []);
 
-  // meshRisksAtTime監視用
-  useEffect(() => {
-    console.log(`[meshRisksAtTime変更検知] メッシュ数: ${Object.keys(meshRisksAtTime).length}`);
-    if (Object.keys(meshRisksAtTime).length > 0) {
-      console.log(`[meshRisksAtTime変更検知] サンプル値:`, Object.entries(meshRisksAtTime).slice(0, 5));
-    }
-  }, [meshRisksAtTime]);
-
   const loadData = async () => {
     if (!swiInitialTime || !guidanceInitialTime) {
       setError('初期時刻を選択してください');
@@ -138,22 +130,19 @@ const ProductionSession: React.FC = () => {
       // 座標が未取得の場合のみ座標を含める（初回のみ）
       // 座標は固定データなので、2回目以降は転送を省略してデータ量を50%削減
       const needCoords = Object.keys(meshCoords).length === 0;
-      console.log(`[loadRiskAtTime] セッションID: ${session}, FT: ${ft}, 座標取得: ${needCoords}`);
 
       const response = await sessionApiClient.getRiskAtTime(session, ft, { includeCoords: needCoords });
-      console.log(`[loadRiskAtTime] APIレスポンス: mesh_risks=${Object.keys(response.mesh_risks).length}件`);
 
       if (response.status === 'success') {
         setMeshRisksAtTime(response.mesh_risks);
 
         // 座標は初回のみ更新
         if (needCoords && response.mesh_coords) {
-          console.log(`[loadRiskAtTime] 座標キャッシュ: ${Object.keys(response.mesh_coords).length}件`);
           setMeshCoords(response.mesh_coords);
         }
       }
-    } catch (err) {
-      console.error(`メッシュリスク値読み込みエラー (FT=${ft}):`, err);
+    } catch {
+      // エラー時は静かに失敗（UIにはローディング状態で表示）
     }
   };
 
@@ -173,8 +162,8 @@ const ProductionSession: React.FC = () => {
           [prefectureCode]: response.prefecture
         }));
       }
-    } catch (err) {
-      console.error(`府県データ読み込みエラー (${prefectureCode}):`, err);
+    } catch {
+      // エラー時はスキップ
     } finally {
       setLoadingPrefecture(null);
     }
@@ -231,11 +220,8 @@ const ProductionSession: React.FC = () => {
   };
 
   const handleTimeChange = async (newTime: number) => {
-    console.log(`[handleTimeChange] 時刻変更: ${selectedTime} -> ${newTime}`);
-
     // 同じ時刻が選択された場合は何もしない
     if (newTime === selectedTime) {
-      console.log(`[handleTimeChange] 同じ時刻のためスキップ`);
       return;
     }
 
@@ -245,15 +231,10 @@ const ProductionSession: React.FC = () => {
     try {
       // 状態更新
       setSelectedTime(newTime);
-      console.log(`[handleTimeChange] selectedTime更新: ${newTime}`);
 
       // セッションIDがあれば、新しい時刻のメッシュリスク値を読み込み
       if (sessionId) {
-        console.log(`[handleTimeChange] loadRiskAtTime呼び出し開始`);
         await loadRiskAtTime(sessionId, newTime);
-        console.log(`[handleTimeChange] loadRiskAtTime呼び出し完了`);
-      } else {
-        console.warn(`[handleTimeChange] sessionIDが未設定`);
       }
     } finally {
       // ローディング解除
@@ -561,8 +542,8 @@ const ProductionSession: React.FC = () => {
                     [selectedPrefecture]: response.prefecture
                   }));
                 }
-              } catch (err) {
-                console.error('府県データ再読み込みエラー:', err);
+              } catch {
+              // エラー時はスキップ
               }
             }
           }}

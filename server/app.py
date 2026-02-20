@@ -19,7 +19,6 @@ from api.routes.main_routes import main_bp, init_main_routes
 from api.routes.cache_routes import cache_bp
 from api.routes.rainfall_routes import rainfall_bp
 from api.routes.session_routes import create_session_blueprint
-from api.routes.test_routes import test_bp, init_test_routes
 from api.controllers.session_controller import SessionController
 
 # ============================================================
@@ -47,14 +46,10 @@ def create_app(data_dir: str = "data"):
         session_bp = create_session_blueprint(session_controller)
         app.register_blueprint(session_bp, url_prefix=API_PREFIX)
 
-        # テストルートも初期化（session_serviceを渡す）
-        init_test_routes(data_dir, session_service)
-
     # Blueprint登録（全て同じプレフィックスを適用）
     app.register_blueprint(main_bp, url_prefix=API_PREFIX)
     app.register_blueprint(cache_bp, url_prefix=API_PREFIX)
     app.register_blueprint(rainfall_bp, url_prefix=API_PREFIX)
-    app.register_blueprint(test_bp, url_prefix=API_PREFIX)
 
     return app
 
@@ -76,7 +71,6 @@ if __name__ == '__main__':
     logger.info("    POST /soil-rainfall-index")
     logger.info("    GET  /production-soil-rainfall-index")
     logger.info("    POST /production-soil-rainfall-index-with-urls")
-    logger.info("    POST /test-session-with-local-bins")
     logger.info("  キャッシュAPI (cache_bp):")
     logger.info("    GET    /cache/list")
     logger.info("    GET    /cache/stats")
@@ -95,15 +89,6 @@ if __name__ == '__main__':
     logger.info("    GET    /session/<session_id>/rainfall-data")
     logger.info("    POST   /session/<session_id>/recalculate")
     logger.info("    DELETE /session/<session_id>")
-    logger.info("    GET    /sessions")
-    logger.info("    GET    /sessions/stats")
     logger.info("    POST   /sessions/cleanup")
-    logger.info("  テストAPI (test_bp):")
-    logger.info("    GET    /test-bin-data")
-    logger.info("    GET    /test-grib2-analysis")
-    logger.info("    GET    /test-soil-rainfall-index")
-    logger.info("    GET    /test-single-prefecture")
-    logger.info("    GET    /test-full-soil-rainfall-index")
-    logger.info("    GET    /test-full-parallel-soil-rainfall-index")
 
     app.run(debug=True, host='0.0.0.0', port=5000)
