@@ -431,10 +431,17 @@ class CacheService:
                     logger.info(f"ベースセッションID保存: {cache_key} -> {base_session_id}")
             except Exception as e:
                 logger.error(f"ベースセッションID保存エラー: {cache_key} - {e}")
+            # 完了済みロックは待機中リクエストが参照できるようファイルを残す
+            logger.info(f"計算ロック解放: {cache_key}")
+            return
 
-        # ロックファイルは削除せず、completed_atがあれば完了とみなす
-        # これにより、待機中のリクエストがベースセッションIDを取得可能
-        logger.info(f"計算ロック解放: {cache_key}")
+        # エラー時やセッション未生成時はロックファイルを削除して再試行可能にする
+        try:
+            if lock_path.exists():
+                lock_path.unlink()
+            logger.info(f"計算ロック削除: {cache_key}")
+        except Exception as e:
+            logger.error(f"計算ロック削除エラー: {cache_key} - {e}")
 
     def get_base_session_id(self, cache_key: str) -> Optional[str]:
         """
