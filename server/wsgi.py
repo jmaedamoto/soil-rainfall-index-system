@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 
 os.environ.setdefault("CACHE_DIR", "/var/cache/myapp/dosya")
+os.environ.setdefault("SOIL_RAINFALL_API_PREFIX", "")
 
 # アプリケーションのルートディレクトリを設定
 application_root = os.path.dirname(os.path.abspath(__file__))
