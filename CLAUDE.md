@@ -1,5 +1,21 @@
 # 土壌雨量指数計算システム VBA → Python Web API 変換プロジェクト
 
+## Branch Promotion Policy
+
+`develop` / `refactoring` から `staging` / `main` に移す作業では、常に本番用の最小構成を維持する。
+
+- `staging` / `main` では `SOIL_RAINFALL_ROUTE_PROFILE=production` を前提に扱う
+- 本番で公開してよい route は次の 5 本だけ
+  - `POST /production-soil-rainfall-index-with-urls`
+  - `GET /session/<session_id>/prefecture/<prefecture_code>`
+  - `GET /session/<session_id>/risk-at-time`
+  - `GET /session/<session_id>/rainfall-data`
+  - `POST /session/<session_id>/recalculate`
+- 本番クライアントから使われない route、テスト用 route、検証用 route は `staging` / `main` に持ち込まない
+- `test_*.py`、`server/tests/`、`.pytest_cache/`、`__pycache__/`、`*.pyc` は `staging` / `main` に持ち込まない
+- 昇格前には `python scripts/check_production_promotion.py` を実行する
+- 詳細ルールは `docs/staging-promotion-rules.md` を正本として参照する
+
 ## プロジェクト概要
 
 ExcelのVBA（Visual Basic for Applications）で実装されていた土壌雨量指数計算システムを、PythonのWeb APIに変換するプロジェクトです。
