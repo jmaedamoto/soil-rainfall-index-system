@@ -35,3 +35,11 @@
 - ブランチ昇格用 PR テンプレートに `route profile: production` を必須項目として入れる
 - デプロイ設定に `SOIL_RAINFALL_ROUTE_PROFILE=production` を固定する
 - レビュー観点に「開発用 route が露出していないか」を追加する
+- `.github/workflows/staging-promotion-check.yml` で production profile の route と不要ファイルを CI 検査する
+- `scripts/check_production_promotion.py` を昇格前のローカル確認コマンドとして使う
+
+## ローカル確認
+
+```bash
+python scripts/check_production_promotion.py
+```
