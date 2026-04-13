@@ -46,6 +46,9 @@ class ConfigService:
                 "http": None,
                 "https": None
             },
+            "api": {
+                "route_profile": "all"
+            },
             "grib2": {
                 "base_url": "http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn",
                 "swi_path": "/swi10",
@@ -86,6 +89,13 @@ class ConfigService:
             "http": self.get("proxy.http"),
             "https": self.get("proxy.https")
         }
+
+    def get_api_route_profile(self) -> str:
+        """公開するAPIプロファイルを取得"""
+        return os.environ.get(
+            "SOIL_RAINFALL_ROUTE_PROFILE",
+            self.get("api.route_profile", "all")
+        )
     
     def get_grib2_config(self) -> Dict[str, Any]:
         """GRIB2設定を取得"""
