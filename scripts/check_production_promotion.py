@@ -7,6 +7,8 @@ import os
 import sys
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SERVER_ROOT = REPO_ROOT / "server"
@@ -31,6 +33,7 @@ FORBIDDEN_PATTERNS = [
 
 def collect_routes() -> set[str]:
     os.environ["SOIL_RAINFALL_ROUTE_PROFILE"] = "production"
+    os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
     sys.path.insert(0, str(SERVER_ROOT))
 
     import app  # pylint: disable=import-error,import-outside-toplevel

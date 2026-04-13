@@ -26,7 +26,6 @@ from api.routes.session_routes import (
     create_development_session_blueprint,
     create_production_session_blueprint,
 )
-from api.routes.test_routes import test_bp, init_test_routes
 from api.controllers.session_controller import SessionController
 from config.config_service import ConfigService
 
@@ -41,8 +40,6 @@ API_PREFIX = os.environ.get('SOIL_RAINFALL_API_PREFIX', '')
 
 def _register_development_blueprints(app: Flask, data_dir: str, session_controller: SessionController):
     """開発・検証向けBlueprintを登録"""
-    init_test_routes(data_dir, session_controller.session_service)
-
     app.register_blueprint(main_development_bp, url_prefix=API_PREFIX)
     app.register_blueprint(
         create_development_session_blueprint(session_controller),
@@ -50,7 +47,6 @@ def _register_development_blueprints(app: Flask, data_dir: str, session_controll
     )
     app.register_blueprint(cache_bp, url_prefix=API_PREFIX)
     app.register_blueprint(rainfall_bp, url_prefix=API_PREFIX)
-    app.register_blueprint(test_bp, url_prefix=API_PREFIX)
 
 
 def _log_registered_endpoint_sets(route_profile: str):
@@ -85,12 +81,6 @@ def _log_registered_endpoint_sets(route_profile: str):
         logger.info(f"    POST /dosya/api{API_PREFIX}/cache/cleanup")
         logger.info(f"    GET  /dosya/api{API_PREFIX}/rainfall-forecast")
         logger.info(f"    POST /dosya/api{API_PREFIX}/rainfall-adjustment")
-        logger.info(f"    GET  /dosya/api{API_PREFIX}/test-bin-data")
-        logger.info(f"    GET  /dosya/api{API_PREFIX}/test-grib2-analysis")
-        logger.info(f"    GET  /dosya/api{API_PREFIX}/test-soil-rainfall-index")
-        logger.info(f"    GET  /dosya/api{API_PREFIX}/test-single-prefecture")
-        logger.info(f"    GET  /dosya/api{API_PREFIX}/test-full-soil-rainfall-index")
-        logger.info(f"    GET  /dosya/api{API_PREFIX}/test-full-parallel-soil-rainfall-index")
 
 
 def create_app(data_dir: str = "data"):

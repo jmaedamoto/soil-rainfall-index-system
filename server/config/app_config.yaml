@@ -14,7 +14,7 @@ proxy:
 api:
   # all: 開発・検証用ルートも公開
   # production: 本番クライアントに必要なルートのみ公開
-  route_profile: "all"
+  route_profile: "production"
 
 # GRIB2データ取得設定
 grib2:
