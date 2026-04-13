@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { HealthStatus, LightweightCalculationResult } from '../types/api';
+import { HealthStatus } from '../types/api';
+import type { LightweightCalculationResult } from '../types/session';
 import { API_BASE_URL } from '../config/apiConfig';
 
 // Axiosインスタンスの作成
@@ -53,7 +54,7 @@ export class SoilRainfallAPIClient {
   /**
    * 本番用土壌雨量指数計算（SWIとガイダンスの初期時刻を個別指定）
    * セッションベースAPIを使用し、軽量レスポンスを返す
-   * リモートダウンロード失敗時はサーバー側でローカルbinファイルにフォールバック
+   * ローカルbin使用の有無はサーバー設定で制御される
    */
   async calculateProductionSoilRainfallIndexWithUrls(params: {
     swi_initial: string;

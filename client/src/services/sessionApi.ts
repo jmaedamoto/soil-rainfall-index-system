@@ -3,8 +3,10 @@ import type {
   SessionInfo,
   PrefectureDataResponse,
   RiskAtTimeResponse,
-  MeshDetailResponse
-} from '../types/api';
+  MeshDetailResponse,
+  RainfallDataResponse,
+  RecalculateResponse,
+} from '../types/session';
 import { API_BASE_URL } from '../config/apiConfig';
 
 class SessionAPIClient {
@@ -103,14 +105,11 @@ class SessionAPIClient {
   /**
    * 雨量調整用の雨量データ取得
    */
-  async getRainfallData(sessionId: string): Promise<{
-    area_rainfall: Record<string, Array<{ ft: number; value: number }>>;
-    subdivision_rainfall: Record<string, Array<{ ft: number; value: number }>>;
-  }> {
+  async getRainfallData(sessionId: string): Promise<RainfallDataResponse> {
     const response = await axios.get<{
       status: string;
-      area_rainfall: Record<string, Array<{ ft: number; value: number }>>;
-      subdivision_rainfall: Record<string, Array<{ ft: number; value: number }>>;
+      area_rainfall: RainfallDataResponse['area_rainfall'];
+      subdivision_rainfall: RainfallDataResponse['subdivision_rainfall'];
     }>(
       `${this.apiBaseUrl}/session/${sessionId}/rainfall-data`
     );
@@ -129,20 +128,14 @@ class SessionAPIClient {
     swiInitial: string,
     guidanceInitial: string,
     dataSource: string
-  ): Promise<{
-    session_id: string;
-    adjusted: boolean;
-    ft: number;
-    mesh_risks: Record<string, number>;
-    mesh_coords: Record<string, { lat: number; lon: number }>;
-  }> {
+  ): Promise<RecalculateResponse> {
     const response = await axios.post<{
       status: string;
-      session_id: string;
-      adjusted: boolean;
-      ft: number;
-      mesh_risks: Record<string, number>;
-      mesh_coords: Record<string, { lat: number; lon: number }>;
+      session_id: RecalculateResponse['session_id'];
+      adjusted: RecalculateResponse['adjusted'];
+      ft: RecalculateResponse['ft'];
+      mesh_risks: RecalculateResponse['mesh_risks'];
+      mesh_coords: RecalculateResponse['mesh_coords'];
     }>(
       `${this.apiBaseUrl}/session/${sessionId}/recalculate`,
       {

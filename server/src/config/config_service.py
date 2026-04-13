@@ -55,7 +55,12 @@ class ConfigService:
                 "retry_delay": 5
             },
             "data": {
-                "directory": "data"
+                "directory": "data",
+                "local_grib2_fallback": {
+                    "enabled": False,
+                    "swi_path": None,
+                    "guidance_path": None
+                }
             },
             "logging": {
                 "level": "INFO",
@@ -96,6 +101,14 @@ class ConfigService:
     def get_data_directory(self) -> str:
         """データディレクトリを取得"""
         return self.get("data.directory", "data")
+
+    def get_local_grib2_fallback_config(self) -> Dict[str, Any]:
+        """ローカルGRIB2フォールバック設定を取得"""
+        return {
+            "enabled": self.get("data.local_grib2_fallback.enabled", False),
+            "swi_path": self.get("data.local_grib2_fallback.swi_path"),
+            "guidance_path": self.get("data.local_grib2_fallback.guidance_path"),
+        }
 
     def build_swi_url(self, initial_time) -> str:
         """SWI GRIB2 URL構築"""

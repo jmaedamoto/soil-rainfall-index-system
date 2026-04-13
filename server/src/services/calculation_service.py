@@ -13,6 +13,7 @@ from models import (
     BaseInfo, SwiTimeSeries, GuidanceTimeSeries, Risk,
     Mesh, Area, Prefecture, SecondarySubdivision
 )
+from .calculation_aggregation_service import CalculationAggregationService
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,9 @@ class CalculationService:
     l1, l2, l3, l4 = 15.0, 60.0, 15.0, 15.0
     a1, a2, a3, a4 = 0.1, 0.15, 0.05, 0.01
     b1, b2, b3 = 0.12, 0.05, 0.01
+
+    def __init__(self):
+        self.aggregation_service = CalculationAggregationService()
 
     def get_data_num(self, lat: float, lon: float, base_info: Any) -> int:
         """
@@ -688,13 +692,15 @@ class CalculationService:
                 return
 
             # 汎用集約メソッドを使用
-            subdivision.rain_1hour_max_timeline = self._aggregate_timeline(
+            subdivision.rain_1hour_max_timeline = self.aggregation_service.aggregate_timeline(
                 all_meshes, 'rain_1hour_max', GuidanceTimeSeries
             )
-            subdivision.rain_3hour_timeline = self._aggregate_timeline(
+            subdivision.rain_3hour_timeline = self.aggregation_service.aggregate_timeline(
                 all_meshes, 'rain_3hour', GuidanceTimeSeries
             )
-            subdivision.risk_timeline = self._aggregate_area_risk_timeline(subdivision.areas)
+            subdivision.risk_timeline = self.aggregation_service.aggregate_area_risk_timeline(
+                subdivision.areas
+            )
 
         except Exception as e:
             logger.error(f"二次細分集約エラー ({subdivision.name}): {e}")
@@ -716,72 +722,15 @@ class CalculationService:
                 return
 
             # 汎用集約メソッドを使用
-            prefecture.prefecture_rain_1hour_max_timeline = self._aggregate_timeline(
+            prefecture.prefecture_rain_1hour_max_timeline = self.aggregation_service.aggregate_timeline(
                 all_meshes, 'rain_1hour_max', GuidanceTimeSeries
             )
-            prefecture.prefecture_rain_3hour_timeline = self._aggregate_timeline(
+            prefecture.prefecture_rain_3hour_timeline = self.aggregation_service.aggregate_timeline(
                 all_meshes, 'rain_3hour', GuidanceTimeSeries
             )
-            prefecture.prefecture_risk_timeline = self._aggregate_area_risk_timeline(prefecture.areas)
+            prefecture.prefecture_risk_timeline = self.aggregation_service.aggregate_area_risk_timeline(
+                prefecture.areas
+            )
 
         except Exception as e:
             logger.error(f"府県集約エラー ({prefecture.name}): {e}")
-
-    def _aggregate_timeline(self, meshes: List[Mesh], attribute_name: str, model_class):
-        """
-        メッシュのタイムラインデータを集約（最大値）
-
-        Args:
-            meshes: メッシュリスト
-            attribute_name: 集約対象の属性名（例: 'rain_1hour_max', 'rain_3hour'）
-            model_class: データモデルクラス（GuidanceTimeSeries or Risk）
-
-        Returns:
-            集約されたタイムライン
-        """
-        # FT時刻のセットを取得
-        ft_set = set()
-        for mesh in meshes:
-            timeline = getattr(mesh, attribute_name, [])
-            for point in timeline:
-                ft_set.add(point.ft)
-
-        # 各FTで最大値を集約
-        aggregated_timeline = []
-        for ft in sorted(ft_set):
-            max_value = max(
-                (point.value for mesh in meshes
-                 for point in getattr(mesh, attribute_name, []) if point.ft == ft),
-                default=0.0
-            )
-            aggregated_timeline.append(model_class(ft=ft, value=max_value))
-
-        return aggregated_timeline
-
-    def _aggregate_area_risk_timeline(self, areas: List[Area]) -> List[Risk]:
-        """
-        エリアのリスクタイムラインを集約（最大値）
-
-        Args:
-            areas: エリアリスト
-
-        Returns:
-            集約されたリスクタイムライン
-        """
-        # FT時刻のセットを取得
-        ft_set = set()
-        for area in areas:
-            for point in area.risk_timeline:
-                ft_set.add(point.ft)
-
-        # 各FTで最大リスクを集約
-        aggregated_risk = []
-        for ft in sorted(ft_set):
-            max_risk = max(
-                (point.value for area in areas
-                 for point in area.risk_timeline if point.ft == ft),
-                default=0
-            )
-            aggregated_risk.append(Risk(ft=ft, value=max_risk))
-
-        return aggregated_risk
