@@ -359,6 +359,11 @@ class CacheService:
         try:
             with open(lock_path, 'r', encoding='utf-8') as f:
                 lock_data = json.load(f)
+
+            # 計算完了済みならロック中ではない
+            if lock_data.get('completed_at') or lock_data.get('base_session_id'):
+                return False
+
             started_at = datetime.fromisoformat(lock_data['started_at'])
             if datetime.now() - started_at > timedelta(minutes=10):
                 # タイムアウト: 古いロックを削除
