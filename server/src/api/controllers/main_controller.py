@@ -347,17 +347,9 @@ class MainController:
                 if cache_exists:
                     cache_metadata = self.cache_service.get_metadata(cache_key)
 
-                # ローカルフォールバックパス（開発環境用、本番ではファイルが存在しないため無効）
-                fallback_swi = os.path.join(self.data_dir,
-                    "Z__C_RJTD_20230602000000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin")
-                fallback_guidance = os.path.join(self.data_dir,
-                    "guid_msm_grib2_20230602000000_rmax00.bin")
-
                 # メイン処理実行（個別URLを使用、use_cache=True でキャッシュ有効）
                 result = self.main_service.main_process_from_separate_urls(
-                    swi_url, guidance_url, use_cache=True,
-                    fallback_swi_path=fallback_swi if os.path.exists(fallback_swi) else None,
-                    fallback_guidance_path=fallback_guidance if os.path.exists(fallback_guidance) else None
+                    swi_url, guidance_url, use_cache=True
                 )
 
                 # セッションサービスが有効な場合、セッション作成して軽量レスポンスを返す

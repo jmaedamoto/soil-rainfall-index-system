@@ -31,6 +31,10 @@ grib2:
 # データディレクトリ設定
 data:
   directory: "data"
+  local_grib2_fallback:
+    enabled: false
+    swi_path: null
+    guidance_path: null
 
 # キャッシュ設定
 cache:
