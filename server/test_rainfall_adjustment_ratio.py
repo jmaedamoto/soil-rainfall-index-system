@@ -117,3 +117,71 @@ def test_calculate_mesh_ratios_from_session_uses_max_ratio_for_shared_mesh_codes
     mesh_ratios = service.calculate_mesh_ratios_from_session(prefectures, adjustments)
 
     assert mesh_ratios["shared-mesh"][3] == 2.0
+
+
+def test_build_filled_mesh_rainfall_from_session_overwrites_target_area_values():
+    service = RainfallAdjustmentService()
+
+    prefectures = {
+        "28": {
+            "name": "兵庫県",
+            "areas": [
+                {
+                    "name": "神戸市",
+                    "meshes": [
+                        {
+                            "code": "mesh-1",
+                            "rain_timeline": [{"ft": 3, "value": 5.0}, {"ft": 6, "value": 10.0}],
+                        }
+                    ],
+                }
+            ],
+        }
+    }
+
+    adjustments = {
+        "兵庫県_神戸市": {3: 20.0},
+    }
+
+    adjusted = service.build_filled_mesh_rainfall_from_session(prefectures, adjustments)
+
+    assert adjusted["mesh-1"] == [(3, 20.0), (6, 10.0)]
+
+
+def test_build_filled_mesh_rainfall_from_session_uses_max_value_for_shared_mesh_codes():
+    service = RainfallAdjustmentService()
+
+    prefectures = {
+        "28": {
+            "name": "兵庫県",
+            "areas": [
+                {
+                    "name": "A市",
+                    "meshes": [
+                        {
+                            "code": "shared-mesh",
+                            "rain_timeline": [{"ft": 3, "value": 5.0}],
+                        }
+                    ],
+                },
+                {
+                    "name": "B市",
+                    "meshes": [
+                        {
+                            "code": "shared-mesh",
+                            "rain_timeline": [{"ft": 3, "value": 5.0}],
+                        }
+                    ],
+                },
+            ],
+        }
+    }
+
+    adjustments = {
+        "兵庫県_A市": {3: 10.0},
+        "兵庫県_B市": {3: 20.0},
+    }
+
+    adjusted = service.build_filled_mesh_rainfall_from_session(prefectures, adjustments)
+
+    assert adjusted["shared-mesh"] == [(3, 20.0)]

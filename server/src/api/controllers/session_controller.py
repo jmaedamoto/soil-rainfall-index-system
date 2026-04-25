@@ -518,7 +518,7 @@ class SessionController:
             logger.info(f"調整対象市町村数: {len(adjustments)}件")
 
             adjustment_mode = data.get('adjustment_mode', 'ratio_3hour')
-            if adjustment_mode != 'ratio_3hour':
+            if adjustment_mode not in {'ratio_3hour', 'fill_3hour'}:
                 return jsonify({
                     "status": "error",
                     "error": f"Unsupported adjustment_mode: {adjustment_mode}",
@@ -559,14 +559,20 @@ class SessionController:
                             expanded_adjustments[area_key] = subdiv_rain
                             logger.info(f"二次細分 {subdiv_key} → 市町村 {area_key} に展開")
 
-            mesh_ratios = self.rainfall_adjustment_service.calculate_mesh_ratios_from_session(
-                existing_prefectures_dict,
-                expanded_adjustments
-            )
-            adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_adjusted_mesh_rainfall_from_session(
-                existing_prefectures_dict,
-                mesh_ratios
-            )
+            if adjustment_mode == 'fill_3hour':
+                adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_filled_mesh_rainfall_from_session(
+                    existing_prefectures_dict,
+                    expanded_adjustments
+                )
+            else:
+                mesh_ratios = self.rainfall_adjustment_service.calculate_mesh_ratios_from_session(
+                    existing_prefectures_dict,
+                    expanded_adjustments
+                )
+                adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_adjusted_mesh_rainfall_from_session(
+                    existing_prefectures_dict,
+                    mesh_ratios
+                )
 
             # Step 1: 調整対象メッシュのデータを収集
             import time

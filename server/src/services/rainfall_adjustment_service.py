@@ -120,6 +120,57 @@ class RainfallAdjustmentService:
         logger.info("比率適用後のメッシュ雨量生成完了: %sメッシュ", len(adjusted_mesh_rainfall))
         return adjusted_mesh_rainfall
 
+    def build_filled_mesh_rainfall_from_session(
+        self,
+        prefectures_dict: Dict[str, Any],
+        area_adjustments: Dict[str, Dict[int, float]]
+    ) -> Dict[str, List[Tuple[int, float]]]:
+        """
+        セッション辞書形式データから、領域内を入力値で塗りつぶしたメッシュ別3時間雨量を作成する。
+
+        同じ mesh_code に複数領域の指示がかかった場合は、FT ごとに最大値を採用する。
+        """
+        logger.info("セッション辞書から塗りつぶし後のメッシュ雨量生成開始")
+
+        adjusted_mesh_rainfall: Dict[str, Dict[int, float]] = {}
+
+        for pref_dict in prefectures_dict.values():
+            pref_name = pref_dict["name"]
+            for area_dict in pref_dict.get("areas", []):
+                area_key = f"{pref_name}_{area_dict['name']}"
+                adjustments = area_adjustments.get(area_key)
+                if not adjustments:
+                    continue
+
+                for mesh_dict in area_dict.get("meshes", []):
+                    mesh_code = mesh_dict.get("code")
+                    if not mesh_code:
+                        continue
+
+                    current_values = {
+                        int(point["ft"]): float(point["value"])
+                        for point in mesh_dict.get("rain_timeline", [])
+                    }
+
+                    for ft, filled_value in adjustments.items():
+                        ft_int = int(ft)
+                        if ft_int not in current_values:
+                            continue
+                        if mesh_code not in adjusted_mesh_rainfall:
+                            adjusted_mesh_rainfall[mesh_code] = dict(current_values)
+                        adjusted_mesh_rainfall[mesh_code][ft_int] = max(
+                            adjusted_mesh_rainfall[mesh_code].get(ft_int, current_values[ft_int]),
+                            float(filled_value)
+                        )
+
+        filled_mesh_rainfall = {
+            mesh_code: [(ft, value) for ft, value in sorted(ft_values.items())]
+            for mesh_code, ft_values in adjusted_mesh_rainfall.items()
+        }
+
+        logger.info("塗りつぶし後のメッシュ雨量生成完了: %sメッシュ", len(filled_mesh_rainfall))
+        return filled_mesh_rainfall
+
     def extract_area_rainfall_timeseries(
         self,
         prefectures: List[Prefecture],

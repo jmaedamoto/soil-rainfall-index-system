@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { sessionApiClient } from '../services/sessionApi';
 import type { TimeSeriesPoint } from '../types/api';
-import type { CellSelection, RainfallViewMode } from '../features/rainfall-adjustment/types';
+import type { AdjustmentMode, CellSelection, RainfallViewMode } from '../features/rainfall-adjustment/types';
 import {
   buildRainfallAdjustments,
   cloneRainfallMap,
@@ -38,6 +38,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
   const [step, setStep] = useState<'loading' | 'editing' | 'calculating'>('loading');
   const [selectedPrefecture, setSelectedPrefecture] = useState<string>('');
   const [viewMode, setViewMode] = useState<RainfallViewMode>('municipality');
+  const [adjustmentMode, setAdjustmentMode] = useState<AdjustmentMode>('ratio_3hour');
 
   // セル選択状態
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
@@ -62,6 +63,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
       setStep('loading');
       setSelectedCells(new Set());
       setError(null);
+      setAdjustmentMode('ratio_3hour');
     }
   }, [isOpen]);
 
@@ -292,6 +294,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
       const result = await sessionApiClient.recalculateWithAdjustedRainfall(
         sessionId,
         adjustments,
+        adjustmentMode,
         swiInitial,
         guidanceInitial,
         dataSource
@@ -393,6 +396,36 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
         {step === 'editing' && (
           <>
             <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <label style={{ fontWeight: 'bold' }}>調整方式:</label>
+                <button
+                  onClick={() => setAdjustmentMode('ratio_3hour')}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: adjustmentMode === 'ratio_3hour' ? '#1976D2' : '#f5f5f5',
+                    color: adjustmentMode === 'ratio_3hour' ? 'white' : 'black',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  比率補正
+                </button>
+                <button
+                  onClick={() => setAdjustmentMode('fill_3hour')}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: adjustmentMode === 'fill_3hour' ? '#1976D2' : '#f5f5f5',
+                    color: adjustmentMode === 'fill_3hour' ? 'white' : 'black',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  塗りつぶし
+                </button>
+              </div>
+
               {/* 表示モード切り替え */}
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                 <label style={{ fontWeight: 'bold' }}>表示:</label>
@@ -568,6 +601,9 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
               alignItems: 'center'
             }}>
               <div>
+                <span style={{ marginRight: '20px' }}>
+                  調整方式: {adjustmentMode === 'ratio_3hour' ? '比率補正' : '塗りつぶし'}
+                </span>
                 <span style={{ marginRight: '20px' }}>
                   表示中: {selectedPrefecture} - 全{Object.keys(currentPrefectureData).length}{viewMode === 'municipality' ? '市町村' : '二次細分'}
                 </span>
