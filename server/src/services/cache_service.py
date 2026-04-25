@@ -13,6 +13,7 @@ import gzip
 import json
 import logging
 import time
+from threading import Thread
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
@@ -168,6 +169,28 @@ class CacheService:
             # エラー時は中途半端なファイルを削除
             if cache_path.exists():
                 cache_path.unlink()
+
+    def set_cached_result_async(
+        self,
+        cache_key: str,
+        result: dict,
+        swi_initial: str,
+        guidance_initial: str
+    ) -> None:
+        """
+        計算結果をバックグラウンドでキャッシュ保存する。
+
+        レスポンス返却をブロックしないため、保存処理は daemon thread で実行する。
+        """
+        logger.info(f"キャッシュ非同期保存を開始: {cache_key}")
+
+        worker = Thread(
+            target=self.set_cached_result,
+            args=(cache_key, result, swi_initial, guidance_initial),
+            daemon=True,
+            name=f"cache-save-{cache_key}",
+        )
+        worker.start()
 
     def _save_metadata(
         self,

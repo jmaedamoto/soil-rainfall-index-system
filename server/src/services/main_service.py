@@ -126,9 +126,9 @@ class MainService:
                 swi_grib2, guidance_grib2_filtered, swi_initial_time
             )
 
-            # キャッシュに保存
+            # キャッシュ保存はレスポンスをブロックしないよう非同期で実行
             if use_cache:
-                self.cache_service.set_cached_result(
+                self.cache_service.set_cached_result_async(
                     cache_key,
                     result,
                     swi_initial_time.isoformat(),
