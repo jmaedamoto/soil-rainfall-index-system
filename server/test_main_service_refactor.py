@@ -76,3 +76,44 @@ def test_calculation_aggregation_service_aggregates_area_risks():
     aggregated = aggregation_service.aggregate_area_risk_timeline([area1, area2])
 
     assert [(point.ft, point.value) for point in aggregated] == [(0, 2), (3, 4)]
+
+
+def test_main_process_from_separate_urls_saves_cache_asynchronously(monkeypatch):
+    main_service = MainService()
+
+    swi_initial = __import__("datetime").datetime(2026, 4, 24, 0, 0, 0)
+    guidance_initial = __import__("datetime").datetime(2026, 4, 24, 0, 0, 0)
+    expected_result = {"prefectures": {"28": {"areas": []}}}
+
+    monkeypatch.setattr(
+        main_service,
+        "_parse_separate_grib2_from_urls",
+        lambda swi_url, guidance_url: (
+            SimpleNamespace(initial_date=swi_initial),
+            {"swi": []},
+            SimpleNamespace(initial_date=guidance_initial),
+            {"base_info": {}, "data": [], "data_1h": [], "data_3h": []},
+        ),
+    )
+    monkeypatch.setattr(main_service, "_filter_guidance_data", lambda guidance, *_: guidance)
+    monkeypatch.setattr(main_service, "_run_calculation_pipeline", lambda *args: (expected_result, 0))
+    monkeypatch.setattr(main_service.cache_service, "get_cached_result", lambda cache_key: None)
+
+    async_calls = []
+    monkeypatch.setattr(
+        main_service.cache_service,
+        "set_cached_result_async",
+        lambda cache_key, result, swi_initial_str, guidance_initial_str: async_calls.append(
+            (cache_key, result, swi_initial_str, guidance_initial_str)
+        ),
+    )
+
+    result = main_service.main_process_from_separate_urls(
+        "https://example.com/swi.bin",
+        "https://example.com/guid.bin",
+        use_cache=True,
+    )
+
+    assert result == expected_result
+    assert len(async_calls) == 1
+    assert async_calls[0][1] == expected_result
