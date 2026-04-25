@@ -9,6 +9,7 @@ export interface SessionInfo {
   last_accessed: string;
   swi_initial_time: string;
   guidance_initial_time: string;
+  adjustment_mode?: AdjustmentMode;
   prefecture_count: number;
   prefecture_codes: string[];
 }
@@ -68,6 +69,7 @@ export interface MeshDetailResponse {
 export interface RainfallDataResponse {
   area_rainfall: Record<string, TimeSeriesPoint[]>;
   subdivision_rainfall: Record<string, TimeSeriesPoint[]>;
+  adjustment_mode?: AdjustmentMode;
 }
 
 export interface RecalculateResponse {

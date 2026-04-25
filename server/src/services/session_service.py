@@ -68,6 +68,7 @@ class SessionService:
                 'prefectures': prefectures,
                 'swi_initial_time': swi_initial_time,
                 'guidance_initial_time': guidance_initial_time,
+                'adjustment_mode': 'ratio_3hour',
                 'calculation_time': calculation_time,
                 'created_at': now,
                 'expires_at': expires_at,
@@ -86,7 +87,8 @@ class SessionService:
         self,
         base_session_id: str,
         adjustments: Dict[str, List[Dict]],
-        recalculated_meshes: Dict[str, Dict]
+        recalculated_meshes: Dict[str, Dict],
+        adjustment_mode: str = 'ratio_3hour'
     ) -> Optional[str]:
         """
         フォークセッションを作成（編集用）
@@ -128,6 +130,7 @@ class SessionService:
                 'recalculated_meshes': recalculated_meshes,
                 'swi_initial_time': base_session['swi_initial_time'],
                 'guidance_initial_time': base_session['guidance_initial_time'],
+                'adjustment_mode': adjustment_mode,
                 'created_at': now,
                 'expires_at': expires_at,
                 'last_accessed': now
@@ -386,6 +389,7 @@ class SessionService:
             'prefectures': merged_prefectures,
             'swi_initial_time': fork_session['swi_initial_time'],
             'guidance_initial_time': fork_session['guidance_initial_time'],
+            'adjustment_mode': fork_session.get('adjustment_mode', base_session.get('adjustment_mode', 'ratio_3hour')),
             'created_at': fork_session['created_at'],
             'expires_at': fork_session['expires_at'],
             'last_accessed': fork_session['last_accessed'],
@@ -476,6 +480,7 @@ class SessionService:
             'last_accessed': session['last_accessed'].isoformat(),
             'swi_initial_time': session['swi_initial_time'],
             'guidance_initial_time': session['guidance_initial_time'],
+            'adjustment_mode': session.get('adjustment_mode', 'ratio_3hour'),
             'prefecture_count': len(session['prefectures']),
             'prefecture_codes': list(session['prefectures'].keys())
         }
