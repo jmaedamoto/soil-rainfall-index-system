@@ -1,6 +1,6 @@
 import type { CacheInfo, Mesh } from './api';
 import type { TimeSeriesPoint, RiskTimePoint } from './api';
-import type { AdjustmentMode } from '../features/rainfall-adjustment/types';
+import type { AdjustmentMode, InputMode } from '../features/rainfall-adjustment/types';
 
 export interface SessionInfo {
   session_id: string;
@@ -9,6 +9,7 @@ export interface SessionInfo {
   last_accessed: string;
   swi_initial_time: string;
   guidance_initial_time: string;
+  input_mode?: InputMode;
   adjustment_mode?: AdjustmentMode;
   prefecture_count: number;
   prefecture_codes: string[];
@@ -69,6 +70,9 @@ export interface MeshDetailResponse {
 export interface RainfallDataResponse {
   area_rainfall: Record<string, TimeSeriesPoint[]>;
   subdivision_rainfall: Record<string, TimeSeriesPoint[]>;
+  area_rainfall_24hour?: Record<string, TimeSeriesPoint[]>;
+  subdivision_rainfall_24hour?: Record<string, TimeSeriesPoint[]>;
+  input_mode?: InputMode;
   adjustment_mode?: AdjustmentMode;
 }
 
@@ -82,6 +86,8 @@ export interface RecalculateResponse {
 
 export interface RecalculateRequest {
   adjustments: Record<string, Array<{ ft: number; value: number }>>;
+  aggregate_adjustments?: Record<string, Array<{ ft: number; value: number }>>;
+  input_mode?: InputMode;
   adjustment_mode?: AdjustmentMode;
   swi_initial: string;
   guidance_initial: string;

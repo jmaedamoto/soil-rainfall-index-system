@@ -111,6 +111,9 @@ class SessionAPIClient {
       status: string;
       area_rainfall: RainfallDataResponse['area_rainfall'];
       subdivision_rainfall: RainfallDataResponse['subdivision_rainfall'];
+      area_rainfall_24hour?: RainfallDataResponse['area_rainfall_24hour'];
+      subdivision_rainfall_24hour?: RainfallDataResponse['subdivision_rainfall_24hour'];
+      input_mode?: RainfallDataResponse['input_mode'];
       adjustment_mode?: RainfallDataResponse['adjustment_mode'];
     }>(
       `${this.apiBaseUrl}/session/${sessionId}/rainfall-data`
@@ -118,6 +121,9 @@ class SessionAPIClient {
     return {
       area_rainfall: response.data.area_rainfall,
       subdivision_rainfall: response.data.subdivision_rainfall,
+      area_rainfall_24hour: response.data.area_rainfall_24hour,
+      subdivision_rainfall_24hour: response.data.subdivision_rainfall_24hour,
+      input_mode: response.data.input_mode,
       adjustment_mode: response.data.adjustment_mode
     };
   }
@@ -128,6 +134,8 @@ class SessionAPIClient {
   async recalculateWithAdjustedRainfall(
     sessionId: string,
     adjustments: Record<string, Array<{ ft: number; value: number }>>,
+    aggregateAdjustments: RecalculateRequest['aggregate_adjustments'],
+    inputMode: RecalculateRequest['input_mode'],
     adjustmentMode: RecalculateRequest['adjustment_mode'],
     swiInitial: string,
     guidanceInitial: string,
@@ -144,6 +152,8 @@ class SessionAPIClient {
       `${this.apiBaseUrl}/session/${sessionId}/recalculate`,
       {
         adjustments,
+        aggregate_adjustments: aggregateAdjustments,
+        input_mode: inputMode,
         adjustment_mode: adjustmentMode,
         swi_initial: swiInitial,
         guidance_initial: guidanceInitial,
