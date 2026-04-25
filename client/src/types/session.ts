@@ -1,5 +1,6 @@
 import type { CacheInfo, Mesh } from './api';
 import type { TimeSeriesPoint, RiskTimePoint } from './api';
+import type { AdjustmentMode } from '../features/rainfall-adjustment/types';
 
 export interface SessionInfo {
   session_id: string;
@@ -75,4 +76,12 @@ export interface RecalculateResponse {
   ft: number;
   mesh_risks: Record<string, number>;
   mesh_coords: Record<string, { lat: number; lon: number }>;
+}
+
+export interface RecalculateRequest {
+  adjustments: Record<string, Array<{ ft: number; value: number }>>;
+  adjustment_mode?: AdjustmentMode;
+  swi_initial: string;
+  guidance_initial: string;
+  data_source: string;
 }

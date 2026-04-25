@@ -5,6 +5,7 @@ import type {
   RiskAtTimeResponse,
   MeshDetailResponse,
   RainfallDataResponse,
+  RecalculateRequest,
   RecalculateResponse,
 } from '../types/session';
 import { API_BASE_URL } from '../config/apiConfig';
@@ -125,6 +126,7 @@ class SessionAPIClient {
   async recalculateWithAdjustedRainfall(
     sessionId: string,
     adjustments: Record<string, Array<{ ft: number; value: number }>>,
+    adjustmentMode: RecalculateRequest['adjustment_mode'],
     swiInitial: string,
     guidanceInitial: string,
     dataSource: string
@@ -140,6 +142,7 @@ class SessionAPIClient {
       `${this.apiBaseUrl}/session/${sessionId}/recalculate`,
       {
         adjustments,
+        adjustment_mode: adjustmentMode,
         swi_initial: swiInitial,
         guidance_initial: guidanceInitial,
         data_source: dataSource

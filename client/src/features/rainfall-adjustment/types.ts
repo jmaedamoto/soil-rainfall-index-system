@@ -8,3 +8,5 @@ export interface CellSelection {
 export type RainfallMap = Record<string, TimeSeriesPoint[]>;
 
 export type RainfallViewMode = 'municipality' | 'subdivision';
+
+export type AdjustmentMode = 'ratio_3hour' | 'fill_3hour';
