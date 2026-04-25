@@ -819,3 +819,43 @@ POST /session/<session_id>/recalculate
 - 現状の雨量調整再計算はセッション内 `rain_timeline` を使うため、ロジック自体は source-agnostic
 - ただし `guidance_type` を保持していないため、GSM 正式対応にはセッション設計の拡張が必要
 - 現状の本番雨量調整再計算は比率補正ではなく、市町村ごとの一律上書き型になっている
+
+---
+
+## 11. 2026年4月25日時点の進捗メモ
+
+### 11.1 完了済み
+
+- 第0段階: 雨量調整の比率補正型修正は実装済み
+- 第1段階: 雨量調整の塗りつぶしモード追加は実装済み
+- 第2段階: 雨量調整の24時間入力追加は実装済み
+- `input_mode` と `adjustment_mode` はサーバー・クライアントの双方で実装済み
+- `GET /session/<session_id>/rainfall-data` の24時間集計返却は実装済み
+- フォークセッションに `input_mode` / `adjustment_mode` を保持する実装と関連テストは追加済み
+- 直近ではキャッシュ保存の非同期化とそのテストまで追加済み
+
+### 11.2 未着手または未完了
+
+- 第3段階: サーバー側の GSM 対応は未着手
+- 第4段階: クライアント側の MSM / GSM 切替 UI は未着手
+- `guidance_type` の request 追加、session 保存、response 返却は未実装
+- キャッシュキーへの `guidance_type` 組み込みは未実装
+- `build_guidance_url()` は現状 `guid_msm_*` 固定で GSM を生成できない
+- クライアントの時刻候補と時刻送り UI は現状 3 時間刻み前提のまま
+- 雨量調整 API の `guidance_initial` / `data_source` は互換用で、ガイダンス種別保持には未使用
+
+### 11.3 再開時の次の着手候補
+
+- まずサーバー側で `guidance_type=msm|gsm` を受け取れるようにする
+- `ConfigService.build_guidance_url()` を MSM / GSM 両対応に拡張する
+- セッション、軽量レスポンス、`used_urls`、キャッシュキーに `guidance_type` を通す
+- その後でクライアントの取得 UI と時刻候補ロジックを MSM / GSM 切替対応にする
+
+### 11.4 参考コミット
+
+- `54029ca` Fix rainfall adjustment ratio recalculation
+- `e79cf91` Add fill mode for rainfall adjustment
+- `ec267f0` Add 24-hour rainfall adjustment input
+- `7541721` Persist rainfall adjustment mode in sessions
+- `ad42f99` Make cache saving asynchronous
+- `871cf59` Add async cache save test
