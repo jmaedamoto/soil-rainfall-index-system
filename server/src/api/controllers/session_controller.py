@@ -13,6 +13,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.append(project_root)
 
 from services.session_service import SessionService
+from services.rainfall_adjustment_service import RainfallAdjustmentService
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ class SessionController:
 
     def __init__(self, session_service: SessionService):
         self.session_service = session_service
+        self.rainfall_adjustment_service = RainfallAdjustmentService()
 
     def get_session_info(self, session_id: str):
         """
@@ -459,6 +461,7 @@ class SessionController:
         Request Body:
             {
                 "adjustments": {"府県名_市町村名": [{"ft": 0, "value": 10.5}, ...]},
+                "adjustment_mode": "ratio_3hour",  # 省略時は ratio_3hour
                 "swi_initial": "2025-01-01T00:00:00Z",  # 使用されない（互換性のため残す）
                 "guidance_initial": "2025-01-01T00:00:00Z",  # 使用されない
                 "data_source": "test"  # 使用されない
@@ -514,6 +517,14 @@ class SessionController:
 
             logger.info(f"調整対象市町村数: {len(adjustments)}件")
 
+            adjustment_mode = data.get('adjustment_mode', 'ratio_3hour')
+            if adjustment_mode != 'ratio_3hour':
+                return jsonify({
+                    "status": "error",
+                    "error": f"Unsupported adjustment_mode: {adjustment_mode}",
+                    "session_id": session_id
+                }), 400
+
             # NumPyベクトル化版サービス（高速）
             from services.calculation_service_numpy import CalculationServiceNumpy
             calculation_service_numpy = CalculationServiceNumpy()
@@ -548,45 +559,45 @@ class SessionController:
                             expanded_adjustments[area_key] = subdiv_rain
                             logger.info(f"二次細分 {subdiv_key} → 市町村 {area_key} に展開")
 
+            mesh_ratios = self.rainfall_adjustment_service.calculate_mesh_ratios_from_session(
+                existing_prefectures_dict,
+                expanded_adjustments
+            )
+            adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_adjusted_mesh_rainfall_from_session(
+                existing_prefectures_dict,
+                mesh_ratios
+            )
+
             # Step 1: 調整対象メッシュのデータを収集
             import time
             collect_start = time.time()
 
             for pref_code, pref_dict in existing_prefectures_dict.items():
                 for area_dict in pref_dict['areas']:
-                    area_key = f"{pref_dict['name']}_{area_dict['name']}"
+                    for mesh_dict in area_dict['meshes']:
+                        mesh_code = mesh_dict['code']
+                        new_rain_timeline = adjusted_mesh_rainfall.get(mesh_code)
+                        if not new_rain_timeline:
+                            continue
 
-                    if area_key in expanded_adjustments:
-                        adjusted_rain = expanded_adjustments[area_key]
+                        # 初期SWI値を取得
+                        swi_timeline = mesh_dict.get('swi_timeline', [])
+                        initial_swi = swi_timeline[0]['value'] if swi_timeline else 100.0
 
-                        # 雨量timelineを調整
-                        new_rain_timeline = [
-                            (ft, adjusted_rain[ft])
-                            for ft in sorted(adjusted_rain.keys())
+                        # NumPy一括計算用のデータを収集
+                        mesh_data_list.append({
+                            'mesh_code': mesh_code,
+                            'initial_swi': initial_swi,
+                            'advisory_bound': mesh_dict['advisary_bound'],
+                            'warning_bound': mesh_dict['warning_bound'],
+                            'dosyakei_bound': mesh_dict['dosyakei_bound'],
+                            'rain_3hour': new_rain_timeline
+                        })
+                        mesh_code_to_rain[mesh_code] = [
+                            {"ft": ft, "value": value}
+                            for ft, value in new_rain_timeline
                         ]
-
-                        # この市町村の全メッシュを処理
-                        for mesh_dict in area_dict['meshes']:
-                            mesh_code = mesh_dict['code']
-
-                            # 初期SWI値を取得
-                            swi_timeline = mesh_dict.get('swi_timeline', [])
-                            initial_swi = swi_timeline[0]['value'] if swi_timeline else 100.0
-
-                            # NumPy一括計算用のデータを収集
-                            mesh_data_list.append({
-                                'mesh_code': mesh_code,
-                                'initial_swi': initial_swi,
-                                'advisory_bound': mesh_dict['advisary_bound'],
-                                'warning_bound': mesh_dict['warning_bound'],
-                                'dosyakei_bound': mesh_dict['dosyakei_bound'],
-                                'rain_3hour': new_rain_timeline
-                            })
-                            mesh_code_to_rain[mesh_code] = [
-                                {"ft": ft, "value": value}
-                                for ft, value in new_rain_timeline
-                            ]
-                            adjusted_mesh_count += 1
+                        adjusted_mesh_count += 1
 
             collect_time = time.time() - collect_start
             logger.info(f"データ収集: {adjusted_mesh_count}メッシュ, {collect_time:.3f}秒")

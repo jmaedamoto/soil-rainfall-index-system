@@ -15,6 +15,111 @@ logger = logging.getLogger(__name__)
 class RainfallAdjustmentService:
     """雨量調整サービス"""
 
+    def calculate_mesh_ratios_from_session(
+        self,
+        prefectures_dict: Dict[str, Any],
+        area_adjustments: Dict[str, Dict[int, float]]
+    ) -> Dict[str, Dict[int, float]]:
+        """
+        セッション辞書形式データから、メッシュごとの調整比率を計算する。
+
+        Args:
+            prefectures_dict: session['prefectures'] 形式の辞書
+            area_adjustments: {"府県名_市町村名": {ft: value}}
+
+        Returns:
+            {"mesh_code": {ft: ratio}}
+        """
+        logger.info("セッション辞書からメッシュごとの調整比率を計算開始")
+
+        mesh_to_areas: Dict[str, List[str]] = {}
+        for pref_dict in prefectures_dict.values():
+            pref_name = pref_dict["name"]
+            for area_dict in pref_dict.get("areas", []):
+                area_key = f"{pref_name}_{area_dict['name']}"
+                for mesh_dict in area_dict.get("meshes", []):
+                    mesh_code = mesh_dict.get("code")
+                    if not mesh_code:
+                        continue
+                    mesh_to_areas.setdefault(mesh_code, []).append(area_key)
+
+        mesh_ratios: Dict[str, Dict[int, float]] = {}
+
+        for mesh_code, area_keys in mesh_to_areas.items():
+            ft_ratios_list: Dict[int, List[float]] = {}
+
+            for area_key in area_keys:
+                adjustments = area_adjustments.get(area_key)
+                if not adjustments:
+                    continue
+
+                for ft, adjusted_value in adjustments.items():
+                    ft_int = int(ft)
+                    original_max = self._get_area_original_max_from_session(
+                        prefectures_dict,
+                        area_key,
+                        ft_int
+                    )
+
+                    if original_max > 0:
+                        ratio = adjusted_value / original_max
+                    else:
+                        if adjusted_value > 0:
+                            logger.warning(
+                                "雨量調整をスキップ: original_max=0, area=%s, ft=%s, adjusted_value=%s",
+                                area_key,
+                                ft_int,
+                                adjusted_value,
+                            )
+                        ratio = 1.0
+
+                    ft_ratios_list.setdefault(ft_int, []).append(ratio)
+
+            if ft_ratios_list:
+                mesh_ratios[mesh_code] = {
+                    ft: max(ratios) if ratios else 1.0
+                    for ft, ratios in ft_ratios_list.items()
+                }
+
+        logger.info("セッション辞書からの調整比率計算完了: %sメッシュ", len(mesh_ratios))
+        return mesh_ratios
+
+    def build_adjusted_mesh_rainfall_from_session(
+        self,
+        prefectures_dict: Dict[str, Any],
+        mesh_ratios: Dict[str, Dict[int, float]]
+    ) -> Dict[str, List[Tuple[int, float]]]:
+        """
+        セッション辞書形式データから、比率適用後のメッシュ別3時間雨量を作成する。
+
+        Args:
+            prefectures_dict: session['prefectures'] 形式の辞書
+            mesh_ratios: {"mesh_code": {ft: ratio}}
+
+        Returns:
+            {"mesh_code": [(ft, adjusted_value), ...]}
+        """
+        adjusted_mesh_rainfall: Dict[str, List[Tuple[int, float]]] = {}
+
+        for pref_dict in prefectures_dict.values():
+            for area_dict in pref_dict.get("areas", []):
+                for mesh_dict in area_dict.get("meshes", []):
+                    mesh_code = mesh_dict.get("code")
+                    if mesh_code not in mesh_ratios:
+                        continue
+
+                    ratios = mesh_ratios[mesh_code]
+                    adjusted_mesh_rainfall[mesh_code] = [
+                        (
+                            int(point["ft"]),
+                            float(point["value"]) * ratios.get(int(point["ft"]), 1.0)
+                        )
+                        for point in mesh_dict.get("rain_timeline", [])
+                    ]
+
+        logger.info("比率適用後のメッシュ雨量生成完了: %sメッシュ", len(adjusted_mesh_rainfall))
+        return adjusted_mesh_rainfall
+
     def extract_area_rainfall_timeseries(
         self,
         prefectures: List[Prefecture],
@@ -334,6 +439,35 @@ class RainfallAdjustmentService:
         # prefecturesからメッシュを再取得して調整する方が確実
 
         logger.info("ガイダンスデータへの比率適用完了")
+
+    def _get_area_original_max_from_session(
+        self,
+        prefectures_dict: Dict[str, Any],
+        area_key: str,
+        ft: int
+    ) -> float:
+        """
+        セッション辞書形式データから、市町村の特定FTにおける元の最大3時間雨量を取得する。
+        """
+        pref_name, area_name = area_key.split('_', 1)
+
+        for pref_dict in prefectures_dict.values():
+            if pref_dict.get("name") != pref_name:
+                continue
+
+            for area_dict in pref_dict.get("areas", []):
+                if area_dict.get("name") != area_name:
+                    continue
+
+                max_value = 0.0
+                for mesh_dict in area_dict.get("meshes", []):
+                    for rain_point in mesh_dict.get("rain_timeline", []):
+                        if int(rain_point["ft"]) == ft:
+                            max_value = max(max_value, float(rain_point["value"]))
+
+                return max_value
+
+        return 0.0
 
     def adjust_mesh_rainfall_by_ratios(
         self,
