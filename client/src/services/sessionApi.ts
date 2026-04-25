@@ -111,12 +111,14 @@ class SessionAPIClient {
       status: string;
       area_rainfall: RainfallDataResponse['area_rainfall'];
       subdivision_rainfall: RainfallDataResponse['subdivision_rainfall'];
+      adjustment_mode?: RainfallDataResponse['adjustment_mode'];
     }>(
       `${this.apiBaseUrl}/session/${sessionId}/rainfall-data`
     );
     return {
       area_rainfall: response.data.area_rainfall,
-      subdivision_rainfall: response.data.subdivision_rainfall
+      subdivision_rainfall: response.data.subdivision_rainfall,
+      adjustment_mode: response.data.adjustment_mode
     };
   }
 

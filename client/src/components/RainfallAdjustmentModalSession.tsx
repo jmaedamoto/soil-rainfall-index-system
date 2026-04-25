@@ -252,6 +252,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
           setAdjustedRainfall(cloneRainfallMap(data.area_rainfall));
           setOriginalSubdivisionRainfall(data.subdivision_rainfall);
           setAdjustedSubdivisionRainfall(cloneRainfallMap(data.subdivision_rainfall));
+          setAdjustmentMode(data.adjustment_mode ?? 'ratio_3hour');
 
           // 最初の府県を選択
           const allAreas = Object.keys(data.area_rainfall);

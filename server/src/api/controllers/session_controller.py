@@ -441,7 +441,8 @@ class SessionController:
             return jsonify({
                 "status": "success",
                 "area_rainfall": area_rainfall,
-                "subdivision_rainfall": subdivision_rainfall
+                "subdivision_rainfall": subdivision_rainfall,
+                "adjustment_mode": session.get('adjustment_mode', 'ratio_3hour')
             })
 
         except Exception as e:
@@ -629,7 +630,8 @@ class SessionController:
             fork_session_id = self.session_service.create_fork_session(
                 base_session_id=base_session_id,
                 adjustments=adjustments_raw,  # 元の形式で保存
-                recalculated_meshes=recalculated_meshes
+                recalculated_meshes=recalculated_meshes,
+                adjustment_mode=adjustment_mode
             )
 
             if fork_session_id is None:
