@@ -9,4 +9,11 @@ export type RainfallMap = Record<string, TimeSeriesPoint[]>;
 
 export type RainfallViewMode = 'municipality' | 'subdivision';
 
-export type AdjustmentMode = 'ratio_3hour' | 'fill_3hour';
+export type InputMode = '3hour' | '24hour';
+
+export type AdjustmentMode =
+  | 'ratio_3hour'
+  | 'fill_3hour'
+  | 'fill_24hour_uniform'
+  | 'ratio_24hour_uniform'
+  | 'ratio_24hour_peak_mesh';

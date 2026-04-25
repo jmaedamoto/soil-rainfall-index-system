@@ -378,6 +378,8 @@ class SessionController:
             prefectures = session['prefectures']
             area_rainfall = {}
             subdivision_rainfall = {}
+            area_rainfall_24hour, subdivision_rainfall_24hour = \
+                self.rainfall_adjustment_service.aggregate_rainfall_24hour_from_session(prefectures)
 
             for pref_code, prefecture in prefectures.items():
                 pref_name = prefecture["name"]
@@ -442,6 +444,9 @@ class SessionController:
                 "status": "success",
                 "area_rainfall": area_rainfall,
                 "subdivision_rainfall": subdivision_rainfall,
+                "area_rainfall_24hour": area_rainfall_24hour,
+                "subdivision_rainfall_24hour": subdivision_rainfall_24hour,
+                "input_mode": session.get('input_mode', '3hour'),
                 "adjustment_mode": session.get('adjustment_mode', 'ratio_3hour')
             })
 
@@ -516,15 +521,41 @@ class SessionController:
                     point['ft']: point['value'] for point in timeline
                 }
 
-            logger.info(f"調整対象市町村数: {len(adjustments)}件")
+            aggregate_adjustments_raw = data.get('aggregate_adjustments', {})
+            aggregate_adjustments = {}
+            for area_key, timeline in aggregate_adjustments_raw.items():
+                aggregate_adjustments[area_key] = {
+                    point['ft']: point['value'] for point in timeline
+                }
 
+            input_mode = data.get('input_mode', '3hour')
             adjustment_mode = data.get('adjustment_mode', 'ratio_3hour')
-            if adjustment_mode not in {'ratio_3hour', 'fill_3hour'}:
+
+            if input_mode not in {'3hour', '24hour'}:
+                return jsonify({
+                    "status": "error",
+                    "error": f"Unsupported input_mode: {input_mode}",
+                    "session_id": session_id
+                }), 400
+
+            allowed_adjustment_modes = {
+                '3hour': {'ratio_3hour', 'fill_3hour'},
+                '24hour': {'fill_24hour_uniform', 'ratio_24hour_uniform', 'ratio_24hour_peak_mesh'},
+            }
+            if adjustment_mode not in allowed_adjustment_modes[input_mode]:
                 return jsonify({
                     "status": "error",
                     "error": f"Unsupported adjustment_mode: {adjustment_mode}",
                     "session_id": session_id
                 }), 400
+
+            logger.info(
+                "調整対象領域数: 3hour=%s件, 24hour=%s件, input_mode=%s, adjustment_mode=%s",
+                len(adjustments),
+                len(aggregate_adjustments),
+                input_mode,
+                adjustment_mode,
+            )
 
             # NumPyベクトル化版サービス（高速）
             from services.calculation_service_numpy import CalculationServiceNumpy
@@ -560,7 +591,33 @@ class SessionController:
                             expanded_adjustments[area_key] = subdiv_rain
                             logger.info(f"二次細分 {subdiv_key} → 市町村 {area_key} に展開")
 
-            if adjustment_mode == 'fill_3hour':
+            expanded_aggregate_adjustments = dict(aggregate_adjustments)
+            for subdiv_key, subdiv_rain in list(aggregate_adjustments.items()):
+                if subdiv_key in subdiv_to_areas:
+                    info = subdiv_to_areas[subdiv_key]
+                    for area_name in info['area_names']:
+                        area_key = f"{info['pref_name']}_{area_name}"
+                        if area_key not in expanded_aggregate_adjustments:
+                            expanded_aggregate_adjustments[area_key] = subdiv_rain
+                            logger.info(f"二次細分 {subdiv_key} → 市町村 {area_key} に24時間調整を展開")
+
+            if input_mode == '24hour':
+                if adjustment_mode == 'fill_24hour_uniform':
+                    adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_fill_24hour_uniform_from_session(
+                        existing_prefectures_dict,
+                        expanded_aggregate_adjustments
+                    )
+                elif adjustment_mode == 'ratio_24hour_uniform':
+                    adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_ratio_24hour_uniform_from_session(
+                        existing_prefectures_dict,
+                        expanded_aggregate_adjustments
+                    )
+                else:
+                    adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_ratio_24hour_peak_mesh_from_session(
+                        existing_prefectures_dict,
+                        expanded_aggregate_adjustments
+                    )
+            elif adjustment_mode == 'fill_3hour':
                 adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_filled_mesh_rainfall_from_session(
                     existing_prefectures_dict,
                     expanded_adjustments
@@ -629,8 +686,9 @@ class SessionController:
             # フォークセッションを作成
             fork_session_id = self.session_service.create_fork_session(
                 base_session_id=base_session_id,
-                adjustments=adjustments_raw,  # 元の形式で保存
+                adjustments=aggregate_adjustments_raw if input_mode == '24hour' else adjustments_raw,
                 recalculated_meshes=recalculated_meshes,
+                input_mode=input_mode,
                 adjustment_mode=adjustment_mode
             )
 
