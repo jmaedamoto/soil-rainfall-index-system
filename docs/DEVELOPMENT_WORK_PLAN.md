@@ -822,34 +822,44 @@ POST /session/<session_id>/recalculate
 
 ---
 
-## 11. 2026年4月25日時点の進捗メモ
+## 11. 2026年4月26日時点の進捗メモ
 
 ### 11.1 完了済み
 
 - 第0段階: 雨量調整の比率補正型修正は実装済み
 - 第1段階: 雨量調整の塗りつぶしモード追加は実装済み
 - 第2段階: 雨量調整の24時間入力追加は実装済み
+- 第3段階: サーバー側の GSM 対応は実装済み
+- 第4段階: クライアント側の MSM / GSM 切替 UI は実装済み
+- 第5段階: セッションと雨量調整まで含めた GSM 一貫対応は実装済み
 - `input_mode` と `adjustment_mode` はサーバー・クライアントの双方で実装済み
 - `GET /session/<session_id>/rainfall-data` の24時間集計返却は実装済み
 - フォークセッションに `input_mode` / `adjustment_mode` を保持する実装と関連テストは追加済み
+- `guidance_type` の request 追加、session 保存、response 返却は実装済み
+- キャッシュキーへの `guidance_type` 組み込みは実装済み
+- `build_guidance_url()` は MSM / GSM 両対応になり、GSM の無効時刻は 400 エラーで弾く
+- クライアントの時刻候補と時刻送り UI は GSM 対応済み
+  - GSM の JST 候補は `03, 09, 15, 21`
+- staging では以下を確認済み
+  - MSM / GSM の双方で計算開始できる
+  - GSM で開始したセッションの雨量調整が成功する
+  - GSM セッションでも `guidance_type` が保持される
+- GSM 雨量調整の 504 対策として、比率補正時の元最大雨量探索を前計算化して最適化済み
 - 直近ではキャッシュ保存の非同期化とそのテストまで追加済み
 
 ### 11.2 未着手または未完了
 
-- 第3段階: サーバー側の GSM 対応は未着手
-- 第4段階: クライアント側の MSM / GSM 切替 UI は未着手
-- `guidance_type` の request 追加、session 保存、response 返却は未実装
-- キャッシュキーへの `guidance_type` 組み込みは未実装
-- `build_guidance_url()` は現状 `guid_msm_*` 固定で GSM を生成できない
-- クライアントの時刻候補と時刻送り UI は現状 3 時間刻み前提のまま
-- 雨量調整 API の `guidance_initial` / `data_source` は互換用で、ガイダンス種別保持には未使用
+- staging で確認した内容を恒久テストへ増やす余地がある
+  - GSM 無効時刻の API レベル検証
+  - GSM の JST 候補と画面挙動のクライアント側検証
+- 必要なら `NEXT_RESTART_TASKS` を新しいテーマに更新する
+- 雨量調整 API の `swi_initial` / `guidance_initial` / `data_source` は互換用で、再計算ロジックでは本質的には未使用のまま
 
 ### 11.3 再開時の次の着手候補
 
-- まずサーバー側で `guidance_type=msm|gsm` を受け取れるようにする
-- `ConfigService.build_guidance_url()` を MSM / GSM 両対応に拡張する
-- セッション、軽量レスポンス、`used_urls`、キャッシュキーに `guidance_type` を通す
-- その後でクライアントの取得 UI と時刻候補ロジックを MSM / GSM 切替対応にする
+- GSM 対応後の恒久テストを整理する
+- 次の機能テーマに合わせて再開ドキュメントを更新する
+- 必要なら staging/main 昇格用の差分を最終確認する
 
 ### 11.4 参考コミット
 
@@ -859,3 +869,7 @@ POST /session/<session_id>/recalculate
 - `7541721` Persist rainfall adjustment mode in sessions
 - `ad42f99` Make cache saving asynchronous
 - `871cf59` Add async cache save test
+- `2ca2d8c` Add GSM guidance type support
+- `c76d6e6` Validate GSM guidance initial times
+- `efc2220` Fix GSM JST hour selection
+- `73de961` Optimize rainfall adjustment ratio lookup
