@@ -1,5 +1,5 @@
 export const MSM_HOUR_OPTIONS = [0, 3, 6, 9, 12, 15, 18, 21];
-export const GSM_HOUR_OPTIONS = [0, 6, 12, 18];
+export const GSM_HOUR_OPTIONS = [3, 9, 15, 21];
 
 export interface DefaultDateTimeSelection {
   date: string;
@@ -21,15 +21,22 @@ export const getDefaultJstSelection = (
 ): DefaultDateTimeSelection => {
   const now = new Date();
   const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000 - 3 * 60 * 60 * 1000);
-  const year = jstNow.getUTCFullYear();
-  const month = (jstNow.getUTCMonth() + 1).toString().padStart(2, '0');
-  const day = jstNow.getUTCDate().toString().padStart(2, '0');
-  const hourStep = guidanceType === 'gsm' ? 6 : 3;
-  const hour = Math.floor(jstNow.getUTCHours() / hourStep) * hourStep;
+  const allowedHours = getGuidanceHourOptions(guidanceType);
+  let selectionDate = new Date(jstNow);
+  let hour = [...allowedHours].reverse().find((candidate) => candidate <= jstNow.getUTCHours());
+
+  if (hour === undefined) {
+    selectionDate = new Date(selectionDate.getTime() - 24 * 60 * 60 * 1000);
+    hour = allowedHours[allowedHours.length - 1];
+  }
+
+  const year = selectionDate.getUTCFullYear();
+  const month = (selectionDate.getUTCMonth() + 1).toString().padStart(2, '0');
+  const day = selectionDate.getUTCDate().toString().padStart(2, '0');
 
   return {
     date: `${year}-${month}-${day}`,
-    hour,
+    hour: hour ?? allowedHours[0],
   };
 };
 
