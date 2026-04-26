@@ -354,24 +354,31 @@ class CalculationService:
             if normalized_risk_rule == "legacy" or not risk_hourly:
                 return risk_hourly
 
+            adjusted = [Risk(ft=risk.ft, value=risk.value) for risk in risk_hourly]
+
             first_level4_index = next(
-                (index for index, risk in enumerate(risk_hourly) if risk.value >= 4),
+                (index for index, risk in enumerate(adjusted) if risk.value >= 4),
                 None,
             )
 
             if first_level4_index is None:
-                return risk_hourly
-
-            adjusted = [Risk(ft=risk.ft, value=risk.value) for risk in risk_hourly]
+                for risk in adjusted:
+                    if risk.value == 3:
+                        risk.value = 2
+                return adjusted
 
             level2_start = max(0, first_level4_index - 6)
             level3_start = max(0, first_level4_index - 2)
+
+            for index in range(first_level4_index):
+                if adjusted[index].value >= 2:
+                    adjusted[index].value = 2
 
             for index in range(level2_start, first_level4_index):
                 adjusted[index].value = max(adjusted[index].value, 2)
 
             for index in range(level3_start, first_level4_index):
-                adjusted[index].value = max(adjusted[index].value, 3)
+                adjusted[index].value = 3
 
             return adjusted
 
