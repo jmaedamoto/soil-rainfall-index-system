@@ -178,7 +178,7 @@ const ProductionSession: React.FC = () => {
           </div>
           <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
             {guidanceType === 'gsm'
-              ? 'GSM は 6 時間ごとの初期時刻に限定されます。'
+              ? 'GSM は JST では 03, 09, 15, 21 時を選択できます。'
               : 'MSM は 3 時間ごとの初期時刻を選択できます。'}
           </div>
         </div>
