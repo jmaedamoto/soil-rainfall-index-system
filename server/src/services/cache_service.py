@@ -3,7 +3,7 @@
 
 機能:
 - gzip圧縮によるJSON保存（209MB → 約20MB）
-- キャッシュキー生成（SWI初期時刻 + ガイダンス初期時刻）
+- キャッシュキー生成（SWI初期時刻 + ガイダンス初期時刻 + ガイダンス種別）
 - 自動TTL管理（デフォルト7日）
 - メタデータ管理
 - 計算中ロック機能（重複計算防止）
@@ -45,7 +45,11 @@ class CacheService:
                     f"TTL={default_ttl_days}日")
 
     @staticmethod
-    def generate_cache_key(swi_initial: str, guidance_initial: str) -> str:
+    def generate_cache_key(
+        swi_initial: str,
+        guidance_initial: str,
+        guidance_type: str = "msm"
+    ) -> str:
         """
         キャッシュキー生成
 
@@ -54,7 +58,7 @@ class CacheService:
             guidance_initial: ガイダンス初期時刻（ISO8601形式）
 
         Returns:
-            キャッシュキー（例: "swi_20251014120000_guid_20251014060000"）
+            キャッシュキー（例: "swi_20251014120000_guid_msm_20251014060000"）
         """
         swi_dt = datetime.fromisoformat(
             swi_initial.replace('Z', '+00:00'))
@@ -64,7 +68,7 @@ class CacheService:
         swi_key = swi_dt.strftime("%Y%m%d%H%M%S")
         guid_key = guid_dt.strftime("%Y%m%d%H%M%S")
 
-        return f"swi_{swi_key}_guid_{guid_key}"
+        return f"swi_{swi_key}_guid_{guidance_type.lower()}_{guid_key}"
 
     def _get_cache_path(self, cache_key: str) -> Path:
         """キャッシュファイルパス取得（.json.gz）"""
@@ -132,7 +136,8 @@ class CacheService:
         cache_key: str,
         result: dict,
         swi_initial: str,
-        guidance_initial: str
+        guidance_initial: str,
+        guidance_type: str = "msm"
     ):
         """
         計算結果をキャッシュに保存
@@ -159,7 +164,7 @@ class CacheService:
 
             # メタデータ保存
             self._save_metadata(cache_key, result, swi_initial,
-                               guidance_initial, file_size_mb)
+                               guidance_initial, guidance_type, file_size_mb)
 
             logger.info(f"キャッシュ保存完了: {cache_key} "
                        f"({file_size_mb:.1f}MB, {elapsed:.2f}秒)")
@@ -175,7 +180,8 @@ class CacheService:
         cache_key: str,
         result: dict,
         swi_initial: str,
-        guidance_initial: str
+        guidance_initial: str,
+        guidance_type: str = "msm"
     ) -> None:
         """
         計算結果をバックグラウンドでキャッシュ保存する。
@@ -186,7 +192,7 @@ class CacheService:
 
         worker = Thread(
             target=self.set_cached_result,
-            args=(cache_key, result, swi_initial, guidance_initial),
+            args=(cache_key, result, swi_initial, guidance_initial, guidance_type),
             daemon=True,
             name=f"cache-save-{cache_key}",
         )
@@ -198,6 +204,7 @@ class CacheService:
         result: dict,
         swi_initial: str,
         guidance_initial: str,
+        guidance_type: str,
         file_size_mb: float
     ):
         """メタデータ保存"""
@@ -217,6 +224,7 @@ class CacheService:
             "created_at": datetime.now().isoformat(),
             "swi_initial": swi_initial,
             "guidance_initial": guidance_initial,
+            "guidance_type": guidance_type,
             "mesh_count": mesh_count,
             "file_size_mb": round(file_size_mb, 2),
             "compressed": True,

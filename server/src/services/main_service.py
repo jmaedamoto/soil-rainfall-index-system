@@ -59,7 +59,7 @@ class MainService:
         try:
             # 設定ファイルからURL構築
             swi_url = self.config_service.build_swi_url(initial_time)
-            guidance_url = self.config_service.build_guidance_url(initial_time)
+            guidance_url = self.config_service.build_guidance_url(initial_time, "msm")
             base_info, swi_grib2, guidance_grib2 = self._parse_grib2_from_urls(
                 swi_url, guidance_url
             )
@@ -76,6 +76,7 @@ class MainService:
         self,
         swi_url: str,
         guidance_url: str,
+        guidance_type: str = "msm",
         use_cache: bool = True
     ) -> Dict[str, Any]:
         """
@@ -102,9 +103,11 @@ class MainService:
             logger.info(f"ガイダンス初期時刻: {guidance_initial_time}")
 
             # キャッシュキー生成
+            normalized_guidance_type = self.config_service.normalize_guidance_type(guidance_type)
             cache_key = self.cache_service.generate_cache_key(
                 swi_initial_time.isoformat(),
-                guidance_initial_time.isoformat()
+                guidance_initial_time.isoformat(),
+                normalized_guidance_type
             )
 
             # キャッシュチェック
@@ -132,7 +135,8 @@ class MainService:
                     cache_key,
                     result,
                     swi_initial_time.isoformat(),
-                    guidance_initial_time.isoformat()
+                    guidance_initial_time.isoformat(),
+                    normalized_guidance_type
                 )
 
             return result

@@ -502,7 +502,14 @@ class TestController:
                 prefectures_dict[pref.code] = self.main_service._prefecture_to_dict(pref)
 
             # セッションに保存（session_serviceを使用）
-            session_id = self.session_service.create_session(prefectures_dict, base_info.initial_date.isoformat())
+            initial_time_iso = base_info.initial_date.isoformat()
+            session_id = self.session_service.create_session(
+                prefectures_dict,
+                initial_time_iso,
+                initial_time_iso,
+                datetime.now().isoformat(),
+                'msm'
+            )
 
             # 利用可能な時刻を取得
             available_times = []

@@ -446,6 +446,7 @@ class SessionController:
                 "subdivision_rainfall": subdivision_rainfall,
                 "area_rainfall_24hour": area_rainfall_24hour,
                 "subdivision_rainfall_24hour": subdivision_rainfall_24hour,
+                "guidance_type": session.get('guidance_type', 'msm'),
                 "input_mode": session.get('input_mode', '3hour'),
                 "adjustment_mode": session.get('adjustment_mode', 'ratio_3hour')
             })
@@ -530,6 +531,27 @@ class SessionController:
 
             input_mode = data.get('input_mode', '3hour')
             adjustment_mode = data.get('adjustment_mode', 'ratio_3hour')
+            session_guidance_type = (session.get('guidance_type', 'msm') or 'msm').lower()
+            requested_guidance_type = data.get('guidance_type')
+            guidance_type = session_guidance_type
+
+            if requested_guidance_type is not None:
+                normalized_requested_guidance_type = requested_guidance_type.lower()
+                if normalized_requested_guidance_type not in {'msm', 'gsm'}:
+                    return jsonify({
+                        "status": "error",
+                        "error": f"Unsupported guidance_type: {requested_guidance_type}",
+                        "session_id": session_id
+                    }), 400
+                if normalized_requested_guidance_type != session_guidance_type:
+                    return jsonify({
+                        "status": "error",
+                        "error": (
+                            "guidance_type does not match the session. "
+                            f"session={session_guidance_type}, request={normalized_requested_guidance_type}"
+                        ),
+                        "session_id": session_id
+                    }), 400
 
             if input_mode not in {'3hour', '24hour'}:
                 return jsonify({
@@ -550,11 +572,12 @@ class SessionController:
                 }), 400
 
             logger.info(
-                "調整対象領域数: 3hour=%s件, 24hour=%s件, input_mode=%s, adjustment_mode=%s",
+                "調整対象領域数: 3hour=%s件, 24hour=%s件, input_mode=%s, adjustment_mode=%s, guidance_type=%s",
                 len(adjustments),
                 len(aggregate_adjustments),
                 input_mode,
                 adjustment_mode,
+                guidance_type,
             )
 
             # NumPyベクトル化版サービス（高速）
@@ -729,6 +752,7 @@ class SessionController:
                 "session_id": fork_session_id,  # 新しいフォークセッションID
                 "base_session_id": base_session_id,
                 "is_fork": True,
+                "guidance_type": guidance_type,
                 "adjusted": True,
                 "ft": 0,
                 "mesh_risks": mesh_risks,

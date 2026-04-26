@@ -8,7 +8,8 @@ import type { Prefecture as PrefectureType } from '../types/api';
 import {
   buildIsoStringFromJst,
   getDefaultJstSelection,
-  TIME_HOUR_OPTIONS,
+  getGuidanceHourOptions,
+  MSM_HOUR_OPTIONS,
 } from '../features/production-session/utils/dateTime';
 import {
   PREFECTURE_NAME_MAP,
@@ -23,6 +24,7 @@ const ProductionSession: React.FC = () => {
   const [guidanceHour, setGuidanceHour] = useState<number>(0);
   const [swiInitialTime, setSwiInitialTime] = useState<string>('');
   const [guidanceInitialTime, setGuidanceInitialTime] = useState<string>('');
+  const [guidanceType, setGuidanceType] = useState<'msm' | 'gsm'>('msm');
 
   const {
     error,
@@ -47,6 +49,7 @@ const ProductionSession: React.FC = () => {
   } = useProductionSession({
     swiInitialTime,
     guidanceInitialTime,
+    guidanceType,
   });
 
   // 日付・時刻変更時にISO文字列を更新
@@ -68,18 +71,33 @@ const ProductionSession: React.FC = () => {
     setGuidanceHour(defaultSelection.hour);
   }, []);
 
+  useEffect(() => {
+    const guidanceOptions = getGuidanceHourOptions(guidanceType);
+
+    if (!guidanceOptions.includes(guidanceHour)) {
+      const defaultSelection = getDefaultJstSelection(guidanceType);
+      setGuidanceHour(defaultSelection.hour);
+      if (!guidanceDate) {
+        setGuidanceDate(defaultSelection.date);
+      }
+    }
+  }, [guidanceDate, guidanceHour, guidanceType]);
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (!sessionInfo) return;
-    const maxFt = Math.max(...sessionInfo.available_times);
+    const availableTimes = sessionInfo.available_times;
+    if (availableTimes.length === 0) return;
 
-    if (e.key === 'ArrowLeft' && selectedTime > 0) {
-      handleTimeChange(selectedTime - 3);
-    } else if (e.key === 'ArrowRight' && selectedTime < maxFt) {
-      handleTimeChange(selectedTime + 3);
+    const currentIndex = availableTimes.indexOf(selectedTime);
+    if (currentIndex === -1) return;
+
+    if (e.key === 'ArrowLeft' && currentIndex > 0) {
+      handleTimeChange(availableTimes[currentIndex - 1]);
+    } else if (e.key === 'ArrowRight' && currentIndex < availableTimes.length - 1) {
+      handleTimeChange(availableTimes[currentIndex + 1]);
     }
   };
-
-  const _availableTimes = sessionInfo?.available_times || [];
+  const guidanceHourOptions = getGuidanceHourOptions(guidanceType);
 
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
@@ -132,6 +150,39 @@ const ProductionSession: React.FC = () => {
           最新時刻を選択するとエラーになる場合があります。
         </div>
 
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+            ガイダンス種別
+          </label>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input
+                type="radio"
+                name="guidanceType"
+                value="msm"
+                checked={guidanceType === 'msm'}
+                onChange={() => setGuidanceType('msm')}
+              />
+              MSM
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input
+                type="radio"
+                name="guidanceType"
+                value="gsm"
+                checked={guidanceType === 'gsm'}
+                onChange={() => setGuidanceType('gsm')}
+              />
+              GSM
+            </label>
+          </div>
+          <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
+            {guidanceType === 'gsm'
+              ? 'GSM は 6 時間ごとの初期時刻に限定されます。'
+              : 'MSM は 3 時間ごとの初期時刻を選択できます。'}
+          </div>
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
           {/* SWI初期時刻選択 */}
           <div>
@@ -151,7 +202,7 @@ const ProductionSession: React.FC = () => {
                 onChange={(e) => setSwiHour(Number(e.target.value))}
                 style={{ flex: 1, padding: '8px', fontSize: '14px' }}
               >
-                {TIME_HOUR_OPTIONS.map(hour => (
+                {MSM_HOUR_OPTIONS.map(hour => (
                   <option key={hour} value={hour}>
                     {hour.toString().padStart(2, '0')}:00
                   </option>
@@ -183,7 +234,7 @@ const ProductionSession: React.FC = () => {
                 onChange={(e) => setGuidanceHour(Number(e.target.value))}
                 style={{ flex: 1, padding: '8px', fontSize: '14px' }}
               >
-                {TIME_HOUR_OPTIONS.map(hour => (
+                {guidanceHourOptions.map(hour => (
                   <option key={hour} value={hour}>
                     {hour.toString().padStart(2, '0')}:00
                   </option>
@@ -337,7 +388,8 @@ const ProductionSession: React.FC = () => {
           sessionId={sessionId}
           swiInitial={swiInitialTime}
           guidanceInitial={guidanceInitialTime}
-          dataSource="test"
+          guidanceType={sessionInfo.guidance_type ?? guidanceType}
+          dataSource="production"
           onSessionRecalculated={async (newSessionId, _meshRisks, _newMeshCoords) => {
             // フォークセッションIDに切り替え（以降の時刻変更で編集済みデータを取得するため）
             setSessionId(newSessionId);
