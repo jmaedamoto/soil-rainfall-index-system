@@ -111,6 +111,7 @@ export interface SessionInfo {
   last_accessed: string;            // ISO8601形式
   swi_initial_time: string;         // SWI初期時刻
   guidance_initial_time: string;    // ガイダンス初期時刻
+  guidance_type?: 'msm' | 'gsm';
   prefecture_count: number;
   prefecture_codes: string[];
 }
@@ -120,6 +121,7 @@ export interface LightweightCalculationResult {
   session_id: string;               // セッションID
   swi_initial_time: string;         // SWI初期時刻（ISO8601）
   guidance_initial_time: string;    // ガイダンス初期時刻（ISO8601）
+  guidance_type?: 'msm' | 'gsm';
   available_prefectures: string[];  // 利用可能な府県コード
   available_times: number[];        // 利用可能なFT値
   cache_info?: CacheInfo;           // キャッシュ情報
@@ -128,6 +130,7 @@ export interface LightweightCalculationResult {
     swi_initial_time: string;
     guidance_url: string;
     guidance_initial_time: string;
+    guidance_type?: 'msm' | 'gsm';
   };
 }
 

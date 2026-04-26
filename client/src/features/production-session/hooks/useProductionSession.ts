@@ -18,11 +18,13 @@ export const PREFECTURE_NAME_MAP: Record<string, string> = {
 interface UseProductionSessionParams {
   swiInitialTime: string;
   guidanceInitialTime: string;
+  guidanceType?: 'msm' | 'gsm';
 }
 
 export const useProductionSession = ({
   swiInitialTime,
   guidanceInitialTime,
+  guidanceType = 'msm',
 }: UseProductionSessionParams) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = useState<LightweightCalculationResult | null>(null);
@@ -126,6 +128,7 @@ export const useProductionSession = ({
       const result = await apiClient_.calculateProductionSoilRainfallIndexWithUrls({
         swi_initial: swiInitialTime,
         guidance_initial: guidanceInitialTime,
+        guidance_type: guidanceType,
       });
 
       setSessionInfo(result);

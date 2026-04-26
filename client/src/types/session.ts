@@ -9,6 +9,7 @@ export interface SessionInfo {
   last_accessed: string;
   swi_initial_time: string;
   guidance_initial_time: string;
+  guidance_type?: 'msm' | 'gsm';
   input_mode?: InputMode;
   adjustment_mode?: AdjustmentMode;
   prefecture_count: number;
@@ -20,6 +21,7 @@ export interface LightweightCalculationResult {
   session_id: string;
   swi_initial_time: string;
   guidance_initial_time: string;
+  guidance_type?: 'msm' | 'gsm';
   available_prefectures: string[];
   available_times: number[];
   cache_info?: CacheInfo;
@@ -28,6 +30,7 @@ export interface LightweightCalculationResult {
     swi_initial_time: string;
     guidance_url: string;
     guidance_initial_time: string;
+    guidance_type?: 'msm' | 'gsm';
   };
 }
 
@@ -72,6 +75,7 @@ export interface RainfallDataResponse {
   subdivision_rainfall: Record<string, TimeSeriesPoint[]>;
   area_rainfall_24hour?: Record<string, TimeSeriesPoint[]>;
   subdivision_rainfall_24hour?: Record<string, TimeSeriesPoint[]>;
+  guidance_type?: 'msm' | 'gsm';
   input_mode?: InputMode;
   adjustment_mode?: AdjustmentMode;
 }
@@ -92,4 +96,5 @@ export interface RecalculateRequest {
   swi_initial: string;
   guidance_initial: string;
   data_source: string;
+  guidance_type?: 'msm' | 'gsm';
 }

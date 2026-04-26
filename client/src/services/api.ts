@@ -59,6 +59,7 @@ export class SoilRainfallAPIClient {
   async calculateProductionSoilRainfallIndexWithUrls(params: {
     swi_initial: string;
     guidance_initial: string;
+    guidance_type?: 'msm' | 'gsm';
   }): Promise<LightweightCalculationResult> {
     const response = await apiClient.post<LightweightCalculationResult>(
       '/production-soil-rainfall-index-with-urls',

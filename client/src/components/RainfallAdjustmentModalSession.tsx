@@ -19,6 +19,7 @@ interface RainfallAdjustmentModalSessionProps {
   sessionId: string;
   swiInitial: string;
   guidanceInitial: string;
+  guidanceType?: 'msm' | 'gsm';
   dataSource: 'test' | 'production';
   onSessionRecalculated: (sessionId: string, meshRisks: Record<string, number>, meshCoords: Record<string, { lat: number; lon: number }>) => void;
 }
@@ -29,6 +30,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
   sessionId,
   swiInitial,
   guidanceInitial,
+  guidanceType = 'msm',
   dataSource,
   onSessionRecalculated
 }) => {
@@ -361,7 +363,8 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
         adjustmentMode,
         swiInitial,
         guidanceInitial,
-        dataSource
+        dataSource,
+        guidanceType
       );
 
       // 軽量レスポンス（meshRisksとmeshCoords）を親コンポーネントに返す

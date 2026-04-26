@@ -43,7 +43,8 @@ class SessionService:
         prefectures: Dict[str, Prefecture],
         swi_initial_time: str,
         guidance_initial_time: str,
-        calculation_time: str
+        calculation_time: str,
+        guidance_type: str = 'msm'
     ) -> str:
         """
         新しいベースセッションを作成
@@ -68,6 +69,7 @@ class SessionService:
                 'prefectures': prefectures,
                 'swi_initial_time': swi_initial_time,
                 'guidance_initial_time': guidance_initial_time,
+                'guidance_type': guidance_type,
                 'input_mode': '3hour',
                 'adjustment_mode': 'ratio_3hour',
                 'calculation_time': calculation_time,
@@ -132,6 +134,7 @@ class SessionService:
                 'recalculated_meshes': recalculated_meshes,
                 'swi_initial_time': base_session['swi_initial_time'],
                 'guidance_initial_time': base_session['guidance_initial_time'],
+                'guidance_type': base_session.get('guidance_type', 'msm'),
                 'input_mode': input_mode,
                 'adjustment_mode': adjustment_mode,
                 'created_at': now,
@@ -392,6 +395,7 @@ class SessionService:
             'prefectures': merged_prefectures,
             'swi_initial_time': fork_session['swi_initial_time'],
             'guidance_initial_time': fork_session['guidance_initial_time'],
+            'guidance_type': fork_session.get('guidance_type', base_session.get('guidance_type', 'msm')),
             'input_mode': fork_session.get('input_mode', base_session.get('input_mode', '3hour')),
             'adjustment_mode': fork_session.get('adjustment_mode', base_session.get('adjustment_mode', 'ratio_3hour')),
             'created_at': fork_session['created_at'],
@@ -484,6 +488,7 @@ class SessionService:
             'last_accessed': session['last_accessed'].isoformat(),
             'swi_initial_time': session['swi_initial_time'],
             'guidance_initial_time': session['guidance_initial_time'],
+            'guidance_type': session.get('guidance_type', 'msm'),
             'input_mode': session.get('input_mode', '3hour'),
             'adjustment_mode': session.get('adjustment_mode', 'ratio_3hour'),
             'prefecture_count': len(session['prefectures']),

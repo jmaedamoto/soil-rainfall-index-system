@@ -198,12 +198,15 @@ class MainController:
 
             # 使用したURLも返却（デバッグ用）
             swi_url = self.config_service.build_swi_url(initial_time)
-            guidance_url = self.config_service.build_guidance_url(initial_time)
+            guidance_type = "msm"
+            guidance_url = self.config_service.build_guidance_url(initial_time, guidance_type)
 
             result["used_urls"] = {
                 "swi_url": swi_url,
-                "guidance_url": guidance_url
+                "guidance_url": guidance_url,
+                "guidance_type": guidance_type
             }
+            result["guidance_type"] = guidance_type
             
             return jsonify(result)
             
@@ -213,7 +216,8 @@ class MainController:
             if 'initial_time' in locals():
                 error_urls = {
                     "swi_url": self.config_service.build_swi_url(initial_time),
-                    "guidance_url": self.config_service.build_guidance_url(initial_time)
+                    "guidance_url": self.config_service.build_guidance_url(initial_time, "msm"),
+                    "guidance_type": "msm"
                 }
             return jsonify({
                 "status": "error",
@@ -253,6 +257,16 @@ class MainController:
                     "message": "guidance_initialパラメータが必要です"
                 }), 400
 
+            try:
+                guidance_type = self.config_service.normalize_guidance_type(
+                    data.get('guidance_type', 'msm')
+                )
+            except ValueError as e:
+                return jsonify({
+                    "status": "error",
+                    "message": str(e)
+                }), 400
+
             # ISO8601形式の日時パース
             try:
                 swi_initial = datetime.fromisoformat(swi_initial_str.replace('Z', '+00:00'))
@@ -272,16 +286,20 @@ class MainController:
                     "message": f"guidance_initial日時形式エラー: {e}"
                 }), 400
 
-            logger.info(f"本番処理開始: SWI初期時刻={swi_initial}, ガイダンス初期時刻={guidance_initial}")
+            logger.info(
+                f"本番処理開始: SWI初期時刻={swi_initial}, "
+                f"ガイダンス初期時刻={guidance_initial}, guidance_type={guidance_type}"
+            )
 
             # 設定ファイルからURL構築
             swi_url = self.config_service.build_swi_url(swi_initial)
-            guidance_url = self.config_service.build_guidance_url(guidance_initial)
+            guidance_url = self.config_service.build_guidance_url(guidance_initial, guidance_type)
 
             # キャッシュキー生成
             cache_key = self.cache_service.generate_cache_key(
                 swi_initial.isoformat(),
-                guidance_initial.isoformat()
+                guidance_initial.isoformat(),
+                guidance_type
             )
 
             # ========================================
@@ -318,6 +336,7 @@ class MainController:
                             "session_id": base_session_id,
                             "swi_initial_time": swi_initial.isoformat() + 'Z',
                             "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+                            "guidance_type": session.get('guidance_type', guidance_type),
                             "available_prefectures": list(session['prefectures'].keys()),
                             "available_times": available_times,
                             "cache_info": {
@@ -329,7 +348,8 @@ class MainController:
                                 "swi_url": swi_url,
                                 "swi_initial_time": swi_initial.isoformat() + 'Z',
                                 "guidance_url": guidance_url,
-                                "guidance_initial_time": guidance_initial.isoformat() + 'Z'
+                                "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+                                "guidance_type": session.get('guidance_type', guidance_type)
                             }
                         })
 
@@ -349,7 +369,7 @@ class MainController:
 
                 # メイン処理実行（個別URLを使用、use_cache=True でキャッシュ有効）
                 result = self.main_service.main_process_from_separate_urls(
-                    swi_url, guidance_url, use_cache=True
+                    swi_url, guidance_url, guidance_type=guidance_type, use_cache=True
                 )
 
                 # セッションサービスが有効な場合、セッション作成して軽量レスポンスを返す
@@ -359,7 +379,8 @@ class MainController:
                         result['prefectures'],
                         swi_initial.isoformat(),
                         guidance_initial.isoformat(),
-                        datetime.now().isoformat()
+                        datetime.now().isoformat(),
+                        guidance_type
                     )
 
                     # ロック解放時にベースセッションIDを保存
@@ -384,6 +405,7 @@ class MainController:
                         "session_id": session_id,
                         "swi_initial_time": swi_initial.isoformat() + 'Z',
                         "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+                        "guidance_type": guidance_type,
                         "available_prefectures": available_prefs,
                         "available_times": available_times,
                         "cache_info": {
@@ -395,7 +417,8 @@ class MainController:
                             "swi_url": swi_url,
                             "swi_initial_time": swi_initial.isoformat() + 'Z',
                             "guidance_url": guidance_url,
-                            "guidance_initial_time": guidance_initial.isoformat() + 'Z'
+                            "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+                            "guidance_type": guidance_type
                         }
                     })
 
@@ -410,8 +433,10 @@ class MainController:
                     "swi_url": swi_url,
                     "swi_initial_time": swi_initial.isoformat() + 'Z',
                     "guidance_url": guidance_url,
-                    "guidance_initial_time": guidance_initial.isoformat() + 'Z'
+                    "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+                    "guidance_type": guidance_type
                 }
+                result["guidance_type"] = guidance_type
 
                 result["cache_info"] = {
                     "cache_key": cache_key,
@@ -474,7 +499,8 @@ class MainController:
                     result['prefectures'],
                     swi_initial_time,
                     guidance_initial_time,
-                    datetime.now().isoformat()
+                    datetime.now().isoformat(),
+                    'msm'
                 )
 
                 # 利用可能な時刻を抽出
@@ -495,6 +521,7 @@ class MainController:
                     "session_id": session_id,
                     "swi_initial_time": swi_initial_time + 'Z' if not swi_initial_time.endswith('Z') else swi_initial_time,
                     "guidance_initial_time": guidance_initial_time + 'Z' if not guidance_initial_time.endswith('Z') else guidance_initial_time,
+                    "guidance_type": "msm",
                     "available_prefectures": available_prefs,
                     "available_times": available_times,
                     "cache_info": None,  # テストモードではキャッシュなし
@@ -502,7 +529,8 @@ class MainController:
                         "swi_url": f"file://{swi_file}",
                         "swi_initial_time": swi_initial_time,
                         "guidance_url": f"file://{guidance_file}",
-                        "guidance_initial_time": guidance_initial_time
+                        "guidance_initial_time": guidance_initial_time,
+                        "guidance_type": "msm"
                     }
                 })
 
