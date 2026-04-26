@@ -136,11 +136,22 @@ class ConfigService:
             raise ValueError(f"Unsupported guidance_type: {guidance_type}")
         return normalized
 
+    def validate_guidance_initial_time(self, initial_time, guidance_type: Optional[str] = None) -> None:
+        """ガイダンス種別ごとの初期時刻制約を検証"""
+        normalized_guidance_type = self.normalize_guidance_type(guidance_type)
+
+        if normalized_guidance_type == "gsm" and initial_time.hour % 6 != 0:
+            raise ValueError(
+                "Invalid guidance_initial for gsm: "
+                "GSM guidance is only available at 00, 06, 12, 18 UTC"
+            )
+
     def build_guidance_url(self, initial_time, guidance_type: Optional[str] = None) -> str:
         """ガイダンス GRIB2 URL構築"""
         base_url = self.get("grib2.base_url", "http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn")
         guidance_path = self.get("grib2.guidance_path", "/gdc")
         normalized_guidance_type = self.normalize_guidance_type(guidance_type)
+        self.validate_guidance_initial_time(initial_time, normalized_guidance_type)
 
         if normalized_guidance_type == "gsm":
             filename = (
