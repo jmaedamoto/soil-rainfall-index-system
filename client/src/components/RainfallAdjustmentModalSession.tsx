@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { sessionApiClient } from '../services/sessionApi';
-import type { TimeSeriesPoint } from '../types/api';
+import type { RiskRule, TimeSeriesPoint } from '../types/api';
 import type { AdjustmentMode, CellSelection, InputMode, RainfallViewMode } from '../features/rainfall-adjustment/types';
 import {
   buildRainfallAdjustments,
@@ -20,6 +20,7 @@ interface RainfallAdjustmentModalSessionProps {
   swiInitial: string;
   guidanceInitial: string;
   guidanceType?: 'msm' | 'gsm';
+  riskRule?: RiskRule;
   dataSource: 'test' | 'production';
   onSessionRecalculated: (sessionId: string, meshRisks: Record<string, number>, meshCoords: Record<string, { lat: number; lon: number }>) => void;
 }
@@ -31,6 +32,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
   swiInitial,
   guidanceInitial,
   guidanceType = 'msm',
+  riskRule,
   dataSource,
   onSessionRecalculated
 }) => {
@@ -364,7 +366,8 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
         swiInitial,
         guidanceInitial,
         dataSource,
-        guidanceType
+        guidanceType,
+        riskRule
       );
 
       // 軽量レスポンス（meshRisksとmeshCoords）を親コンポーネントに返す

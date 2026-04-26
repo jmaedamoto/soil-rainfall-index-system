@@ -423,6 +423,7 @@ const ProductionSession: React.FC = () => {
           swiInitial={swiInitialTime}
           guidanceInitial={guidanceInitialTime}
           guidanceType={sessionInfo.guidance_type ?? guidanceType}
+          riskRule={sessionInfo.risk_rule ?? riskRule}
           dataSource="production"
           onSessionRecalculated={async (newSessionId, _meshRisks, _newMeshCoords) => {
             // フォークセッションIDに切り替え（以降の時刻変更で編集済みデータを取得するため）

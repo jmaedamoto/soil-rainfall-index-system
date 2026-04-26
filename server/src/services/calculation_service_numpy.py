@@ -348,17 +348,32 @@ class CalculationServiceNumpy:
 
         # 3時間雨量を配列化
         rain_3h = np.zeros((n_periods, n_meshes), dtype=np.float64)
+        rain_1h_max = np.zeros((n_periods, n_meshes), dtype=np.float64)
         for i, mesh in enumerate(mesh_data_list):
+            original_3h_by_ft = {
+                int(ft): float(value)
+                for ft, value in mesh.get('original_rain_3hour', mesh['rain_3hour'])
+            }
+            max_1h_by_ft = {
+                int(ft): float(value)
+                for ft, value in mesh.get('rain_1hour_max', [])
+            }
             for j, (ft, value) in enumerate(mesh['rain_3hour']):
                 rain_3h[j, i] = value
+                original_1h_max = max_1h_by_ft.get(int(ft), 0.0)
+                original_3h = original_3h_by_ft.get(int(ft), 0.0)
 
-        # 1時間雨量を推定（3時間雨量を3等分）
-        rain_1hour = np.zeros((n_periods * 3, n_meshes), dtype=np.float64)
-        for i in range(n_periods):
-            rain_1h_avg = rain_3h[i] / 3.0
-            rain_1hour[i * 3] = rain_1h_avg
-            rain_1hour[i * 3 + 1] = rain_1h_avg
-            rain_1hour[i * 3 + 2] = rain_1h_avg
+                if value <= 0:
+                    adjusted_1h_max = 0.0
+                elif original_1h_max > 0 and original_3h > 0:
+                    adjusted_1h_max = min(value, original_1h_max * (value / original_3h))
+                else:
+                    adjusted_1h_max = value / 3.0
+
+                rain_1h_max[j, i] = max(0.0, min(value, adjusted_1h_max))
+
+        # 1時間雨量を推定（元の1時間最大雨量の形状を可能な限り維持）
+        rain_1hour = self.calc_hourly_rain_vectorized(rain_3h, rain_1h_max)
 
         # 1時間ごとSWI計算
         swi_hourly = self.calc_swi_hourly_vectorized(

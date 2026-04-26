@@ -707,7 +707,15 @@ class SessionController:
                             'advisory_bound': mesh_dict['advisary_bound'],
                             'warning_bound': mesh_dict['warning_bound'],
                             'dosyakei_bound': mesh_dict['dosyakei_bound'],
-                            'rain_3hour': new_rain_timeline
+                            'rain_3hour': new_rain_timeline,
+                            'original_rain_3hour': [
+                                (int(point['ft']), float(point['value']))
+                                for point in mesh_dict.get('rain_timeline', [])
+                            ],
+                            'rain_1hour_max': [
+                                (int(point['ft']), float(point['value']))
+                                for point in mesh_dict.get('rain_1hour_max_timeline', [])
+                            ],
                         })
                         mesh_code_to_rain[mesh_code] = [
                             {"ft": ft, "value": value}
