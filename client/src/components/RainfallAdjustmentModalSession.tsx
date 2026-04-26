@@ -398,7 +398,8 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
         swiInitial,
         guidanceInitial,
         dataSource,
-        guidanceType
+        guidanceType,
+        riskRule
       );
 
       // 軽量レスポンス（meshRisksとmeshCoords）を親コンポーネントに返す
