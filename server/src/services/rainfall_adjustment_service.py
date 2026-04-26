@@ -38,15 +38,24 @@ class RainfallAdjustmentService:
         logger.info("セッション辞書からメッシュごとの調整比率を計算開始")
 
         mesh_to_areas: Dict[str, List[str]] = {}
+        area_original_max: Dict[str, Dict[int, float]] = {}
         for pref_dict in prefectures_dict.values():
             pref_name = pref_dict["name"]
             for area_dict in pref_dict.get("areas", []):
                 area_key = f"{pref_name}_{area_dict['name']}"
+                ft_max_values: Dict[int, float] = {}
                 for mesh_dict in area_dict.get("meshes", []):
                     mesh_code = mesh_dict.get("code")
                     if not mesh_code:
                         continue
                     mesh_to_areas.setdefault(mesh_code, []).append(area_key)
+                    for point in mesh_dict.get("rain_timeline", []):
+                        ft = int(point["ft"])
+                        value = float(point["value"])
+                        if ft not in ft_max_values or value > ft_max_values[ft]:
+                            ft_max_values[ft] = value
+
+                area_original_max[area_key] = ft_max_values
 
         mesh_ratios: Dict[str, Dict[int, float]] = {}
 
@@ -60,11 +69,7 @@ class RainfallAdjustmentService:
 
                 for ft, adjusted_value in adjustments.items():
                     ft_int = int(ft)
-                    original_max = self._get_area_original_max_from_session(
-                        prefectures_dict,
-                        area_key,
-                        ft_int
-                    )
+                    original_max = area_original_max.get(area_key, {}).get(ft_int, 0.0)
 
                     if original_max > 0:
                         ratio = adjusted_value / original_max
