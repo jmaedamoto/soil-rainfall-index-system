@@ -286,6 +286,17 @@ class MainController:
                     "message": f"guidance_initial日時形式エラー: {e}"
                 }), 400
 
+            try:
+                self.config_service.validate_guidance_initial_time(
+                    guidance_initial,
+                    guidance_type
+                )
+            except ValueError as e:
+                return jsonify({
+                    "status": "error",
+                    "message": str(e)
+                }), 400
+
             logger.info(
                 f"本番処理開始: SWI初期時刻={swi_initial}, "
                 f"ガイダンス初期時刻={guidance_initial}, guidance_type={guidance_type}"
