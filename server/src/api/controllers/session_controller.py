@@ -14,6 +14,7 @@ sys.path.append(project_root)
 
 from services.session_service import SessionService
 from services.rainfall_adjustment_service import RainfallAdjustmentService
+from services.calculation_service_numpy import CalculationServiceNumpy
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,7 @@ class SessionController:
             response_data = {
                 "name": prefecture["name"],
                 "code": prefecture["code"],
+                "risk_rule": self.session_service.get_session(session_id).get("risk_rule", "legacy"),
                 "areas": [
                     {
                         "name": area["name"],
@@ -447,6 +449,7 @@ class SessionController:
                 "area_rainfall_24hour": area_rainfall_24hour,
                 "subdivision_rainfall_24hour": subdivision_rainfall_24hour,
                 "guidance_type": session.get('guidance_type', 'msm'),
+                "risk_rule": session.get('risk_rule', 'legacy'),
                 "input_mode": session.get('input_mode', '3hour'),
                 "adjustment_mode": session.get('adjustment_mode', 'ratio_3hour')
             })
@@ -532,8 +535,13 @@ class SessionController:
             input_mode = data.get('input_mode', '3hour')
             adjustment_mode = data.get('adjustment_mode', 'ratio_3hour')
             session_guidance_type = (session.get('guidance_type', 'msm') or 'msm').lower()
+            session_risk_rule = CalculationServiceNumpy.normalize_risk_rule(
+                session.get('risk_rule', 'legacy')
+            )
             requested_guidance_type = data.get('guidance_type')
+            requested_risk_rule = data.get('risk_rule')
             guidance_type = session_guidance_type
+            risk_rule = session_risk_rule
 
             if requested_guidance_type is not None:
                 normalized_requested_guidance_type = requested_guidance_type.lower()
@@ -549,6 +557,27 @@ class SessionController:
                         "error": (
                             "guidance_type does not match the session. "
                             f"session={session_guidance_type}, request={normalized_requested_guidance_type}"
+                        ),
+                        "session_id": session_id
+                    }), 400
+
+            if requested_risk_rule is not None:
+                try:
+                    normalized_requested_risk_rule = CalculationServiceNumpy.normalize_risk_rule(
+                        requested_risk_rule
+                    )
+                except ValueError:
+                    return jsonify({
+                        "status": "error",
+                        "error": f"Unsupported risk_rule: {requested_risk_rule}",
+                        "session_id": session_id
+                    }), 400
+                if normalized_requested_risk_rule != session_risk_rule:
+                    return jsonify({
+                        "status": "error",
+                        "error": (
+                            "risk_rule does not match the session. "
+                            f"session={session_risk_rule}, request={normalized_requested_risk_rule}"
                         ),
                         "session_id": session_id
                     }), 400
@@ -572,16 +601,16 @@ class SessionController:
                 }), 400
 
             logger.info(
-                "調整対象領域数: 3hour=%s件, 24hour=%s件, input_mode=%s, adjustment_mode=%s, guidance_type=%s",
+                "調整対象領域数: 3hour=%s件, 24hour=%s件, input_mode=%s, adjustment_mode=%s, guidance_type=%s, risk_rule=%s",
                 len(adjustments),
                 len(aggregate_adjustments),
                 input_mode,
                 adjustment_mode,
                 guidance_type,
+                risk_rule,
             )
 
             # NumPyベクトル化版サービス（高速）
-            from services.calculation_service_numpy import CalculationServiceNumpy
             calculation_service_numpy = CalculationServiceNumpy()
 
             # 再計算済みメッシュを保存する辞書
@@ -692,7 +721,10 @@ class SessionController:
             # Step 2: NumPy一括計算
             calc_start = time.time()
             if mesh_data_list:
-                numpy_results = calculation_service_numpy.recalculate_meshes_vectorized(mesh_data_list)
+                numpy_results = calculation_service_numpy.recalculate_meshes_vectorized(
+                    mesh_data_list,
+                    risk_rule=risk_rule,
+                )
 
                 # 結果をrecalculated_meshesに格納
                 for mesh_code, result in numpy_results.items():
@@ -753,6 +785,7 @@ class SessionController:
                 "base_session_id": base_session_id,
                 "is_fork": True,
                 "guidance_type": guidance_type,
+                "risk_rule": risk_rule,
                 "adjusted": True,
                 "ft": 0,
                 "mesh_risks": mesh_risks,

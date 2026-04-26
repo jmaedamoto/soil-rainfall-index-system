@@ -7,7 +7,7 @@ NumPyベクトル化によるCalculationService
 """
 
 import numpy as np
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,13 @@ class CalculationServiceNumpy:
     L1, L2, L3, L4 = 15.0, 60.0, 15.0, 15.0
     A1, A2, A3, A4 = 0.1, 0.15, 0.05, 0.01
     B1, B2, B3 = 0.12, 0.05, 0.01
+
+    @staticmethod
+    def normalize_risk_rule(risk_rule: Optional[str]) -> str:
+        normalized = (risk_rule or "legacy").lower()
+        if normalized not in {"legacy", "lead_time_to_level4"}:
+            raise ValueError(f"Unsupported risk_rule: {risk_rule}")
+        return normalized
 
     def calc_tank_model_vectorized(
         self,
@@ -104,7 +111,8 @@ class CalculationServiceNumpy:
         swi_hourly: np.ndarray,
         advisory_bounds: np.ndarray,
         warning_bounds: np.ndarray,
-        dosyakei_bounds: np.ndarray
+        dosyakei_bounds: np.ndarray,
+        risk_rule: str = "legacy"
     ) -> np.ndarray:
         """
         全メッシュの危険度をベクトル化計算
@@ -118,7 +126,8 @@ class CalculationServiceNumpy:
         Returns:
             risk_hourly: リスク時系列 (n_times, n_meshes)
         """
-        n_times, n_meshes = swi_hourly.shape
+        _, n_meshes = swi_hourly.shape
+        normalized_risk_rule = self.normalize_risk_rule(risk_rule)
 
         # 閾値を整数にキャスト（元のコードと同じ処理）
         advisory = np.floor(advisory_bounds).astype(np.int32).reshape(1, -1)
@@ -136,7 +145,42 @@ class CalculationServiceNumpy:
 
         risk = np.select(conditions, choices, default=0).astype(np.int32)
 
-        return risk
+        return self.apply_risk_rule_vectorized(risk, normalized_risk_rule)
+
+    def apply_risk_rule_vectorized(
+        self,
+        risk_hourly: np.ndarray,
+        risk_rule: str = "legacy"
+    ) -> np.ndarray:
+        normalized_risk_rule = self.normalize_risk_rule(risk_rule)
+        if normalized_risk_rule == "legacy" or risk_hourly.size == 0:
+            return risk_hourly
+
+        adjusted = risk_hourly.copy()
+        n_times, n_meshes = adjusted.shape
+
+        for mesh_index in range(n_meshes):
+            level4_indices = np.where(adjusted[:, mesh_index] >= 4)[0]
+            if len(level4_indices) == 0:
+                continue
+
+            first_level4_index = int(level4_indices[0])
+            level2_start = max(0, first_level4_index - 6)
+            level3_start = max(0, first_level4_index - 2)
+
+            if level2_start < first_level4_index:
+                adjusted[level2_start:first_level4_index, mesh_index] = np.maximum(
+                    adjusted[level2_start:first_level4_index, mesh_index],
+                    2,
+                )
+
+            if level3_start < first_level4_index:
+                adjusted[level3_start:first_level4_index, mesh_index] = np.maximum(
+                    adjusted[level3_start:first_level4_index, mesh_index],
+                    3,
+                )
+
+        return adjusted
 
     def calc_3hour_max_risk_vectorized(self, risk_hourly: np.ndarray) -> np.ndarray:
         """
@@ -261,7 +305,8 @@ class CalculationServiceNumpy:
 
     def recalculate_meshes_vectorized(
         self,
-        mesh_data_list: list
+        mesh_data_list: list,
+        risk_rule: str = "legacy"
     ) -> dict:
         """
         複数メッシュの雨量調整後の再計算を一括実行
@@ -322,7 +367,7 @@ class CalculationServiceNumpy:
 
         # 1時間ごとリスク計算
         risk_hourly = self.calc_hourly_risk_vectorized(
-            swi_hourly, advisory_bounds, warning_bounds, dosyakei_bounds
+            swi_hourly, advisory_bounds, warning_bounds, dosyakei_bounds, risk_rule=risk_rule
         )
 
         # 3時間最大リスク計算

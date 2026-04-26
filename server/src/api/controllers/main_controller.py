@@ -261,6 +261,9 @@ class MainController:
                 guidance_type = self.config_service.normalize_guidance_type(
                     data.get('guidance_type', 'msm')
                 )
+                risk_rule = self.main_service.calculation_service.normalize_risk_rule(
+                    data.get('risk_rule', 'legacy')
+                )
             except ValueError as e:
                 return jsonify({
                     "status": "error",
@@ -299,7 +302,8 @@ class MainController:
 
             logger.info(
                 f"本番処理開始: SWI初期時刻={swi_initial}, "
-                f"ガイダンス初期時刻={guidance_initial}, guidance_type={guidance_type}"
+                f"ガイダンス初期時刻={guidance_initial}, guidance_type={guidance_type}, "
+                f"risk_rule={risk_rule}"
             )
 
             # 設定ファイルからURL構築
@@ -310,7 +314,8 @@ class MainController:
             cache_key = self.cache_service.generate_cache_key(
                 swi_initial.isoformat(),
                 guidance_initial.isoformat(),
-                guidance_type
+                guidance_type,
+                risk_rule,
             )
 
             # ========================================
@@ -348,6 +353,7 @@ class MainController:
                             "swi_initial_time": swi_initial.isoformat() + 'Z',
                             "guidance_initial_time": guidance_initial.isoformat() + 'Z',
                             "guidance_type": session.get('guidance_type', guidance_type),
+                            "risk_rule": session.get('risk_rule', risk_rule),
                             "available_prefectures": list(session['prefectures'].keys()),
                             "available_times": available_times,
                             "cache_info": {
@@ -360,7 +366,8 @@ class MainController:
                                 "swi_initial_time": swi_initial.isoformat() + 'Z',
                                 "guidance_url": guidance_url,
                                 "guidance_initial_time": guidance_initial.isoformat() + 'Z',
-                                "guidance_type": session.get('guidance_type', guidance_type)
+                                "guidance_type": session.get('guidance_type', guidance_type),
+                                "risk_rule": session.get('risk_rule', risk_rule),
                             }
                         })
 
@@ -380,7 +387,11 @@ class MainController:
 
                 # メイン処理実行（個別URLを使用、use_cache=True でキャッシュ有効）
                 result = self.main_service.main_process_from_separate_urls(
-                    swi_url, guidance_url, guidance_type=guidance_type, use_cache=True
+                    swi_url,
+                    guidance_url,
+                    guidance_type=guidance_type,
+                    risk_rule=risk_rule,
+                    use_cache=True,
                 )
 
                 # セッションサービスが有効な場合、セッション作成して軽量レスポンスを返す
@@ -391,7 +402,8 @@ class MainController:
                         swi_initial.isoformat(),
                         guidance_initial.isoformat(),
                         datetime.now().isoformat(),
-                        guidance_type
+                        guidance_type,
+                        risk_rule,
                     )
 
                     # ロック解放時にベースセッションIDを保存
@@ -417,6 +429,7 @@ class MainController:
                         "swi_initial_time": swi_initial.isoformat() + 'Z',
                         "guidance_initial_time": guidance_initial.isoformat() + 'Z',
                         "guidance_type": guidance_type,
+                        "risk_rule": risk_rule,
                         "available_prefectures": available_prefs,
                         "available_times": available_times,
                         "cache_info": {
@@ -429,7 +442,8 @@ class MainController:
                             "swi_initial_time": swi_initial.isoformat() + 'Z',
                             "guidance_url": guidance_url,
                             "guidance_initial_time": guidance_initial.isoformat() + 'Z',
-                            "guidance_type": guidance_type
+                            "guidance_type": guidance_type,
+                            "risk_rule": risk_rule,
                         }
                     })
 
@@ -448,6 +462,7 @@ class MainController:
                     "guidance_type": guidance_type
                 }
                 result["guidance_type"] = guidance_type
+                result["risk_rule"] = risk_rule
 
                 result["cache_info"] = {
                     "cache_key": cache_key,
@@ -511,7 +526,8 @@ class MainController:
                     swi_initial_time,
                     guidance_initial_time,
                     datetime.now().isoformat(),
-                    'msm'
+                    'msm',
+                    'legacy'
                 )
 
                 # 利用可能な時刻を抽出
@@ -533,6 +549,7 @@ class MainController:
                     "swi_initial_time": swi_initial_time + 'Z' if not swi_initial_time.endswith('Z') else swi_initial_time,
                     "guidance_initial_time": guidance_initial_time + 'Z' if not guidance_initial_time.endswith('Z') else guidance_initial_time,
                     "guidance_type": "msm",
+                    "risk_rule": "legacy",
                     "available_prefectures": available_prefs,
                     "available_times": available_times,
                     "cache_info": None,  # テストモードではキャッシュなし
@@ -541,7 +558,8 @@ class MainController:
                         "swi_initial_time": swi_initial_time,
                         "guidance_url": f"file://{guidance_file}",
                         "guidance_initial_time": guidance_initial_time,
-                        "guidance_type": "msm"
+                        "guidance_type": "msm",
+                        "risk_rule": "legacy"
                     }
                 })
 

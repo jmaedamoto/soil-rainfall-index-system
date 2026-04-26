@@ -15,6 +15,7 @@ import {
   PREFECTURE_NAME_MAP,
   useProductionSession,
 } from '../features/production-session/hooks/useProductionSession';
+import type { RiskRule } from '../types/api';
 
 const ProductionSession: React.FC = () => {
   const [isRainfallModalOpen, setIsRainfallModalOpen] = useState(false);
@@ -25,6 +26,7 @@ const ProductionSession: React.FC = () => {
   const [swiInitialTime, setSwiInitialTime] = useState<string>('');
   const [guidanceInitialTime, setGuidanceInitialTime] = useState<string>('');
   const [guidanceType, setGuidanceType] = useState<'msm' | 'gsm'>('msm');
+  const [riskRule, setRiskRule] = useState<RiskRule>('legacy');
 
   const {
     error,
@@ -50,6 +52,7 @@ const ProductionSession: React.FC = () => {
     swiInitialTime,
     guidanceInitialTime,
     guidanceType,
+    riskRule,
   });
 
   // 日付・時刻変更時にISO文字列を更新
@@ -148,6 +151,37 @@ const ProductionSession: React.FC = () => {
         }}>
           <strong>注意:</strong> 気象庁データはデータ時刻から約3時間後に利用可能になります。
           最新時刻を選択するとエラーになる場合があります。
+        </div>
+
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+            危険度ルール
+          </label>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input
+                type="radio"
+                name="riskRule"
+                value="legacy"
+                checked={riskRule === 'legacy'}
+                onChange={() => setRiskRule('legacy')}
+              />
+              従来ルール
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input
+                type="radio"
+                name="riskRule"
+                value="lead_time_to_level4"
+                checked={riskRule === 'lead_time_to_level4'}
+                onChange={() => setRiskRule('lead_time_to_level4')}
+              />
+              レベル4先行ルール
+            </label>
+          </div>
+          <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
+            レベル4に最初に到達する2時間前以降をレベル3、6時間前以降をレベル2として扱います。
+          </div>
         </div>
 
         <div style={{ marginBottom: '20px' }}>
