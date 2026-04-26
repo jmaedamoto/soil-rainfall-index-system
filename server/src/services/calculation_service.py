@@ -363,22 +363,30 @@ class CalculationService:
 
             if first_level4_index is None:
                 for risk in adjusted:
-                    if risk.value == 3:
-                        risk.value = 2
+                    if risk.value in {2, 3, 4}:
+                        risk.value = 0
                 return adjusted
+
+            last_level4_index = max(
+                index for index, risk in enumerate(adjusted) if risk.value >= 4
+            )
 
             level2_start = max(0, first_level4_index - 6)
             level3_start = max(0, first_level4_index - 2)
 
-            for index in range(first_level4_index):
-                if adjusted[index].value >= 2:
-                    adjusted[index].value = 2
+            # 従来ルール由来のレベル2/3は無効化し、レベル4先行ルールで全期間を作り直す
+            for risk in adjusted:
+                if risk.value in {2, 3, 4}:
+                    risk.value = 0
 
             for index in range(level2_start, first_level4_index):
-                adjusted[index].value = max(adjusted[index].value, 2)
+                adjusted[index].value = 2
 
             for index in range(level3_start, first_level4_index):
                 adjusted[index].value = 3
+
+            for index in range(first_level4_index, last_level4_index + 1):
+                adjusted[index].value = 4
 
             return adjusted
 
