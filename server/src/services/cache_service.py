@@ -3,7 +3,7 @@
 
 機能:
 - gzip圧縮によるJSON保存（209MB → 約20MB）
-- キャッシュキー生成（SWI初期時刻 + ガイダンス初期時刻 + ガイダンス種別）
+- キャッシュキー生成（SWI初期時刻 + ガイダンス初期時刻 + ガイダンス種別 + 危険度ルール）
 - 自動TTL管理（デフォルト7日）
 - メタデータ管理
 - 計算中ロック機能（重複計算防止）
@@ -48,7 +48,8 @@ class CacheService:
     def generate_cache_key(
         swi_initial: str,
         guidance_initial: str,
-        guidance_type: str = "msm"
+        guidance_type: str = "msm",
+        risk_rule: str = "legacy"
     ) -> str:
         """
         キャッシュキー生成
@@ -68,7 +69,7 @@ class CacheService:
         swi_key = swi_dt.strftime("%Y%m%d%H%M%S")
         guid_key = guid_dt.strftime("%Y%m%d%H%M%S")
 
-        return f"swi_{swi_key}_guid_{guidance_type.lower()}_{guid_key}"
+        return f"swi_{swi_key}_guid_{guidance_type.lower()}_{guid_key}_risk_{risk_rule.lower()}"
 
     def _get_cache_path(self, cache_key: str) -> Path:
         """キャッシュファイルパス取得（.json.gz）"""
@@ -137,7 +138,8 @@ class CacheService:
         result: dict,
         swi_initial: str,
         guidance_initial: str,
-        guidance_type: str = "msm"
+        guidance_type: str = "msm",
+        risk_rule: str = "legacy"
     ):
         """
         計算結果をキャッシュに保存
@@ -163,8 +165,9 @@ class CacheService:
             file_size_mb = cache_path.stat().st_size / (1024 * 1024)
 
             # メタデータ保存
-            self._save_metadata(cache_key, result, swi_initial,
-                               guidance_initial, guidance_type, file_size_mb)
+            self._save_metadata(
+                cache_key, result, swi_initial, guidance_initial, guidance_type, risk_rule, file_size_mb
+            )
 
             logger.info(f"キャッシュ保存完了: {cache_key} "
                        f"({file_size_mb:.1f}MB, {elapsed:.2f}秒)")
@@ -181,7 +184,8 @@ class CacheService:
         result: dict,
         swi_initial: str,
         guidance_initial: str,
-        guidance_type: str = "msm"
+        guidance_type: str = "msm",
+        risk_rule: str = "legacy"
     ) -> None:
         """
         計算結果をバックグラウンドでキャッシュ保存する。
@@ -192,7 +196,7 @@ class CacheService:
 
         worker = Thread(
             target=self.set_cached_result,
-            args=(cache_key, result, swi_initial, guidance_initial, guidance_type),
+            args=(cache_key, result, swi_initial, guidance_initial, guidance_type, risk_rule),
             daemon=True,
             name=f"cache-save-{cache_key}",
         )
@@ -205,6 +209,7 @@ class CacheService:
         swi_initial: str,
         guidance_initial: str,
         guidance_type: str,
+        risk_rule: str,
         file_size_mb: float
     ):
         """メタデータ保存"""
@@ -225,6 +230,7 @@ class CacheService:
             "swi_initial": swi_initial,
             "guidance_initial": guidance_initial,
             "guidance_type": guidance_type,
+            "risk_rule": risk_rule,
             "mesh_count": mesh_count,
             "file_size_mb": round(file_size_mb, 2),
             "compressed": True,

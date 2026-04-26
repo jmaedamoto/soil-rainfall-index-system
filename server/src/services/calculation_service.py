@@ -5,7 +5,7 @@ VBA Module.basの完全再現によるCalculationService
 既存のcalculation_service.pyを完全に置き換え
 """
 
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 import logging
 from datetime import datetime, timedelta
 
@@ -27,6 +27,14 @@ class CalculationService:
 
     def __init__(self):
         self.aggregation_service = CalculationAggregationService()
+
+    @staticmethod
+    def normalize_risk_rule(risk_rule: Optional[str]) -> str:
+        """危険度ルールを正規化する。"""
+        normalized = (risk_rule or "legacy").lower()
+        if normalized not in {"legacy", "lead_time_to_level4"}:
+            raise ValueError(f"Unsupported risk_rule: {risk_rule}")
+        return normalized
 
     def get_data_num(self, lat: float, lon: float, base_info: Any) -> int:
         """
@@ -277,7 +285,8 @@ class CalculationService:
 
     def calc_hourly_risk(self, swi_hourly: List[SwiTimeSeries],
                          advisary_bound: int, warning_bound: int,
-                         dosyakei_bound: int) -> List[Risk]:
+                         dosyakei_bound: int,
+                         risk_rule: str = "legacy") -> List[Risk]:
         """
         1時間ごとの危険度を判定
 
@@ -292,6 +301,7 @@ class CalculationService:
         """
         try:
             risk_hourly = []
+            normalized_risk_rule = self.normalize_risk_rule(risk_rule)
 
             for swi_item in swi_hourly:
                 swi_value = swi_item.value
@@ -308,10 +318,47 @@ class CalculationService:
 
                 risk_hourly.append(Risk(ft=swi_item.ft, value=risk))
 
-            return risk_hourly
+            return self.apply_risk_rule_to_hourly(risk_hourly, normalized_risk_rule)
 
         except Exception as e:
             logger.error(f"Hourly risk calculation error: {e}")
+            return []
+
+    def apply_risk_rule_to_hourly(
+        self,
+        risk_hourly: List[Risk],
+        risk_rule: str = "legacy"
+    ) -> List[Risk]:
+        """1時間危険度系列へ危険度ルールを適用する。"""
+        try:
+            normalized_risk_rule = self.normalize_risk_rule(risk_rule)
+
+            if normalized_risk_rule == "legacy" or not risk_hourly:
+                return risk_hourly
+
+            first_level4_index = next(
+                (index for index, risk in enumerate(risk_hourly) if risk.value >= 4),
+                None,
+            )
+
+            if first_level4_index is None:
+                return risk_hourly
+
+            adjusted = [Risk(ft=risk.ft, value=risk.value) for risk in risk_hourly]
+
+            level2_start = max(0, first_level4_index - 6)
+            level3_start = max(0, first_level4_index - 2)
+
+            for index in range(level2_start, first_level4_index):
+                adjusted[index].value = max(adjusted[index].value, 2)
+
+            for index in range(level3_start, first_level4_index):
+                adjusted[index].value = max(adjusted[index].value, 3)
+
+            return adjusted
+
+        except Exception as e:
+            logger.error(f"Risk rule application error: {e}")
             return []
 
     def calc_3hour_max_risk_from_hourly(self, risk_hourly: List[Risk]) -> List[Risk]:
@@ -433,7 +480,7 @@ class CalculationService:
             logger.error(f"SWI calculation error for mesh {mesh.code}: {e}")
             return []
 
-    def calc_risk_timeline(self, meshes: List[Mesh]) -> List[Risk]:
+    def calc_risk_timeline(self, meshes: List[Mesh], risk_rule: str = "legacy") -> List[Risk]:
         """
         VBA Function calc_risk_timeline の完全再現
         リスクレベル計算
@@ -465,6 +512,7 @@ class CalculationService:
             logger.info(f"First mesh boundaries: advisory={getattr(first_mesh, 'advisary_bound', 'N/A')}, warning={getattr(first_mesh, 'warning_bound', 'N/A')}, dosyakei={getattr(first_mesh, 'dosyakei_bound', 'N/A')}")
             logger.info(f"First 3 SWI values: {[first_mesh.swi[i].value for i in range(min(3, timeline_length))]}")
 
+            normalized_risk_rule = self.normalize_risk_rule(risk_rule)
             risk_timeline = []
 
             for t in range(timeline_length):
@@ -472,6 +520,13 @@ class CalculationService:
                 max_risk = 0
 
                 for mesh in meshes:
+                    mesh_risk_3hour_max = getattr(mesh, 'risk_3hour_max', None)
+                    if mesh_risk_3hour_max:
+                        matching_point = next((point for point in mesh_risk_3hour_max if point.ft == ft), None)
+                        if matching_point is not None:
+                            max_risk = max(max_risk, matching_point.value)
+                            continue
+
                     if not hasattr(mesh, 'swi') or not mesh.swi:
                         continue
 
@@ -507,7 +562,13 @@ class CalculationService:
             logger.error(f"Risk calculation traceback: {traceback.format_exc()}")
             return []
 
-    def process_mesh_calculations(self, mesh: Mesh, swi_grib2: Dict[str, Any], guidance_grib2: Dict[str, Any]) -> Mesh:
+    def process_mesh_calculations(
+        self,
+        mesh: Mesh,
+        swi_grib2: Dict[str, Any],
+        guidance_grib2: Dict[str, Any],
+        risk_rule: str = "legacy"
+    ) -> Mesh:
         """
         VBA calc_data の一部処理
         単一メッシュの計算を実行（全雨量・SWI・危険度）
@@ -561,7 +622,8 @@ class CalculationService:
                     mesh.swi_hourly,
                     mesh.advisary_bound,
                     mesh.warning_bound,
-                    mesh.dosyakei_bound
+                    mesh.dosyakei_bound,
+                    risk_rule=risk_rule,
                 )
 
                 # メッシュ50357712のデバッグログ（risk_hourly計算後）
@@ -581,7 +643,7 @@ class CalculationService:
             logger.error(f"Mesh calculations error: {e}")
             return mesh
 
-    def recalculate_swi_and_risk(self, mesh: Mesh) -> Mesh:
+    def recalculate_swi_and_risk(self, mesh: Mesh, risk_rule: str = "legacy") -> Mesh:
         """
         雨量データは既に調整済みという前提で、SWIと危険度のみ再計算
 
@@ -617,7 +679,8 @@ class CalculationService:
                     mesh.swi_hourly,
                     mesh.advisary_bound,
                     mesh.warning_bound,
-                    mesh.dosyakei_bound
+                    mesh.dosyakei_bound,
+                    risk_rule=risk_rule,
                 )
 
                 # 3時間ごとの最大危険度再計算
@@ -654,7 +717,7 @@ class CalculationService:
             logger.error(f"SWI recalculation error: {e}")
             return mesh
 
-    def process_area_calculations(self, areas: List[Area]) -> None:
+    def process_area_calculations(self, areas: List[Area], risk_rule: str = "legacy") -> None:
         """
         VBA calc_data の一部処理
         各エリアのリスク計算を実行
@@ -662,7 +725,7 @@ class CalculationService:
         try:
             for area in areas:
                 # VBA: prefectures(i).areas(j).risk_timeline = calc_risk_timeline(prefectures(i).areas(j).meshes)
-                area.risk_timeline = self.calc_risk_timeline(area.meshes)
+                area.risk_timeline = self.calc_risk_timeline(area.meshes, risk_rule=risk_rule)
 
         except Exception as e:
             logger.error(f"Area calculations error: {e}")

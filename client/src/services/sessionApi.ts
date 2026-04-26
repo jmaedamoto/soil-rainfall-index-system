@@ -114,6 +114,7 @@ class SessionAPIClient {
       area_rainfall_24hour?: RainfallDataResponse['area_rainfall_24hour'];
       subdivision_rainfall_24hour?: RainfallDataResponse['subdivision_rainfall_24hour'];
       guidance_type?: RainfallDataResponse['guidance_type'];
+      risk_rule?: RainfallDataResponse['risk_rule'];
       input_mode?: RainfallDataResponse['input_mode'];
       adjustment_mode?: RainfallDataResponse['adjustment_mode'];
     }>(
@@ -125,6 +126,7 @@ class SessionAPIClient {
       area_rainfall_24hour: response.data.area_rainfall_24hour,
       subdivision_rainfall_24hour: response.data.subdivision_rainfall_24hour,
       guidance_type: response.data.guidance_type,
+      risk_rule: response.data.risk_rule,
       input_mode: response.data.input_mode,
       adjustment_mode: response.data.adjustment_mode
     };
@@ -142,7 +144,8 @@ class SessionAPIClient {
     swiInitial: string,
     guidanceInitial: string,
     dataSource: string,
-    guidanceType?: RecalculateRequest['guidance_type']
+    guidanceType?: RecalculateRequest['guidance_type'],
+    riskRule?: RecalculateRequest['risk_rule']
   ): Promise<RecalculateResponse> {
     const response = await axios.post<{
       status: string;
@@ -161,7 +164,8 @@ class SessionAPIClient {
         swi_initial: swiInitial,
         guidance_initial: guidanceInitial,
         data_source: dataSource,
-        guidance_type: guidanceType
+        guidance_type: guidanceType,
+        risk_rule: riskRule
       },
       { timeout: 300000 }
     );

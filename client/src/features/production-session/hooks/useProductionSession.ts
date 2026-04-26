@@ -19,12 +19,14 @@ interface UseProductionSessionParams {
   swiInitialTime: string;
   guidanceInitialTime: string;
   guidanceType?: 'msm' | 'gsm';
+  riskRule?: 'legacy' | 'lead_time_to_level4';
 }
 
 export const useProductionSession = ({
   swiInitialTime,
   guidanceInitialTime,
   guidanceType = 'msm',
+  riskRule = 'legacy',
 }: UseProductionSessionParams) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = useState<LightweightCalculationResult | null>(null);
@@ -129,6 +131,7 @@ export const useProductionSession = ({
         swi_initial: swiInitialTime,
         guidance_initial: guidanceInitialTime,
         guidance_type: guidanceType,
+        risk_rule: riskRule,
       });
 
       setSessionInfo(result);

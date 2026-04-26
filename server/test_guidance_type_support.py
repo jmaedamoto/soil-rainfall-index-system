@@ -35,18 +35,20 @@ def test_gsm_guidance_url_rejects_non_6hour_initial_time():
         config.build_guidance_url(datetime(2026, 4, 26, 3, 0, 0), "gsm")
 
 
-def test_generate_cache_key_includes_guidance_type():
+def test_generate_cache_key_includes_guidance_type_and_risk_rule():
     msm_key = CacheService.generate_cache_key(
         "2025-01-01T00:00:00",
         "2025-01-01T06:00:00",
         "msm",
+        "legacy",
     )
     gsm_key = CacheService.generate_cache_key(
         "2025-01-01T00:00:00",
         "2025-01-01T06:00:00",
         "gsm",
+        "lead_time_to_level4",
     )
 
-    assert msm_key == "swi_20250101000000_guid_msm_20250101060000"
-    assert gsm_key == "swi_20250101000000_guid_gsm_20250101060000"
+    assert msm_key == "swi_20250101000000_guid_msm_20250101060000_risk_legacy"
+    assert gsm_key == "swi_20250101000000_guid_gsm_20250101060000_risk_lead_time_to_level4"
     assert msm_key != gsm_key

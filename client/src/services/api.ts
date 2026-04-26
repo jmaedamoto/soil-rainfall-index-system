@@ -60,6 +60,7 @@ export class SoilRainfallAPIClient {
     swi_initial: string;
     guidance_initial: string;
     guidance_type?: 'msm' | 'gsm';
+    risk_rule?: 'legacy' | 'lead_time_to_level4';
   }): Promise<LightweightCalculationResult> {
     const response = await apiClient.post<LightweightCalculationResult>(
       '/production-soil-rainfall-index-with-urls',

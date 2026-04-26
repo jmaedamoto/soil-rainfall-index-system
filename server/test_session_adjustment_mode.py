@@ -83,3 +83,40 @@ def test_fork_session_keeps_guidance_type():
 
     assert session["guidance_type"] == "gsm"
     assert info["guidance_type"] == "gsm"
+
+
+def test_fork_session_keeps_risk_rule():
+    service = SessionService()
+
+    prefectures = {
+        "28": {
+            "name": "兵庫県",
+            "code": "28",
+            "areas": [],
+            "secondary_subdivisions": [],
+            "prefecture_risk_timeline": [],
+        }
+    }
+
+    base_session_id = service.create_session(
+        prefectures=prefectures,
+        swi_initial_time="2026-04-25T00:00:00Z",
+        guidance_initial_time="2026-04-25T06:00:00Z",
+        calculation_time="2026-04-25T00:00:01Z",
+        guidance_type="gsm",
+        risk_rule="lead_time_to_level4",
+    )
+
+    fork_session_id = service.create_fork_session(
+        base_session_id=base_session_id,
+        adjustments={"兵庫県_神戸市": [{"ft": 6, "value": 12}]},
+        recalculated_meshes={},
+        input_mode="3hour",
+        adjustment_mode="ratio_3hour",
+    )
+
+    session = service.get_session(fork_session_id)
+    info = service.get_session_info(fork_session_id)
+
+    assert session["risk_rule"] == "lead_time_to_level4"
+    assert info["risk_rule"] == "lead_time_to_level4"
