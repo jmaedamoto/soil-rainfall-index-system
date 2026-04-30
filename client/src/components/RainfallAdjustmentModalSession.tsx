@@ -792,6 +792,8 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                           return (
                             <td
                               key={point.ft}
+                              data-area={areaName}
+                              data-ft={point.ft}
                               style={{
                                 padding: '4px',
                                 borderRight: '1px solid #eee',
@@ -811,6 +813,8 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                                 type="number"
                                 step="1"
                                 min="0"
+                                data-area={areaName}
+                                data-ft={point.ft}
                                 value={Math.round(point.value)}
                                 onChange={(e) => handleRainfallChange(areaName, point.ft, e.target.value)}
                                 className="rainfall-input"

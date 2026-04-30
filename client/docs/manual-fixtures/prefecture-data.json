@@ -1,0 +1,3112 @@
+{
+  "prefecture": {
+    "areas": [
+      {
+        "name": "大津市南部",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 2
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 2
+          },
+          {
+            "ft": 42,
+            "value": 2
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "近江南部"
+      },
+      {
+        "name": "草津市",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 2
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 2
+          },
+          {
+            "ft": 21,
+            "value": 2
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 2
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "近江南部"
+      },
+      {
+        "name": "守山市",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 2
+          },
+          {
+            "ft": 6,
+            "value": 2
+          },
+          {
+            "ft": 9,
+            "value": 2
+          },
+          {
+            "ft": 12,
+            "value": 2
+          },
+          {
+            "ft": 15,
+            "value": 2
+          },
+          {
+            "ft": 18,
+            "value": 2
+          },
+          {
+            "ft": 21,
+            "value": 2
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 0
+          },
+          {
+            "ft": 33,
+            "value": 0
+          },
+          {
+            "ft": 36,
+            "value": 0
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "近江南部"
+      },
+      {
+        "name": "栗東市",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 2
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 2
+          },
+          {
+            "ft": 21,
+            "value": 2
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 2
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "近江南部"
+      },
+      {
+        "name": "野洲市",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 2
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 2
+          },
+          {
+            "ft": 21,
+            "value": 2
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "近江南部"
+      },
+      {
+        "name": "近江八幡市",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 3
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 0
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "東近江"
+      },
+      {
+        "name": "東近江市",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 3
+          },
+          {
+            "ft": 24,
+            "value": 3
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "東近江"
+      },
+      {
+        "name": "日野町",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 2
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 3
+          },
+          {
+            "ft": 24,
+            "value": 3
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "東近江"
+      },
+      {
+        "name": "竜王町",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 3
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 0
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "東近江"
+      },
+      {
+        "name": "甲賀市",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 3
+          },
+          {
+            "ft": 24,
+            "value": 3
+          },
+          {
+            "ft": 27,
+            "value": 3
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 2
+          },
+          {
+            "ft": 42,
+            "value": 2
+          },
+          {
+            "ft": 45,
+            "value": 2
+          },
+          {
+            "ft": 48,
+            "value": 2
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "甲賀"
+      },
+      {
+        "name": "湖南市",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 3
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 2
+          },
+          {
+            "ft": 42,
+            "value": 2
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "甲賀"
+      },
+      {
+        "name": "大津市北部",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 2
+          },
+          {
+            "ft": 15,
+            "value": 2
+          },
+          {
+            "ft": 18,
+            "value": 2
+          },
+          {
+            "ft": 21,
+            "value": 2
+          },
+          {
+            "ft": 24,
+            "value": 0
+          },
+          {
+            "ft": 27,
+            "value": 0
+          },
+          {
+            "ft": 30,
+            "value": 0
+          },
+          {
+            "ft": 33,
+            "value": 0
+          },
+          {
+            "ft": 36,
+            "value": 0
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "近江西部"
+      },
+      {
+        "name": "高島市",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 2
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 2
+          },
+          {
+            "ft": 15,
+            "value": 2
+          },
+          {
+            "ft": 18,
+            "value": 2
+          },
+          {
+            "ft": 21,
+            "value": 2
+          },
+          {
+            "ft": 24,
+            "value": 0
+          },
+          {
+            "ft": 27,
+            "value": 0
+          },
+          {
+            "ft": 30,
+            "value": 0
+          },
+          {
+            "ft": 33,
+            "value": 0
+          },
+          {
+            "ft": 36,
+            "value": 0
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "近江西部"
+      },
+      {
+        "name": "長浜市",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 2
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 2
+          },
+          {
+            "ft": 18,
+            "value": 2
+          },
+          {
+            "ft": 21,
+            "value": 2
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 0
+          },
+          {
+            "ft": 30,
+            "value": 0
+          },
+          {
+            "ft": 33,
+            "value": 0
+          },
+          {
+            "ft": 36,
+            "value": 0
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "湖北"
+      },
+      {
+        "name": "米原市",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 2
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 2
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 0
+          },
+          {
+            "ft": 33,
+            "value": 0
+          },
+          {
+            "ft": 36,
+            "value": 0
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "湖北"
+      },
+      {
+        "name": "彦根市",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 2
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 3
+          },
+          {
+            "ft": 24,
+            "value": 3
+          },
+          {
+            "ft": 27,
+            "value": 3
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 2
+          },
+          {
+            "ft": 42,
+            "value": 2
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "湖東"
+      },
+      {
+        "name": "愛荘町",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 3
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "湖東"
+      },
+      {
+        "name": "豊郷町",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 2
+          },
+          {
+            "ft": 6,
+            "value": 2
+          },
+          {
+            "ft": 9,
+            "value": 2
+          },
+          {
+            "ft": 12,
+            "value": 2
+          },
+          {
+            "ft": 15,
+            "value": 2
+          },
+          {
+            "ft": 18,
+            "value": 2
+          },
+          {
+            "ft": 21,
+            "value": 2
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 0
+          },
+          {
+            "ft": 33,
+            "value": 0
+          },
+          {
+            "ft": 36,
+            "value": 0
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "湖東"
+      },
+      {
+        "name": "甲良町",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 3
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "湖東"
+      },
+      {
+        "name": "多賀町",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 2
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 3
+          },
+          {
+            "ft": 24,
+            "value": 3
+          },
+          {
+            "ft": 27,
+            "value": 3
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 2
+          },
+          {
+            "ft": 42,
+            "value": 2
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ],
+        "secondary_subdivision_name": "湖東"
+      }
+    ],
+    "code": "shiga",
+    "name": "滋賀県",
+    "prefecture_risk_timeline": [
+      {
+        "ft": 0,
+        "value": 2
+      },
+      {
+        "ft": 3,
+        "value": 3
+      },
+      {
+        "ft": 6,
+        "value": 3
+      },
+      {
+        "ft": 9,
+        "value": 3
+      },
+      {
+        "ft": 12,
+        "value": 3
+      },
+      {
+        "ft": 15,
+        "value": 3
+      },
+      {
+        "ft": 18,
+        "value": 3
+      },
+      {
+        "ft": 21,
+        "value": 3
+      },
+      {
+        "ft": 24,
+        "value": 3
+      },
+      {
+        "ft": 27,
+        "value": 3
+      },
+      {
+        "ft": 30,
+        "value": 2
+      },
+      {
+        "ft": 33,
+        "value": 2
+      },
+      {
+        "ft": 36,
+        "value": 2
+      },
+      {
+        "ft": 39,
+        "value": 2
+      },
+      {
+        "ft": 42,
+        "value": 2
+      },
+      {
+        "ft": 45,
+        "value": 2
+      },
+      {
+        "ft": 48,
+        "value": 2
+      },
+      {
+        "ft": 51,
+        "value": 0
+      },
+      {
+        "ft": 54,
+        "value": 0
+      },
+      {
+        "ft": 57,
+        "value": 0
+      },
+      {
+        "ft": 60,
+        "value": 0
+      },
+      {
+        "ft": 63,
+        "value": 0
+      },
+      {
+        "ft": 66,
+        "value": 0
+      },
+      {
+        "ft": 69,
+        "value": 0
+      },
+      {
+        "ft": 72,
+        "value": 0
+      },
+      {
+        "ft": 75,
+        "value": 0
+      },
+      {
+        "ft": 78,
+        "value": 0
+      }
+    ],
+    "risk_rule": "legacy",
+    "secondary_subdivisions": [
+      {
+        "area_names": [
+          "大津市南部",
+          "草津市",
+          "守山市",
+          "栗東市",
+          "野洲市"
+        ],
+        "name": "近江南部",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 2
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 2
+          },
+          {
+            "ft": 42,
+            "value": 2
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ]
+      },
+      {
+        "area_names": [
+          "近江八幡市",
+          "東近江市",
+          "日野町",
+          "竜王町"
+        ],
+        "name": "東近江",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 3
+          },
+          {
+            "ft": 24,
+            "value": 3
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ]
+      },
+      {
+        "area_names": [
+          "甲賀市",
+          "湖南市"
+        ],
+        "name": "甲賀",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 0
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 3
+          },
+          {
+            "ft": 24,
+            "value": 3
+          },
+          {
+            "ft": 27,
+            "value": 3
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 2
+          },
+          {
+            "ft": 42,
+            "value": 2
+          },
+          {
+            "ft": 45,
+            "value": 2
+          },
+          {
+            "ft": 48,
+            "value": 2
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ]
+      },
+      {
+        "area_names": [
+          "大津市北部",
+          "高島市"
+        ],
+        "name": "近江西部",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 2
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 2
+          },
+          {
+            "ft": 15,
+            "value": 2
+          },
+          {
+            "ft": 18,
+            "value": 2
+          },
+          {
+            "ft": 21,
+            "value": 2
+          },
+          {
+            "ft": 24,
+            "value": 0
+          },
+          {
+            "ft": 27,
+            "value": 0
+          },
+          {
+            "ft": 30,
+            "value": 0
+          },
+          {
+            "ft": 33,
+            "value": 0
+          },
+          {
+            "ft": 36,
+            "value": 0
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ]
+      },
+      {
+        "area_names": [
+          "長浜市",
+          "米原市"
+        ],
+        "name": "湖北",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 2
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 2
+          },
+          {
+            "ft": 24,
+            "value": 2
+          },
+          {
+            "ft": 27,
+            "value": 2
+          },
+          {
+            "ft": 30,
+            "value": 0
+          },
+          {
+            "ft": 33,
+            "value": 0
+          },
+          {
+            "ft": 36,
+            "value": 0
+          },
+          {
+            "ft": 39,
+            "value": 0
+          },
+          {
+            "ft": 42,
+            "value": 0
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ]
+      },
+      {
+        "area_names": [
+          "彦根市",
+          "愛荘町",
+          "豊郷町",
+          "甲良町",
+          "多賀町"
+        ],
+        "name": "湖東",
+        "risk_timeline": [
+          {
+            "ft": 0,
+            "value": 2
+          },
+          {
+            "ft": 3,
+            "value": 3
+          },
+          {
+            "ft": 6,
+            "value": 3
+          },
+          {
+            "ft": 9,
+            "value": 3
+          },
+          {
+            "ft": 12,
+            "value": 3
+          },
+          {
+            "ft": 15,
+            "value": 3
+          },
+          {
+            "ft": 18,
+            "value": 3
+          },
+          {
+            "ft": 21,
+            "value": 3
+          },
+          {
+            "ft": 24,
+            "value": 3
+          },
+          {
+            "ft": 27,
+            "value": 3
+          },
+          {
+            "ft": 30,
+            "value": 2
+          },
+          {
+            "ft": 33,
+            "value": 2
+          },
+          {
+            "ft": 36,
+            "value": 2
+          },
+          {
+            "ft": 39,
+            "value": 2
+          },
+          {
+            "ft": 42,
+            "value": 2
+          },
+          {
+            "ft": 45,
+            "value": 0
+          },
+          {
+            "ft": 48,
+            "value": 0
+          },
+          {
+            "ft": 51,
+            "value": 0
+          },
+          {
+            "ft": 54,
+            "value": 0
+          },
+          {
+            "ft": 57,
+            "value": 0
+          },
+          {
+            "ft": 60,
+            "value": 0
+          },
+          {
+            "ft": 63,
+            "value": 0
+          },
+          {
+            "ft": 66,
+            "value": 0
+          },
+          {
+            "ft": 69,
+            "value": 0
+          },
+          {
+            "ft": 72,
+            "value": 0
+          },
+          {
+            "ft": 75,
+            "value": 0
+          },
+          {
+            "ft": 78,
+            "value": 0
+          }
+        ]
+      }
+    ]
+  },
+  "status": "success"
+}
