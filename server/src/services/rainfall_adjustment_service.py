@@ -251,6 +251,20 @@ class RainfallAdjustmentService:
             strategy='ratio_peak_mesh'
         )
 
+    def build_fill_24hour_peak_mesh_from_session(
+        self,
+        prefectures_dict: Dict[str, Any],
+        area_adjustments: Dict[str, Dict[int, float]]
+    ) -> Dict[str, List[Tuple[int, float]]]:
+        """
+        領域内の24時間合計最大メッシュの時間分布を使い、24時間入力値で領域を塗りつぶす。
+        """
+        return self._build_24hour_adjusted_mesh_rainfall(
+            prefectures_dict,
+            area_adjustments,
+            strategy='fill_peak_mesh'
+        )
+
     def extract_area_rainfall_timeseries(
         self,
         prefectures: List[Prefecture],
@@ -647,6 +661,8 @@ class RainfallAdjustmentService:
                     self._apply_fill_24hour_uniform(area_dict.get("meshes", []), adjustments, adjusted_mesh_rainfall)
                 elif strategy == 'ratio_uniform':
                     self._apply_ratio_24hour_uniform(area_dict.get("meshes", []), adjustments, adjusted_mesh_rainfall)
+                elif strategy == 'fill_peak_mesh':
+                    self._apply_fill_24hour_peak_mesh(area_key, area_dict.get("meshes", []), adjustments, adjusted_mesh_rainfall)
                 elif strategy == 'ratio_peak_mesh':
                     self._apply_ratio_24hour_peak_mesh(area_key, area_dict.get("meshes", []), adjustments, adjusted_mesh_rainfall)
 
@@ -719,41 +735,17 @@ class RainfallAdjustmentService:
         adjustments: Dict[int, float],
         adjusted_mesh_rainfall: Dict[str, Dict[int, float]]
     ) -> None:
-        mesh_timelines = {
-            mesh_dict.get("code"): self._mesh_timeline_to_dict(mesh_dict)
-            for mesh_dict in meshes
-            if mesh_dict.get("code")
-        }
+        mesh_timelines = self._build_mesh_timelines(meshes)
 
         for window_end_ft, target_24h in adjustments.items():
-            window_end_ft_int = int(window_end_ft)
-            if window_end_ft_int not in self.WINDOW_24H_MAP:
+            peak_window = self._resolve_peak_mesh_window(area_key, mesh_timelines, int(window_end_ft), target_24h)
+            if peak_window is None:
                 continue
 
-            peak_mesh_code = None
-            peak_sum = 0.0
-            mesh_sums: Dict[str, float] = {}
+            _, peak_sum, mesh_sums, _ = peak_window
 
             for mesh_code, timeline_dict in mesh_timelines.items():
-                window_fts = self._available_window_fts(timeline_dict, window_end_ft_int)
-                mesh_sum = sum(timeline_dict.get(ft, 0.0) for ft in window_fts)
-                mesh_sums[mesh_code] = mesh_sum
-                if mesh_sum > peak_sum:
-                    peak_sum = mesh_sum
-                    peak_mesh_code = mesh_code
-
-            if peak_sum <= 0:
-                if float(target_24h) > 0:
-                    logger.warning(
-                        "24時間最大格子比率補正をスキップ: original_sum_24h=0, area=%s, window_end_ft=%s, adjusted_value=%s",
-                        area_key,
-                        window_end_ft_int,
-                        target_24h,
-                    )
-                continue
-
-            for mesh_code, timeline_dict in mesh_timelines.items():
-                window_fts = self._available_window_fts(timeline_dict, window_end_ft_int)
+                window_fts = self._available_window_fts(timeline_dict, int(window_end_ft))
                 if not window_fts:
                     continue
 
@@ -768,6 +760,84 @@ class RainfallAdjustmentService:
                     }
 
                 self._merge_mesh_values(mesh_code, timeline_dict, target_values, adjusted_mesh_rainfall)
+
+    def _apply_fill_24hour_peak_mesh(
+        self,
+        area_key: str,
+        meshes: List[Dict[str, Any]],
+        adjustments: Dict[int, float],
+        adjusted_mesh_rainfall: Dict[str, Dict[int, float]]
+    ) -> None:
+        mesh_timelines = self._build_mesh_timelines(meshes)
+
+        for window_end_ft, target_24h in adjustments.items():
+            peak_window = self._resolve_peak_mesh_window(area_key, mesh_timelines, int(window_end_ft), target_24h)
+            if peak_window is None:
+                continue
+
+            _, _, _, peak_profile = peak_window
+            target_values = {
+                ft: float(target_24h) * ratio
+                for ft, ratio in peak_profile.items()
+            }
+
+            for mesh_code, timeline_dict in mesh_timelines.items():
+                window_fts = self._available_window_fts(timeline_dict, int(window_end_ft))
+                if not window_fts:
+                    continue
+
+                filled_values = {
+                    ft: target_values[ft]
+                    for ft in window_fts
+                    if ft in target_values
+                }
+                self._merge_mesh_values(mesh_code, timeline_dict, filled_values, adjusted_mesh_rainfall)
+
+    def _build_mesh_timelines(self, meshes: List[Dict[str, Any]]) -> Dict[str, Dict[int, float]]:
+        return {
+            mesh_dict.get("code"): self._mesh_timeline_to_dict(mesh_dict)
+            for mesh_dict in meshes
+            if mesh_dict.get("code")
+        }
+
+    def _resolve_peak_mesh_window(
+        self,
+        area_key: str,
+        mesh_timelines: Dict[str, Dict[int, float]],
+        window_end_ft: int,
+        target_24h: float
+    ) -> Optional[Tuple[str, float, Dict[str, float], Dict[int, float]]]:
+        if window_end_ft not in self.WINDOW_24H_MAP:
+            return None
+
+        peak_mesh_code = None
+        peak_sum = 0.0
+        mesh_sums: Dict[str, float] = {}
+        peak_profile: Dict[int, float] = {}
+
+        for mesh_code, timeline_dict in mesh_timelines.items():
+            window_fts = self._available_window_fts(timeline_dict, window_end_ft)
+            mesh_sum = sum(timeline_dict.get(ft, 0.0) for ft in window_fts)
+            mesh_sums[mesh_code] = mesh_sum
+            if mesh_sum > peak_sum:
+                peak_sum = mesh_sum
+                peak_mesh_code = mesh_code
+                peak_profile = {
+                    ft: (timeline_dict.get(ft, 0.0) / mesh_sum) if mesh_sum > 0 else 0.0
+                    for ft in window_fts
+                }
+
+        if peak_sum <= 0 or peak_mesh_code is None:
+            if float(target_24h) > 0:
+                logger.warning(
+                    "24時間最大格子補正をスキップ: original_sum_24h=0, area=%s, window_end_ft=%s, adjusted_value=%s",
+                    area_key,
+                    window_end_ft,
+                    target_24h,
+                )
+            return None
+
+        return peak_mesh_code, peak_sum, mesh_sums, peak_profile
 
     def _build_original_max_by_ft(self, meshes: List[Dict[str, Any]]) -> Dict[int, float]:
         original_max_by_ft: Dict[int, float] = {}
