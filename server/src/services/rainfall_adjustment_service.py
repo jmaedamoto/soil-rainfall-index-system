@@ -3,7 +3,7 @@
 雨量調整サービス
 ユーザーが入力した雨量調整値に基づいてガイダンスデータを調整
 """
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Optional
 import logging
 import copy
 
