@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { sessionApiClient } from '../services/sessionApi';
-import type { TimeSeriesPoint } from '../types/api';
+import type { RiskRule, TimeSeriesPoint } from '../types/api';
 import type { AdjustmentMode, CellSelection, InputMode, RainfallViewMode } from '../features/rainfall-adjustment/types';
 import {
   buildRainfallAdjustments,
@@ -20,6 +20,8 @@ interface RainfallAdjustmentModalSessionProps {
   swiInitial: string;
   guidanceInitial: string;
   guidanceType?: 'msm' | 'gsm';
+  riskRule?: RiskRule;
+  prefectureDetails?: Array<{ code: string; name: string }>;
   dataSource: 'test' | 'production';
   onSessionRecalculated: (sessionId: string, meshRisks: Record<string, number>, meshCoords: Record<string, { lat: number; lon: number }>) => void;
 }
@@ -31,6 +33,8 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
   swiInitial,
   guidanceInitial,
   guidanceType = 'msm',
+  riskRule,
+  prefectureDetails = [],
   dataSource,
   onSessionRecalculated
 }) => {
@@ -310,12 +314,9 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
       const fetchRainfallData = async () => {
         try {
-          const [data, sessionInfo] = await Promise.all([
-            sessionApiClient.getRainfallData(sessionId),
-            sessionApiClient.getSessionInfo(sessionId),
-          ]);
+          const data = await sessionApiClient.getRainfallData(sessionId);
 
-          const orderedPrefectureNames = (sessionInfo.prefecture_details || []).map(
+          const orderedPrefectureNames = prefectureDetails.map(
             (prefecture) => prefecture.name
           );
           setPrefectureOrder(orderedPrefectureNames);
@@ -364,7 +365,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
       fetchRainfallData();
     }
-  }, [isOpen, step, sessionId]);
+  }, [isOpen, step, sessionId, prefectureDetails]);
 
   // 再計算実行（セッションベース）
   const handleRecalculate = async () => {
