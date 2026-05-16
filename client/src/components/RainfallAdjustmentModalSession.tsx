@@ -46,6 +46,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<'loading' | 'editing' | 'calculating'>('loading');
   const [selectedPrefecture, setSelectedPrefecture] = useState<string>('');
+  const [prefectureOrder, setPrefectureOrder] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<RainfallViewMode>('municipality');
   const [inputMode, setInputMode] = useState<InputMode>('3hour');
   const [adjustmentMode, setAdjustmentMode] = useState<AdjustmentMode>('ratio_3hour');
@@ -110,6 +111,21 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
       ? rainfallByPrefecture
       : subdivisionRainfallByPrefecture;
   }, [inputMode, viewMode, rainfall24HourByPrefecture, subdivisionRainfall24HourByPrefecture, rainfallByPrefecture, subdivisionRainfallByPrefecture]);
+
+  const availablePrefectures = useMemo(() => {
+    const currentPrefectureNames = Object.keys(currentGroupedMap);
+    if (prefectureOrder.length === 0) {
+      return currentPrefectureNames;
+    }
+
+    const currentPrefectureSet = new Set(currentPrefectureNames);
+    const orderedPrefectures = prefectureOrder.filter((prefName) => currentPrefectureSet.has(prefName));
+    const remainingPrefectures = currentPrefectureNames.filter(
+      (prefName) => !prefectureOrder.includes(prefName)
+    );
+
+    return [...orderedPrefectures, ...remainingPrefectures];
+  }, [currentGroupedMap, prefectureOrder]);
 
   // セルが選択されているか判定
   const isCellSelected = (areaName: string, ft: number) => {
@@ -294,7 +310,15 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
       const fetchRainfallData = async () => {
         try {
-          const data = await sessionApiClient.getRainfallData(sessionId);
+          const [data, sessionInfo] = await Promise.all([
+            sessionApiClient.getRainfallData(sessionId),
+            sessionApiClient.getSessionInfo(sessionId),
+          ]);
+
+          const orderedPrefectureNames = (sessionInfo.prefecture_details || []).map(
+            (prefecture) => prefecture.name
+          );
+          setPrefectureOrder(orderedPrefectureNames);
 
           // area_rainfallとsubdivision_rainfallを直接使用
           setOriginalRainfall(data.area_rainfall);
@@ -315,9 +339,18 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
           );
 
           // 最初の府県を選択
-          const allAreas = Object.keys(data.area_rainfall);
-          if (allAreas.length > 0) {
-            const firstPrefName = allAreas[0].split('_')[0];
+          const allPrefecturesFromRainfall = Array.from(new Set(
+            Object.keys(data.area_rainfall).map((areaName) => areaName.split('_')[0])
+          ));
+          const orderedAvailablePrefectures = orderedPrefectureNames.filter(
+            (prefName) => allPrefecturesFromRainfall.includes(prefName)
+          );
+
+          if (orderedAvailablePrefectures.length > 0) {
+            const firstPrefName = orderedAvailablePrefectures[0];
+            setSelectedPrefecture(firstPrefName);
+          } else if (allPrefecturesFromRainfall.length > 0) {
+            const firstPrefName = allPrefecturesFromRainfall[0];
             setSelectedPrefecture(firstPrefName);
           }
 
@@ -561,7 +594,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                     fontSize: '14px'
                   }}
                 >
-                  {Object.keys(viewMode === 'municipality' ? rainfallByPrefecture : subdivisionRainfallByPrefecture).map(prefName => (
+                  {availablePrefectures.map(prefName => (
                     <option key={prefName} value={prefName}>{prefName}</option>
                   ))}
                 </select>
