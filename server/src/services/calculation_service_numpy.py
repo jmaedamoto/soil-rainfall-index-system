@@ -243,6 +243,21 @@ class CalculationServiceNumpy:
 
         return rain_1hour
 
+    def calc_hourly_rain_uniform_vectorized(self, rain_3h: np.ndarray) -> np.ndarray:
+        """
+        3時間雨量を1時間ごとに均等按分する。
+        """
+        n_periods, n_meshes = rain_3h.shape
+        rain_1hour = np.zeros((n_periods * 3, n_meshes), dtype=np.float64)
+
+        for i in range(n_periods):
+            hourly_value = rain_3h[i] / 3.0
+            rain_1hour[i * 3] = hourly_value
+            rain_1hour[i * 3 + 1] = hourly_value
+            rain_1hour[i * 3 + 2] = hourly_value
+
+        return rain_1hour
+
     def process_all_meshes_vectorized(
         self,
         mesh_data: Dict[str, np.ndarray],
@@ -373,18 +388,11 @@ class CalculationServiceNumpy:
         # 3時間最大リスク計算
         risk_3hour = self.calc_3hour_max_risk_vectorized(risk_hourly)
 
-        # 3時間SWI計算（タンクモデルを3時間ステップで）
-        swi_3hour = np.zeros((n_periods + 1, n_meshes), dtype=np.float64)
-        swi_3hour[0] = initial_swi
-
-        s1 = initial_s1.copy()
-        s2 = initial_s2.copy()
-        s3 = initial_s3.copy()
-
-        for t_idx in range(n_periods):
-            rain = rain_3h[t_idx]
-            s1, s2, s3 = self.calc_tank_model_vectorized(s1, s2, s3, 3.0, rain)
-            swi_3hour[t_idx + 1] = s1 + s2 + s3
+        # 3時間SWIは、3時間雨量を1時間ごとに均等按分して1時間ステップで計算した終点値を使う
+        rain_1hour_uniform = self.calc_hourly_rain_uniform_vectorized(rain_3h)
+        swi_hourly_uniform = self.calc_swi_hourly_vectorized(
+            initial_swi, initial_s1, initial_s2, initial_s3, rain_1hour_uniform
+        )
 
         # 結果を辞書形式に変換
         results = {}
@@ -392,9 +400,10 @@ class CalculationServiceNumpy:
             mesh_code = mesh['mesh_code']
 
             # SWIタイムライン (FT=0を含む)
-            swi_timeline = [{'ft': 0, 'value': float(swi_3hour[0, i])}]
+            swi_timeline = [{'ft': 0, 'value': float(swi_hourly_uniform[0, i])}]
             for j, ft in enumerate(ft_list):
-                swi_timeline.append({'ft': ft, 'value': float(swi_3hour[j + 1, i])})
+                hourly_index = (j + 1) * 3
+                swi_timeline.append({'ft': ft, 'value': float(swi_hourly_uniform[hourly_index, i])})
 
             # 3時間最大リスクタイムライン
             risk_3h_timeline = []
