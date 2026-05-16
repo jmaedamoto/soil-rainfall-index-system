@@ -227,6 +227,24 @@ class CalculationService:
             logger.error(f"Hourly rain calculation error: {e}")
             return []
 
+    def calc_hourly_rain_uniform(
+        self,
+        rain_3h: List[GuidanceTimeSeries]
+    ) -> List[GuidanceTimeSeries]:
+        """
+        3時間雨量を1時間ごとに均等按分する。
+        """
+        hourly_rain = []
+
+        for rain_item in rain_3h:
+            hourly_value = rain_item.value / 3.0
+            ft_base = rain_item.ft
+            hourly_rain.append(GuidanceTimeSeries(ft=ft_base - 2, value=hourly_value))
+            hourly_rain.append(GuidanceTimeSeries(ft=ft_base - 1, value=hourly_value))
+            hourly_rain.append(GuidanceTimeSeries(ft=ft_base, value=hourly_value))
+
+        return hourly_rain
+
     def calc_swi_hourly(self, initial_swi: float, initial_first_tunk: float,
                         initial_second_tunk: float, initial_third_tunk: float,
                         hourly_rain: List[GuidanceTimeSeries]) -> List[SwiTimeSeries]:
@@ -453,41 +471,33 @@ class CalculationService:
 
             # guidance_indexは上で既に計算済み
             python_guidance_index = guidance_index - 1
-
-            # VBA: ReDim swi_time_siries(UBound(guidance_grib2.data) + 1)
-            swi_time_series = []
-
-            # VBA: swi_time_siries(1).ft = 0
-            # VBA: swi_time_siries(1).value = swi
-            swi_time_series.append(SwiTimeSeries(ft=0, value=swi))
-
-            # VBA: tmp_f = 0, tmp_s = 0, tmp_t = 0 (VBAでは初期化)
-            # しかし実際には初期タンク値が使用される
-            current_first_tunk = first_tunk
-            current_second_tunk = second_tunk
-            current_third_tunk = third_tunk
-
-            # VBA: For i = 1 To UBound(guidance_grib2.data)
-            for i in range(len(guidance_grib2['data'])):  # Python 0-based
+            rain_3hour = []
+            for i in range(len(guidance_grib2['data'])):
                 guidance_item = guidance_grib2['data'][i]
-
                 if python_guidance_index < len(guidance_item['value']):
-                    # VBA: Call calc_tunk_model(first_tunk, second_tunk, third_tunk, 3, guidance_grib2.data(i).value(guidance_index), tmp_f, tmp_s, tmp_t)
-                    rain_value = guidance_item['value'][python_guidance_index]
-                    tmp_f, tmp_s, tmp_t = self.calc_tunk_model(current_first_tunk, current_second_tunk, current_third_tunk, 3, rain_value)
+                    rain_3hour.append(
+                        GuidanceTimeSeries(
+                            ft=guidance_item['ft'],
+                            value=guidance_item['value'][python_guidance_index],
+                        )
+                    )
 
-                    # VBA: swi_time_siries(i + 1).ft = guidance_grib2.data(i).ft
-                    # VBA: swi_time_siries(i + 1).value = tmp_f + tmp_s + tmp_t
-                    swi_value = tmp_f + tmp_s + tmp_t
-                    swi_time_series.append(SwiTimeSeries(
-                        ft=guidance_item['ft'],
-                        value=swi_value
-                    ))
+            hourly_rain_uniform = self.calc_hourly_rain_uniform(rain_3hour)
+            swi_hourly = self.calc_swi_hourly(
+                swi,
+                first_tunk,
+                second_tunk,
+                third_tunk,
+                hourly_rain_uniform,
+            )
 
-                    # VBA: first_tunk = tmp_f, second_tunk = tmp_s, third_tunk = tmp_t
-                    current_first_tunk = tmp_f
-                    current_second_tunk = tmp_s
-                    current_third_tunk = tmp_t
+            swi_by_ft = {point.ft: point.value for point in swi_hourly}
+            swi_time_series = [SwiTimeSeries(ft=0, value=swi)]
+            for rain_item in rain_3hour:
+                if rain_item.ft in swi_by_ft:
+                    swi_time_series.append(
+                        SwiTimeSeries(ft=rain_item.ft, value=swi_by_ft[rain_item.ft])
+                    )
 
             return swi_time_series
 
@@ -701,30 +711,21 @@ class CalculationService:
                 # 3時間ごとの最大危険度再計算
                 mesh.risk_3hour_max = self.calc_3hour_max_risk_from_hourly(mesh.risk_hourly)
 
-                # 3時間ごとのSWI再計算（rain_3hourを使用）
-                # この場合はタンクモデルを3時間ステップで計算
-                swi_3hour = []
-                swi_3hour.append(SwiTimeSeries(ft=0, value=initial_swi))
-
-                current_first = initial_first_tunk
-                current_second = initial_second_tunk
-                current_third = initial_third_tunk
-
+                hourly_rain_uniform = self.calc_hourly_rain_uniform(mesh.rain_3hour)
+                swi_hourly_uniform = self.calc_swi_hourly(
+                    initial_swi,
+                    initial_first_tunk,
+                    initial_second_tunk,
+                    initial_third_tunk,
+                    hourly_rain_uniform
+                )
+                swi_by_ft = {point.ft: point.value for point in swi_hourly_uniform}
+                mesh.swi = [SwiTimeSeries(ft=0, value=initial_swi)]
                 for rain_point in mesh.rain_3hour:
-                    new_first, new_second, new_third = self.calc_tunk_model(
-                        current_first, current_second, current_third,
-                        3.0,  # 3時間
-                        rain_point.value
-                    )
-
-                    new_swi = new_first + new_second + new_third
-                    swi_3hour.append(SwiTimeSeries(ft=rain_point.ft, value=new_swi))
-
-                    current_first = new_first
-                    current_second = new_second
-                    current_third = new_third
-
-                mesh.swi = swi_3hour
+                    if rain_point.ft in swi_by_ft:
+                        mesh.swi.append(
+                            SwiTimeSeries(ft=rain_point.ft, value=swi_by_ft[rain_point.ft])
+                        )
 
             return mesh
 
