@@ -16,4 +16,5 @@ export type AdjustmentMode =
   | 'fill_3hour'
   | 'fill_24hour_uniform'
   | 'ratio_24hour_uniform'
+  | 'fill_24hour_peak_mesh'
   | 'ratio_24hour_peak_mesh';

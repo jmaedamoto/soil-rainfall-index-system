@@ -627,7 +627,12 @@ class SessionController:
 
             allowed_adjustment_modes = {
                 '3hour': {'ratio_3hour', 'fill_3hour'},
-                '24hour': {'fill_24hour_uniform', 'ratio_24hour_uniform', 'ratio_24hour_peak_mesh'},
+                '24hour': {
+                    'fill_24hour_uniform',
+                    'ratio_24hour_uniform',
+                    'fill_24hour_peak_mesh',
+                    'ratio_24hour_peak_mesh',
+                },
             }
             if adjustment_mode not in allowed_adjustment_modes[input_mode]:
                 return jsonify({
@@ -697,6 +702,11 @@ class SessionController:
                     )
                 elif adjustment_mode == 'ratio_24hour_uniform':
                     adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_ratio_24hour_uniform_from_session(
+                        existing_prefectures_dict,
+                        expanded_aggregate_adjustments
+                    )
+                elif adjustment_mode == 'fill_24hour_peak_mesh':
+                    adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_fill_24hour_peak_mesh_from_session(
                         existing_prefectures_dict,
                         expanded_aggregate_adjustments
                     )
