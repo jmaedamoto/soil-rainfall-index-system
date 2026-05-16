@@ -497,7 +497,16 @@ class SessionService:
             'input_mode': session.get('input_mode', '3hour'),
             'adjustment_mode': session.get('adjustment_mode', 'ratio_3hour'),
             'prefecture_count': len(session['prefectures']),
-            'prefecture_codes': list(session['prefectures'].keys())
+            'prefecture_codes': list(session['prefectures'].keys()),
+            'prefecture_details': [
+                {
+                    'code': pref_code,
+                    'name': pref_data.get('name', pref_code)
+                    if isinstance(pref_data, dict)
+                    else getattr(pref_data, 'name', pref_code),
+                }
+                for pref_code, pref_data in session['prefectures'].items()
+            ]
         }
 
         # フォークセッションの場合、追加情報

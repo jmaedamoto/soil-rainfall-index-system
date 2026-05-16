@@ -8,6 +8,7 @@ import numpy as np
 import logging
 import os
 import time
+import csv
 from collections import defaultdict, OrderedDict
 
 from models import Prefecture, Area, Mesh, SecondarySubdivision, PREFECTURES_MASTER
@@ -24,6 +25,72 @@ class DataService:
         self.cache = {}
         self.cache_timestamp = None
         self.cache_ttl = 300  # 5分キャッシュ
+
+    def get_prefecture_definitions(self) -> List[Dict[str, Any]]:
+        """府県定義一覧を取得する"""
+        prefectures_file = os.path.join(self.data_dir, "prefectures.csv")
+        fallback_definitions = [
+            {
+                "code": code,
+                "name": name,
+                "sort_order": (index + 1) * 10,
+                "enabled": True,
+            }
+            for index, (code, name) in enumerate(PREFECTURES_MASTER.items())
+        ]
+
+        if not os.path.exists(prefectures_file):
+            logger.warning(
+                f"Prefecture master not found: {prefectures_file}. "
+                "Falling back to built-in prefecture list."
+            )
+            return fallback_definitions
+
+        definitions: List[Dict[str, Any]] = []
+        try:
+            with open(prefectures_file, "r", encoding="utf-8-sig", newline="") as csv_file:
+                reader = csv.DictReader(csv_file)
+                for row in reader:
+                    code = (row.get("prefecture_code") or "").strip()
+                    name = (row.get("prefecture_name") or "").strip()
+                    if not code or not name:
+                        logger.warning(f"Skipping prefecture row with missing code/name: {row}")
+                        continue
+
+                    sort_order_raw = (row.get("sort_order") or "").strip()
+                    try:
+                        sort_order = int(sort_order_raw) if sort_order_raw else 9999
+                    except ValueError:
+                        logger.warning(
+                            f"Invalid sort_order for prefecture {code}: {sort_order_raw}. "
+                            "Using fallback order."
+                        )
+                        sort_order = 9999
+
+                    enabled_raw = (row.get("enabled") or "1").strip().lower()
+                    enabled = enabled_raw in ("1", "true", "yes", "on")
+                    if not enabled:
+                        continue
+
+                    definitions.append({
+                        "code": code,
+                        "name": name,
+                        "sort_order": sort_order,
+                        "enabled": enabled,
+                    })
+        except Exception as e:
+            logger.error(f"Error loading prefecture master {prefectures_file}: {e}")
+            return fallback_definitions
+
+        if not definitions:
+            logger.warning(
+                f"No enabled prefectures found in {prefectures_file}. "
+                "Falling back to built-in prefecture list."
+            )
+            return fallback_definitions
+
+        definitions.sort(key=lambda item: (item["sort_order"], item["code"]))
+        return definitions
 
     def meshcode_to_coordinate(self, code: str) -> Tuple[float, float]:
         """メッシュコードから緯度経度を計算（単一メッシュ用）"""
@@ -181,7 +248,10 @@ class DataService:
         all_dosyakei_data = {}
         all_vba_swi_data = {}
 
-        for pref_code in PREFECTURES_MASTER.keys():
+        prefecture_definitions = self.get_prefecture_definitions()
+
+        for pref in prefecture_definitions:
+            pref_code = pref["code"]
             dosha_data, dosyakei_data, vba_swi_data = self.load_csv_data(pref_code)
             if dosha_data is not None:
                 all_dosha_data[pref_code] = dosha_data
@@ -197,7 +267,9 @@ class DataService:
         mesh_processing_start = time.time()
         prefectures = []
 
-        for pref_code, pref_name in PREFECTURES_MASTER.items():
+        for pref in prefecture_definitions:
+            pref_code = pref["code"]
+            pref_name = pref["name"]
             if pref_code not in all_dosha_data:
                 logger.warning(f"Skipping {pref_code}: no dosha data")
                 continue
