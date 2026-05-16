@@ -48,11 +48,14 @@ class SessionController:
 
     @staticmethod
     def _build_row_metrics_from_meshes(meshes: List[Dict[str, Any]]) -> Dict[str, Any]:
+        positive_thresholds = [
+            int(mesh.get("dosyakei_bound", 0))
+            for mesh in meshes
+            if int(mesh.get("dosyakei_bound", 0)) > 0
+        ]
+
         return {
-            "level4_threshold": max(
-                (int(mesh.get("dosyakei_bound", 0)) for mesh in meshes),
-                default=0,
-            ),
+            "level4_threshold": min(positive_thresholds, default=0),
             "swi_timeline": SessionController._build_max_timeline_from_meshes(
                 meshes, "swi_timeline"
             ),
