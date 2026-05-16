@@ -33,6 +33,9 @@ export interface Area {
   secondary_subdivision_name?: string;  // 所属する二次細分名
   meshes: Mesh[];  // メッシュデータ
   risk_timeline: RiskTimePoint[];  // リスク時系列
+  level4_threshold?: number;  // 領域内のレベル4基準値の最大値
+  swi_timeline?: TimeSeriesPoint[];  // 領域内のSWI最大値
+  rain_3hour_timeline?: TimeSeriesPoint[];  // 領域内の前3時間雨量最大値
 }
 
 export interface SecondarySubdivision {
@@ -41,6 +44,8 @@ export interface SecondarySubdivision {
   rain_1hour_max_timeline: TimeSeriesPoint[];  // 二次細分内の最大1時間雨量
   rain_3hour_timeline: TimeSeriesPoint[];  // 二次細分内の最大3時間雨量
   risk_timeline: RiskTimePoint[];  // 二次細分内の最大リスク
+  level4_threshold?: number;  // 二次細分内のレベル4基準値の最大値
+  swi_timeline?: TimeSeriesPoint[];  // 二次細分内のSWI最大値
 }
 
 export interface Prefecture {
@@ -51,6 +56,9 @@ export interface Prefecture {
   prefecture_rain_1hour_max_timeline?: TimeSeriesPoint[];  // 府県全体の最大1時間雨量
   prefecture_rain_3hour_timeline?: TimeSeriesPoint[];  // 府県全体の最大3時間雨量
   prefecture_risk_timeline?: RiskTimePoint[];  // 府県全体の最大リスク
+  level4_threshold?: number;  // 府県内のレベル4基準値の最大値
+  swi_timeline?: TimeSeriesPoint[];  // 府県内のSWI最大値
+  rain_3hour_timeline?: TimeSeriesPoint[];  // 府県内の前3時間雨量最大値
 }
 
 export interface CacheMetadata {
@@ -143,15 +151,24 @@ export interface LightweightCalculationResult {
 export interface LightweightPrefectureData {
   name: string;
   code: string;
+  level4_threshold?: number;
+  swi_timeline?: TimeSeriesPoint[];
+  rain_3hour_timeline?: TimeSeriesPoint[];
   areas: Array<{
     name: string;
     secondary_subdivision_name: string;
     risk_timeline: RiskTimePoint[];
+    level4_threshold?: number;
+    swi_timeline?: TimeSeriesPoint[];
+    rain_3hour_timeline?: TimeSeriesPoint[];
   }>;
   secondary_subdivisions: Array<{
     name: string;
     area_names: string[];
     risk_timeline: RiskTimePoint[];
+    level4_threshold?: number;
+    swi_timeline?: TimeSeriesPoint[];
+    rain_3hour_timeline?: TimeSeriesPoint[];
   }>;
   prefecture_risk_timeline: RiskTimePoint[];
 }

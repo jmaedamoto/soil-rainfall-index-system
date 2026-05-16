@@ -7,6 +7,7 @@ from datetime import datetime
 import logging
 import os
 import sys
+from typing import Any, Dict, List
 
 # プロジェクトルートをパスに追加
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -25,6 +26,54 @@ class SessionController:
     def __init__(self, session_service: SessionService):
         self.session_service = session_service
         self.rainfall_adjustment_service = RainfallAdjustmentService()
+
+    @staticmethod
+    def _build_max_timeline_from_meshes(
+        meshes: List[Dict[str, Any]],
+        timeline_key: str
+    ) -> List[Dict[str, float]]:
+        max_by_ft: Dict[int, float] = {}
+
+        for mesh in meshes:
+            for point in mesh.get(timeline_key, []):
+                ft = int(point["ft"])
+                value = float(point["value"])
+                if ft not in max_by_ft or value > max_by_ft[ft]:
+                    max_by_ft[ft] = value
+
+        return [
+            {"ft": ft, "value": value}
+            for ft, value in sorted(max_by_ft.items())
+        ]
+
+    @staticmethod
+    def _build_row_metrics_from_meshes(meshes: List[Dict[str, Any]]) -> Dict[str, Any]:
+        return {
+            "level4_threshold": max(
+                (int(mesh.get("dosyakei_bound", 0)) for mesh in meshes),
+                default=0,
+            ),
+            "swi_timeline": SessionController._build_max_timeline_from_meshes(
+                meshes, "swi_timeline"
+            ),
+            "rain_3hour_timeline": SessionController._build_max_timeline_from_meshes(
+                meshes, "rain_timeline"
+            ),
+        }
+
+    @staticmethod
+    def _collect_subdivision_meshes(
+        prefecture: Dict[str, Any],
+        area_names: List[str]
+    ) -> List[Dict[str, Any]]:
+        area_name_set = set(area_names)
+        meshes: List[Dict[str, Any]] = []
+
+        for area in prefecture.get("areas", []):
+            if area.get("name") in area_name_set:
+                meshes.extend(area.get("meshes", []))
+
+        return meshes
 
     def get_session_info(self, session_id: str):
         """
@@ -90,7 +139,8 @@ class SessionController:
                     {
                         "name": area["name"],
                         "secondary_subdivision_name": area["secondary_subdivision_name"],
-                        "risk_timeline": area["risk_timeline"]
+                        "risk_timeline": area["risk_timeline"],
+                        **self._build_row_metrics_from_meshes(area.get("meshes", [])),
                     }
                     for area in prefecture["areas"]
                 ],
@@ -98,11 +148,24 @@ class SessionController:
                     {
                         "name": subdiv["name"],
                         "area_names": subdiv.get("area_names", []),
-                        "risk_timeline": subdiv.get("risk_timeline", [])
+                        "risk_timeline": subdiv.get("risk_timeline", []),
+                        **self._build_row_metrics_from_meshes(
+                            self._collect_subdivision_meshes(
+                                prefecture,
+                                subdiv.get("area_names", []),
+                            )
+                        ),
                     }
                     for subdiv in prefecture.get("secondary_subdivisions", [])
                 ],
-                "prefecture_risk_timeline": prefecture.get("prefecture_risk_timeline", [])
+                "prefecture_risk_timeline": prefecture.get("prefecture_risk_timeline", []),
+                **self._build_row_metrics_from_meshes(
+                    [
+                        mesh
+                        for area in prefecture.get("areas", [])
+                        for mesh in area.get("meshes", [])
+                    ]
+                ),
             }
 
             # デバッグ: レスポンスデータの確認
