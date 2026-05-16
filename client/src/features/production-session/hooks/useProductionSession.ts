@@ -6,15 +6,6 @@ import type {
   LightweightPrefectureData,
 } from '../../../types/session';
 
-export const PREFECTURE_NAME_MAP: Record<string, string> = {
-  shiga: '滋賀県',
-  kyoto: '京都府',
-  osaka: '大阪府',
-  hyogo: '兵庫県',
-  nara: '奈良県',
-  wakayama: '和歌山県',
-};
-
 interface UseProductionSessionParams {
   swiInitialTime: string;
   guidanceInitialTime: string;

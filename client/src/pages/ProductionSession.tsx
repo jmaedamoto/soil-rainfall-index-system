@@ -12,7 +12,6 @@ import {
   MSM_HOUR_OPTIONS,
 } from '../features/production-session/utils/dateTime';
 import {
-  PREFECTURE_NAME_MAP,
   useProductionSession,
 } from '../features/production-session/hooks/useProductionSession';
 import type { RiskRule } from '../types/api';
@@ -365,7 +364,7 @@ const ProductionSession: React.FC = () => {
             >
               {sessionInfo.available_prefectures.map(code => (
                 <option key={code} value={code}>
-                  {code}
+                  {sessionInfo.available_prefecture_details?.find((pref) => pref.code === code)?.name || code}
                   {loadingPrefecture === code && ' (読み込み中...)'}
                   {prefectureRiskData[code] && ' ✓'}
                 </option>
@@ -393,10 +392,13 @@ const ProductionSession: React.FC = () => {
               <div style={{ marginTop: '30px' }}>
                 <AreaRiskBarChart
                   prefectures={Object.values(prefectureRiskData).filter(p => p !== undefined) as PrefectureType[]}
-                  availablePrefectures={sessionInfo.available_prefectures.map(code => ({
-                    code,
-                    name: PREFECTURE_NAME_MAP[code] || code,
-                  }))}
+                  availablePrefectures={
+                    sessionInfo.available_prefecture_details ||
+                    sessionInfo.available_prefectures.map(code => ({
+                      code,
+                      name: code,
+                    }))
+                  }
                   selectedPrefecture={selectedPrefecture}
                   selectedTime={selectedTime}
                   onPrefectureChange={handlePrefectureChange}

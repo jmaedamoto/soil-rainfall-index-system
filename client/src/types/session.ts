@@ -15,6 +15,10 @@ export interface SessionInfo {
   adjustment_mode?: AdjustmentMode;
   prefecture_count: number;
   prefecture_codes: string[];
+  prefecture_details?: Array<{
+    code: string;
+    name: string;
+  }>;
 }
 
 export interface LightweightCalculationResult {
@@ -25,6 +29,10 @@ export interface LightweightCalculationResult {
   guidance_type?: 'msm' | 'gsm';
   risk_rule?: RiskRule;
   available_prefectures: string[];
+  available_prefecture_details?: Array<{
+    code: string;
+    name: string;
+  }>;
   available_times: number[];
   cache_info?: CacheInfo;
   used_urls?: {

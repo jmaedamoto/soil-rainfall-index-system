@@ -89,6 +89,21 @@ class MainController:
             "architecture": "Refactored Service Layer Architecture",
             "version": "4.0.0"
         })
+
+    @staticmethod
+    def _build_available_prefecture_details(prefectures: dict) -> list:
+        """府県コードと名称の一覧を返す"""
+        details = []
+        for code, prefecture in prefectures.items():
+            if isinstance(prefecture, dict):
+                name = prefecture.get("name", code)
+            else:
+                name = getattr(prefecture, "name", code)
+            details.append({
+                "code": code,
+                "name": name,
+            })
+        return details
     
     def data_check(self):
         """データファイル確認エンドポイント"""
@@ -96,15 +111,18 @@ class MainController:
             required_files = []
             
             # 必要なファイルリスト
-            prefectures = ["shiga", "kyoto", "osaka", "hyogo", "nara", "wakayama"]
-            for pref in prefectures:
+            prefecture_definitions = self.main_service.data_service.get_prefecture_definitions()
+            for pref in prefecture_definitions:
+                pref_code = pref["code"]
                 required_files.extend([
-                    f"dosha_{pref}.csv",
-                    f"dosyakei_{pref}.csv"
+                    f"dosha_{pref_code}.csv",
+                    f"dosyakei_{pref_code}.csv"
                 ])
             
             # ファイル存在確認
             file_status = {}
+            prefectures_file = os.path.join(self.data_dir, "prefectures.csv")
+            file_status["prefectures.csv"] = os.path.exists(prefectures_file)
             for filename in required_files:
                 filepath = os.path.join(self.data_dir, filename)
                 file_status[filename] = os.path.exists(filepath)
@@ -355,6 +373,9 @@ class MainController:
                             "guidance_type": session.get('guidance_type', guidance_type),
                             "risk_rule": session.get('risk_rule', risk_rule),
                             "available_prefectures": list(session['prefectures'].keys()),
+                            "available_prefecture_details": self._build_available_prefecture_details(
+                                session['prefectures']
+                            ),
                             "available_times": available_times,
                             "cache_info": {
                                 "cache_key": cache_key,
@@ -431,6 +452,9 @@ class MainController:
                         "guidance_type": guidance_type,
                         "risk_rule": risk_rule,
                         "available_prefectures": available_prefs,
+                        "available_prefecture_details": self._build_available_prefecture_details(
+                            result['prefectures']
+                        ),
                         "available_times": available_times,
                         "cache_info": {
                             "cache_key": cache_key,
@@ -551,6 +575,9 @@ class MainController:
                     "guidance_type": "msm",
                     "risk_rule": "legacy",
                     "available_prefectures": available_prefs,
+                    "available_prefecture_details": self._build_available_prefecture_details(
+                        result['prefectures']
+                    ),
                     "available_times": available_times,
                     "cache_info": None,  # テストモードではキャッシュなし
                     "used_urls": {
