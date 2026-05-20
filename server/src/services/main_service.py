@@ -2,7 +2,7 @@
 """
 メイン処理サービス
 """
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional, Callable
 import logging
 from datetime import datetime, timedelta
 import time
@@ -80,6 +80,7 @@ class MainService:
         risk_rule: str = "legacy",
         use_cache: bool = True,
         async_cache_save: bool = True,
+        on_cache_saved: Optional[Callable[[bool], None]] = None,
     ) -> Dict[str, Any]:
         """
         個別URLベースのメイン処理（SWIとガイダンスのURLを個別指定）
@@ -143,6 +144,7 @@ class MainService:
                         guidance_initial_time.isoformat(),
                         normalized_guidance_type,
                         normalized_risk_rule,
+                        on_cache_saved,
                     )
                 else:
                     self.cache_service.set_cached_result(

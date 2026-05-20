@@ -486,6 +486,15 @@ class MainController:
             session_id = None
 
             try:
+                on_cache_saved = None
+                if lock_acquired:
+                    def on_cache_saved(success: bool) -> None:
+                        if success:
+                            logger.info(f"非同期キャッシュ保存完了によりロック解放: {cache_key}")
+                        else:
+                            logger.warning(f"非同期キャッシュ保存失敗によりロック解放: {cache_key}")
+                        self.cache_service.release_calculation_lock(cache_key)
+
                 # メイン処理実行（個別URLを使用、use_cache=True でキャッシュ有効）
                 result = self.main_service.main_process_from_separate_urls(
                     swi_url,
@@ -493,7 +502,8 @@ class MainController:
                     guidance_type=guidance_type,
                     risk_rule=risk_rule,
                     use_cache=True,
-                    async_cache_save=False,
+                    async_cache_save=True,
+                    on_cache_saved=on_cache_saved,
                 )
 
                 # セッションサービスが有効な場合、セッション作成して軽量レスポンスを返す
@@ -509,9 +519,6 @@ class MainController:
                         cache_key,
                     )
 
-                    # ロック解放時にベースセッションIDを保存
-                    if lock_acquired:
-                        self.cache_service.release_calculation_lock(cache_key, session_id)
                     return self._build_lightweight_session_response(
                         session_id,
                         result['prefectures'],
@@ -525,6 +532,7 @@ class MainController:
 
                 # セッションサービスが無効な場合、従来通り全データを返す
                 if lock_acquired:
+                    # セッションを使わない経路ではレスポンス前にロックを解放してよい
                     self.cache_service.release_calculation_lock(cache_key)
 
                 result["status"] = "success"

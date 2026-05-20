@@ -5,7 +5,6 @@
 - gzip圧縮によるJSON保存（209MB → 約20MB）
 - キャッシュキー生成（SWI初期時刻 + ガイダンス初期時刻 + ガイダンス種別 + 危険度ルール）
 - 自動TTL管理（デフォルト7日）
-- メタデータ管理
 - 計算中ロック機能（重複計算防止）
 """
 
@@ -17,7 +16,7 @@ import tempfile
 from threading import Thread
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Callable
 import os
 
 logger = logging.getLogger(__name__)
@@ -76,13 +75,13 @@ class CacheService:
         """キャッシュファイルパス取得（.json.gz）"""
         return self.cache_dir / f"{cache_key}.json.gz"
 
-    def _get_meta_path(self, cache_key: str) -> Path:
-        """メタデータファイルパス取得（.meta.json）"""
-        return self.cache_dir / f"{cache_key}.meta.json"
-
     def _get_cache_temp_glob(self, cache_key: str) -> str:
         """キャッシュ保存中の一時ファイルglob"""
         return f"{cache_key}.json.gz.*.tmp"
+
+    def _get_legacy_meta_path(self, cache_key: str) -> Path:
+        """旧メタデータファイルパス取得（後方互換の削除用）"""
+        return self.cache_dir / f"{cache_key}.meta.json"
 
     def _write_json_atomic(self, path: Path, data: dict) -> None:
         """JSONを一時ファイル経由で原子的に保存する"""
@@ -137,10 +136,9 @@ class CacheService:
         return any(self.cache_dir.glob(self._get_cache_temp_glob(cache_key)))
 
     def is_cache_materializing(self, cache_key: str) -> bool:
-        """キャッシュ本体とメタデータのどちらか片方だけが存在する中間状態か確認"""
+        """キャッシュ本体はあるが保存用tmpがまだ残っている中間状態か確認"""
         cache_exists = self._get_cache_path(cache_key).exists()
-        meta_exists = self._get_meta_path(cache_key).exists()
-        return cache_exists != meta_exists
+        return cache_exists and self.is_cache_write_in_progress(cache_key)
 
     def wait_for_cache_materialization(
         self,
@@ -149,22 +147,20 @@ class CacheService:
         poll_interval: float = 0.2,
     ) -> bool:
         """
-        保存中tmpの完了または本体gzの出現を短時間待機する
+        保存中tmpの完了と本体gzの出現を短時間待機する
         """
         cache_path = self._get_cache_path(cache_key)
-        meta_path = self._get_meta_path(cache_key)
         start_time = time.time()
 
         while time.time() - start_time < timeout_seconds:
             if (
                 cache_path.exists()
-                and meta_path.exists()
                 and not self.is_cache_write_in_progress(cache_key)
             ):
                 return True
             time.sleep(poll_interval)
 
-        return cache_path.exists() and meta_path.exists()
+        return cache_path.exists() and not self.is_cache_write_in_progress(cache_key)
 
     def get_cached_result(self, cache_key: str) -> Optional[dict]:
         """
@@ -177,14 +173,9 @@ class CacheService:
             キャッシュされたデータ、存在しない場合None
         """
         cache_path = self._get_cache_path(cache_key)
-        meta_path = self._get_meta_path(cache_key)
 
         if not cache_path.exists():
             logger.info(f"キャッシュ未存在: {cache_key}")
-            return None
-
-        if not meta_path.exists():
-            logger.info(f"キャッシュメタデータ未存在（保存途中）: {cache_key}")
             return None
 
         # TTLチェック
@@ -220,7 +211,7 @@ class CacheService:
         guidance_initial: str,
         guidance_type: str = "msm",
         risk_rule: str = "legacy"
-    ):
+    ) -> bool:
         """
         計算結果をキャッシュに保存
 
@@ -235,26 +226,29 @@ class CacheService:
         try:
             logger.info(f"キャッシュ保存開始: {cache_key}")
             start_time = datetime.now()
+            legacy_meta_path = self._get_legacy_meta_path(cache_key)
 
             # データ保存（temp file + atomic rename）
             self._write_gzip_json_atomic(cache_path, result)
+            if legacy_meta_path.exists():
+                legacy_meta_path.unlink()
 
             elapsed = (datetime.now() - start_time).total_seconds()
             file_size_mb = cache_path.stat().st_size / (1024 * 1024)
 
-            # メタデータ保存
-            self._save_metadata(
-                cache_key, result, swi_initial, guidance_initial, guidance_type, risk_rule, file_size_mb
-            )
-
             logger.info(f"キャッシュ保存完了: {cache_key} "
                        f"({file_size_mb:.1f}MB, {elapsed:.2f}秒)")
+            return True
 
         except Exception as e:
             logger.error(f"キャッシュ保存エラー: {cache_key} - {e}")
             # エラー時は中途半端なファイルを削除
             if cache_path.exists():
                 cache_path.unlink()
+            legacy_meta_path = self._get_legacy_meta_path(cache_key)
+            if legacy_meta_path.exists():
+                legacy_meta_path.unlink()
+            return False
 
     def set_cached_result_async(
         self,
@@ -263,7 +257,8 @@ class CacheService:
         swi_initial: str,
         guidance_initial: str,
         guidance_type: str = "msm",
-        risk_rule: str = "legacy"
+        risk_rule: str = "legacy",
+        on_complete: Optional[Callable[[bool], None]] = None,
     ) -> None:
         """
         計算結果をバックグラウンドでキャッシュ保存する。
@@ -272,72 +267,52 @@ class CacheService:
         """
         logger.info(f"キャッシュ非同期保存を開始: {cache_key}")
 
+        def run_save() -> None:
+            success = self.set_cached_result(
+                cache_key,
+                result,
+                swi_initial,
+                guidance_initial,
+                guidance_type,
+                risk_rule,
+            )
+            if on_complete:
+                try:
+                    on_complete(success)
+                except Exception as callback_error:
+                    logger.error(
+                        f"キャッシュ保存完了コールバックエラー: {cache_key} - {callback_error}"
+                    )
+
         worker = Thread(
-            target=self.set_cached_result,
-            args=(cache_key, result, swi_initial, guidance_initial, guidance_type, risk_rule),
+            target=run_save,
             daemon=True,
             name=f"cache-save-{cache_key}",
         )
         worker.start()
 
-    def _save_metadata(
-        self,
-        cache_key: str,
-        result: dict,
-        swi_initial: str,
-        guidance_initial: str,
-        guidance_type: str,
-        risk_rule: str,
-        file_size_mb: float
-    ):
-        """メタデータ保存"""
-        meta_path = self._get_meta_path(cache_key)
-
-        # メッシュ数をカウント
-        mesh_count = 0
-        if 'prefectures' in result:
-            for pref_data in result['prefectures'].values():
-                if 'areas' in pref_data:
-                    for area in pref_data['areas']:
-                        if 'meshes' in area:
-                            mesh_count += len(area['meshes'])
-
-        metadata = {
-            "cache_key": cache_key,
-            "created_at": datetime.now().isoformat(),
-            "swi_initial": swi_initial,
-            "guidance_initial": guidance_initial,
-            "guidance_type": guidance_type,
-            "risk_rule": risk_rule,
-            "mesh_count": mesh_count,
-            "file_size_mb": round(file_size_mb, 2),
-            "compressed": True,
-            "compression_format": "gzip"
-        }
-
-        self._write_json_atomic(meta_path, metadata)
-
-    def get_metadata(self, cache_key: str) -> Optional[Dict]:
-        """
-        メタデータ取得
-
-        Args:
-            cache_key: キャッシュキー
-
-        Returns:
-            メタデータ、存在しない場合None
-        """
-        meta_path = self._get_meta_path(cache_key)
-
-        if not meta_path.exists():
+    def _build_metadata_from_gzip(self, cache_key: str) -> Optional[Dict]:
+        """gzip ファイルから管理用メタデータを組み立てる"""
+        cache_path = self._get_cache_path(cache_key)
+        if not cache_path.exists():
             return None
 
         try:
-            with open(meta_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            cache_stat = cache_path.stat()
+            return {
+                "cache_key": cache_key,
+                "created_at": datetime.fromtimestamp(cache_stat.st_mtime).isoformat(),
+                "file_size_mb": round(cache_stat.st_size / (1024 * 1024), 2),
+                "compressed": True,
+                "compression_format": "gzip",
+            }
         except Exception as e:
-            logger.error(f"メタデータ読み込みエラー: {cache_key} - {e}")
+            logger.error(f"gzipメタデータ生成エラー: {cache_key} - {e}")
             return None
+
+    def get_metadata(self, cache_key: str) -> Optional[Dict]:
+        """gzipファイル由来のメタデータを取得"""
+        return self._build_metadata_from_gzip(cache_key)
 
     def _is_cache_valid(self, cache_key: str) -> bool:
         """
@@ -349,12 +324,11 @@ class CacheService:
         Returns:
             有効期限内の場合True
         """
-        metadata = self.get_metadata(cache_key)
-
-        if not metadata or 'created_at' not in metadata:
+        cache_path = self._get_cache_path(cache_key)
+        if not cache_path.exists():
             return False
 
-        created_at = datetime.fromisoformat(metadata['created_at'])
+        created_at = datetime.fromtimestamp(cache_path.stat().st_mtime)
         expiry_date = created_at + timedelta(days=self.default_ttl_days)
 
         return datetime.now() < expiry_date
@@ -367,14 +341,14 @@ class CacheService:
             cache_key: キャッシュキー
         """
         cache_path = self._get_cache_path(cache_key)
-        meta_path = self._get_meta_path(cache_key)
+        legacy_meta_path = self._get_legacy_meta_path(cache_key)
 
         if cache_path.exists():
             cache_path.unlink()
             logger.info(f"キャッシュ削除: {cache_key}")
 
-        if meta_path.exists():
-            meta_path.unlink()
+        if legacy_meta_path.exists():
+            legacy_meta_path.unlink()
 
     def list_caches(self) -> List[Dict]:
         """
@@ -385,13 +359,11 @@ class CacheService:
         """
         caches = []
 
-        for meta_path in self.cache_dir.glob("*.meta.json"):
-            try:
-                with open(meta_path, 'r', encoding='utf-8') as f:
-                    metadata = json.load(f)
-                    caches.append(metadata)
-            except Exception as e:
-                logger.error(f"メタデータ読み込みエラー: {meta_path} - {e}")
+        for cache_path in self.cache_dir.glob("*.json.gz"):
+            cache_key = cache_path.name[:-8]
+            metadata = self._build_metadata_from_gzip(cache_key)
+            if metadata:
+                caches.append(metadata)
 
         # 作成日時でソート（新しい順）
         caches.sort(key=lambda x: x.get('created_at', ''), reverse=True)
@@ -407,18 +379,14 @@ class CacheService:
         """
         deleted_count = 0
 
-        for meta_path in self.cache_dir.glob("*.meta.json"):
+        for cache_path in self.cache_dir.glob("*.json.gz"):
+            cache_key = cache_path.name[:-8]
             try:
-                with open(meta_path, 'r', encoding='utf-8') as f:
-                    metadata = json.load(f)
-
-                cache_key = metadata.get('cache_key')
-                if cache_key and not self._is_cache_valid(cache_key):
+                if not self._is_cache_valid(cache_key):
                     self.invalidate_cache(cache_key)
                     deleted_count += 1
-
             except Exception as e:
-                logger.error(f"期限切れチェックエラー: {meta_path} - {e}")
+                logger.error(f"期限切れチェックエラー: {cache_path} - {e}")
 
         if deleted_count > 0:
             logger.info(f"期限切れキャッシュ削除完了: {deleted_count}件")
