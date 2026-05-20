@@ -14,6 +14,7 @@ import json
 import logging
 import time
 import tempfile
+import io
 from threading import Thread
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -110,11 +111,25 @@ class CacheService:
             suffix=".tmp",
             dir=str(path.parent),
         )
-        os.close(fd)
         try:
-            with gzip.open(temp_path, 'wt', encoding='utf-8', compresslevel=6) as f:
-                json.dump(data, f, ensure_ascii=False)
+            with os.fdopen(fd, 'wb') as raw_file:
+                with gzip.GzipFile(
+                    filename='',
+                    mode='wb',
+                    fileobj=raw_file,
+                    compresslevel=6,
+                ) as gzip_file:
+                    with io.TextIOWrapper(gzip_file, encoding='utf-8') as text_file:
+                        json.dump(data, text_file, ensure_ascii=False)
+                        text_file.flush()
+                raw_file.flush()
+                os.fsync(raw_file.fileno())
             os.replace(temp_path, path)
+            dir_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
         except Exception:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
