@@ -41,7 +41,7 @@ class SessionAPIClient {
    * 指定時刻の全メッシュリスク値取得
    * @param sessionId セッションID
    * @param ft 予報時刻
-   * @param options.includeCoords 座標を含めるか（省略時true、初回のみtrueで2回目以降はfalse推奨）
+   * @param options.includeCoords 互換用パラメータ（現在は常に座標付きで返却される）
    */
   async getRiskAtTime(
     sessionId: string,

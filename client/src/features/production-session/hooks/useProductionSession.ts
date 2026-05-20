@@ -54,10 +54,7 @@ export const useProductionSession = ({
 
   const loadRiskAtTime = async (targetSessionId: string, ft: number, requestId?: number) => {
     try {
-      const needCoords = Object.keys(meshCoords).length === 0;
-      const response = await sessionApiClient.getRiskAtTime(targetSessionId, ft, {
-        includeCoords: needCoords,
-      });
+      const response = await sessionApiClient.getRiskAtTime(targetSessionId, ft);
 
       if (!isLatestLoadRequest(requestId)) {
         return;
@@ -65,10 +62,7 @@ export const useProductionSession = ({
 
       if (response.status === 'success') {
         setMeshRisksAtTime(response.mesh_risks);
-
-        if (needCoords && response.mesh_coords) {
-          setMeshCoords(response.mesh_coords);
-        }
+        setMeshCoords(response.mesh_coords);
       }
     } catch (err) {
       console.error(`メッシュリスク値読み込みエラー (FT=${ft}):`, err);

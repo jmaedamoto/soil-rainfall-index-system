@@ -166,7 +166,7 @@ export interface RiskAtTimeResponse {
   status: 'success' | 'error';
   ft: number;
   mesh_risks: Record<string, number>;  // メッシュコード → リスク値
-  mesh_coords?: Record<string, { lat: number; lon: number }>;  // メッシュコード → 座標（初回のみ、省略可）
+  mesh_coords: Record<string, { lat: number; lon: number }>;  // メッシュコード → 座標
   error?: string;
 }
 
