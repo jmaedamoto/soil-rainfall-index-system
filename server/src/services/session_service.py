@@ -152,7 +152,6 @@ class SessionService:
                     timeout_seconds=300.0,
                 ):
                     cached_result = self.cache_service.get_cached_result(cache_key)
-
         if not cached_result or 'prefectures' not in cached_result:
             logger.warning(f"Session restore skipped, cache unavailable: {session_id} -> {cache_key}")
             return None
@@ -347,11 +346,13 @@ class SessionService:
         if session is None:
             restored = self._restore_session_from_reference(session_id)
             if restored is None:
-                logger.warning(f"Session not found: {session_id}")
+                logger.warning(f"Session not found in memory: {session_id}")
                 return None
             session = restored
 
         with self.lock:
+            # 復元直後に別スレッドが更新している可能性があるため再取得
+            session = self.sessions.get(session_id, session)
             # 期限チェック
             if datetime.now() > session['expires_at']:
                 logger.warning(f"Session expired: {session_id}")
@@ -577,6 +578,9 @@ class SessionService:
         with self.lock:
             if session_id in self.sessions:
                 del self.sessions[session_id]
+                ref_path = self._get_session_ref_path(session_id)
+                if ref_path.exists():
+                    ref_path.unlink()
                 logger.info(f"Session deleted: {session_id}")
                 return True
             return False
@@ -598,6 +602,9 @@ class SessionService:
 
             for session_id in expired_ids:
                 del self.sessions[session_id]
+                ref_path = self._get_session_ref_path(session_id)
+                if ref_path.exists():
+                    ref_path.unlink()
 
         if expired_ids:
             logger.info(f"Cleaned up {len(expired_ids)} expired sessions")
