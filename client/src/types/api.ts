@@ -76,6 +76,11 @@ export interface CacheInfo {
   cache_key: string;
   cache_hit: boolean;           // キャッシュヒットフラグ
   cache_metadata: CacheMetadata | null;
+  served_without_recompute?: boolean;
+  served_from_existing_session?: boolean;
+  served_after_cache_wait?: boolean;
+  waited_for_calculation?: boolean;
+  cache_materializing?: boolean;
 }
 
 export interface HealthStatus {

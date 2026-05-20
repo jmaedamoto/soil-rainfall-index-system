@@ -465,8 +465,8 @@ class MainController:
                             session.get('risk_rule', risk_rule),
                             {
                                 "cache_key": cache_key,
-                                "cache_hit": True,
-                                "cache_metadata": cache_metadata,
+                                "cache_hit": False,
+                                "cache_metadata": None,
                                 "served_from_existing_session": True,
                                 "cache_materializing": cache_write_in_progress,
                             },
@@ -496,8 +496,8 @@ class MainController:
                                 guidance_initial,
                                 guidance_type,
                                 risk_rule,
-                                {
-                                    "cache_key": cache_key,
+                            {
+                                "cache_key": cache_key,
                                     "cache_hit": True,
                                     "cache_metadata": cache_metadata,
                                     "served_after_cache_wait": True,
@@ -552,8 +552,8 @@ class MainController:
                             session.get('risk_rule', risk_rule),
                             {
                                 "cache_key": cache_key,
-                                "cache_hit": True,
-                                "cache_metadata": cache_metadata,
+                                "cache_hit": False,
+                                "cache_metadata": None,
                                 "waited_for_calculation": True,
                             },
                             swi_url,

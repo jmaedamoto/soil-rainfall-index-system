@@ -6,7 +6,36 @@ interface CacheInfoProps {
 }
 
 const CacheInfo: React.FC<CacheInfoProps> = ({ cacheInfo }) => {
-  const { cache_hit, cache_metadata } = cacheInfo;
+  const {
+    cache_hit,
+    cache_metadata,
+    served_from_existing_session,
+    served_after_cache_wait,
+    waited_for_calculation,
+    cache_materializing,
+  } = cacheInfo;
+
+  const statusLabel = cache_hit
+    ? 'ファイルキャッシュヒット'
+    : served_from_existing_session
+      ? '既存セッション再利用'
+      : served_after_cache_wait
+        ? 'キャッシュ確定待機後に取得'
+        : waited_for_calculation
+          ? '他ユーザーの計算完了待ち'
+          : 'キャッシュミス（新規計算）';
+
+  const statusColor = cache_hit
+    ? '#4CAF50'
+    : (served_from_existing_session || served_after_cache_wait || waited_for_calculation)
+      ? '#1976D2'
+      : '#FF9800';
+
+  const statusIcon = cache_hit
+    ? '✅'
+    : (served_from_existing_session || served_after_cache_wait || waited_for_calculation)
+      ? 'ℹ️'
+      : '🔄';
 
   return (
     <div
@@ -66,17 +95,22 @@ const CacheInfo: React.FC<CacheInfoProps> = ({ cacheInfo }) => {
               fontSize: '20px',
             }}
           >
-            {cache_hit ? '✅' : '🔄'}
+            {statusIcon}
           </span>
           <span
             style={{
               fontWeight: 'bold',
-              color: cache_hit ? '#4CAF50' : '#FF9800',
+              color: statusColor,
             }}
           >
-            {cache_hit ? 'キャッシュヒット' : 'キャッシュミス（新規計算）'}
+            {statusLabel}
           </span>
         </div>
+        {cache_materializing && (
+          <div style={{ marginTop: '6px', fontSize: '12px', color: '#666' }}>
+            キャッシュ保存の完了待ち中
+          </div>
+        )}
       </div>
 
       {/* キャッシュキー */}
@@ -179,13 +213,13 @@ const CacheInfo: React.FC<CacheInfoProps> = ({ cacheInfo }) => {
       )}
 
       {/* パフォーマンス情報（キャッシュヒット時） */}
-      {cache_hit && (
+      {(cache_hit || served_from_existing_session || served_after_cache_wait || waited_for_calculation) && (
         <div
           style={{
             marginTop: '12px',
             paddingTop: '12px',
             borderTop: '1px solid #e0e0e0',
-            backgroundColor: '#E8F5E9',
+            backgroundColor: cache_hit ? '#E8F5E9' : '#E3F2FD',
             padding: '8px',
             borderRadius: '4px',
           }}
@@ -193,12 +227,12 @@ const CacheInfo: React.FC<CacheInfoProps> = ({ cacheInfo }) => {
           <div
             style={{
               fontSize: '12px',
-              color: '#2E7D32',
+              color: cache_hit ? '#2E7D32' : '#1565C0',
               textAlign: 'center',
               fontWeight: 'bold',
             }}
           >
-            ⚡ 高速レスポンス（約4倍高速化）
+            {cache_hit ? '⚡ 高速レスポンス（ファイルキャッシュ利用）' : '↺ 再計算を避けて応答'}
           </div>
         </div>
       )}
