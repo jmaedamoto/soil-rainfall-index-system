@@ -13,6 +13,7 @@ import gzip
 import json
 import logging
 import time
+import tempfile
 from threading import Thread
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -78,6 +79,42 @@ class CacheService:
     def _get_meta_path(self, cache_key: str) -> Path:
         """メタデータファイルパス取得（.meta.json）"""
         return self.cache_dir / f"{cache_key}.meta.json"
+
+    def _write_json_atomic(self, path: Path, data: dict) -> None:
+        """JSONを一時ファイル経由で原子的に保存する"""
+        fd, temp_path = tempfile.mkstemp(
+            prefix=f"{path.name}.",
+            suffix=".tmp",
+            dir=str(path.parent),
+            text=True,
+        )
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, path)
+        except Exception:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
+
+    def _write_gzip_json_atomic(self, path: Path, data: dict) -> None:
+        """gzip JSONを一時ファイル経由で原子的に保存する"""
+        fd, temp_path = tempfile.mkstemp(
+            prefix=f"{path.name}.",
+            suffix=".tmp",
+            dir=str(path.parent),
+        )
+        os.close(fd)
+        try:
+            with gzip.open(temp_path, 'wt', encoding='utf-8', compresslevel=6) as f:
+                json.dump(data, f, ensure_ascii=False)
+            os.replace(temp_path, path)
+        except Exception:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
 
     def exists(self, cache_key: str) -> bool:
         """
@@ -156,10 +193,8 @@ class CacheService:
             logger.info(f"キャッシュ保存開始: {cache_key}")
             start_time = datetime.now()
 
-            # データ保存（gzip圧縮、レベル6=バランス良い）
-            with gzip.open(cache_path, 'wt', encoding='utf-8',
-                          compresslevel=6) as f:
-                json.dump(result, f, ensure_ascii=False)
+            # データ保存（temp file + atomic rename）
+            self._write_gzip_json_atomic(cache_path, result)
 
             elapsed = (datetime.now() - start_time).total_seconds()
             file_size_mb = cache_path.stat().st_size / (1024 * 1024)
@@ -237,8 +272,7 @@ class CacheService:
             "compression_format": "gzip"
         }
 
-        with open(meta_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, ensure_ascii=False, indent=2)
+        self._write_json_atomic(meta_path, metadata)
 
     def get_metadata(self, cache_key: str) -> Optional[Dict]:
         """
@@ -419,23 +453,37 @@ class CacheService:
         """
         lock_path = self._get_lock_path(cache_key)
 
-        # 既にロック中かチェック
-        if self.is_calculation_in_progress(cache_key):
-            logger.info(f"計算ロック取得失敗（既にロック中）: {cache_key}")
-            return False
-
         try:
             lock_data = {
                 "cache_key": cache_key,
                 "started_at": datetime.now().isoformat(),
                 "base_session_id": None  # 計算完了後に設定
             }
-            with open(lock_path, 'w', encoding='utf-8') as f:
+            fd = os.open(
+                lock_path,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                0o644,
+            )
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 json.dump(lock_data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
 
             logger.info(f"計算ロック取得成功: {cache_key}")
             return True
 
+        except FileExistsError:
+            if self.is_calculation_in_progress(cache_key):
+                logger.info(f"計算ロック取得失敗（既にロック中）: {cache_key}")
+                return False
+            logger.warning(f"古い計算ロックを検出: {cache_key} - 再取得を試行")
+            try:
+                if lock_path.exists():
+                    lock_path.unlink()
+            except Exception as cleanup_error:
+                logger.error(f"古いロック削除エラー: {cache_key} - {cleanup_error}")
+                return False
+            return self.acquire_calculation_lock(cache_key)
         except Exception as e:
             logger.error(f"計算ロック取得エラー: {cache_key} - {e}")
             return False
@@ -458,8 +506,7 @@ class CacheService:
                         lock_data = json.load(f)
                     lock_data['base_session_id'] = base_session_id
                     lock_data['completed_at'] = datetime.now().isoformat()
-                    with open(lock_path, 'w', encoding='utf-8') as f:
-                        json.dump(lock_data, f, ensure_ascii=False, indent=2)
+                    self._write_json_atomic(lock_path, lock_data)
                     logger.info(f"ベースセッションID保存: {cache_key} -> {base_session_id}")
             except Exception as e:
                 logger.error(f"ベースセッションID保存エラー: {cache_key} - {e}")
