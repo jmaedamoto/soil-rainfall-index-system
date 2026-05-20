@@ -160,21 +160,34 @@ class SessionController:
             mesh_risks = {}
             mesh_coords = {} if include_coords else None
             prefectures = session['prefectures']
+            missing_ft_mesh_codes = []
+            total_mesh_count = 0
 
             sample_count = 0
             for pref_code, prefecture in prefectures.items():
                 for area in prefecture["areas"]:
                     for mesh in area["meshes"]:
-                        # 指定されたFTのリスク値を取得
-                        risk_value = 0
-                        for risk_point in mesh["risk_3hour_max_timeline"]:
-                            if risk_point["ft"] == ft:
-                                risk_value = risk_point["value"]
+                        total_mesh_count += 1
+
+                        # 指定されたFTのリスク値を取得。
+                        # FTが見つからない場合に0へフォールバックすると
+                        # 未完成セッションを正常系として返してしまう。
+                        risk_value = None
+                        for risk_point in mesh.get("risk_3hour_max_timeline", []):
+                            if risk_point.get("ft") == ft:
+                                risk_value = risk_point.get("value")
                                 break
+
+                        if risk_value is None:
+                            missing_ft_mesh_codes.append(str(mesh.get("code", "unknown")))
+                            continue
 
                         # 最初の3メッシュのデータをログ出力
                         if sample_count < 3:
-                            logger.info(f"[get_risk_at_time] FT={ft}, Mesh={mesh['code']}, Risk={risk_value}, Timeline={mesh['risk_3hour_max_timeline'][:3]}")
+                            logger.info(
+                                f"{trace_prefix} [get_risk_at_time] FT={ft}, Mesh={mesh['code']}, "
+                                f"Risk={risk_value}, Timeline={mesh.get('risk_3hour_max_timeline', [])[:3]}"
+                            )
                             sample_count += 1
 
                         mesh_risks[mesh["code"]] = risk_value
@@ -185,6 +198,22 @@ class SessionController:
                                 "lat": mesh["lat"],
                                 "lon": mesh["lon"]
                             }
+
+            if missing_ft_mesh_codes:
+                missing_preview = missing_ft_mesh_codes[:10]
+                logger.warning(
+                    f"{trace_prefix} 時刻別リスク取得失敗: FT={ft} のタイムライン欠落 "
+                    f"(missing_meshes={len(missing_ft_mesh_codes)}/{total_mesh_count}, "
+                    f"sample_meshes={missing_preview})"
+                )
+                return jsonify({
+                    "status": "error",
+                    "error": "Session data is incomplete for the requested forecast time",
+                    "session_id": session_id,
+                    "ft": ft,
+                    "missing_mesh_count": len(missing_ft_mesh_codes),
+                    "mesh_count": total_mesh_count,
+                }), 503
 
             response_data = {
                 "status": "success",
