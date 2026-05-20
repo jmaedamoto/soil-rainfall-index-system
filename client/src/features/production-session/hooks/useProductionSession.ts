@@ -43,20 +43,9 @@ export const useProductionSession = ({
     requestId === undefined || requestId === activeLoadRequestIdRef.current
   );
 
-  const loadRiskAtTime = async (
-    targetSessionId: string,
-    ft: number,
-    requestId?: number,
-    options?: { forceIncludeCoords?: boolean }
-  ) => {
+  const loadRiskAtTime = async (targetSessionId: string, ft: number, requestId?: number) => {
     try {
-      const needCoords =
-        options?.forceIncludeCoords === true ||
-        Object.keys(meshCoords).length === 0 ||
-        targetSessionId !== sessionId;
-      const response = await sessionApiClient.getRiskAtTime(targetSessionId, ft, {
-        includeCoords: needCoords,
-      });
+      const response = await sessionApiClient.getRiskAtTime(targetSessionId, ft);
 
       if (!isLatestLoadRequest(requestId)) {
         return;
@@ -64,10 +53,7 @@ export const useProductionSession = ({
 
       if (response.status === 'success') {
         setMeshRisksAtTime(response.mesh_risks);
-
-        if (needCoords && response.mesh_coords) {
-          setMeshCoords(response.mesh_coords);
-        }
+        setMeshCoords(response.mesh_coords);
       }
     } catch (err) {
       console.error(`メッシュリスク値読み込みエラー (FT=${ft}):`, err);
@@ -172,9 +158,7 @@ export const useProductionSession = ({
       if (result.available_times.length > 0) {
         const initialTime = result.available_times[0];
         setSelectedTime(initialTime);
-        await loadRiskAtTime(result.session_id, initialTime, requestId, {
-          forceIncludeCoords: true,
-        });
+        await loadRiskAtTime(result.session_id, initialTime, requestId);
       }
     } catch (err) {
       if (isLatestLoadRequest(requestId)) {

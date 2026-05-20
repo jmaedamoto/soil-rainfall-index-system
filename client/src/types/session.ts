@@ -79,7 +79,7 @@ export interface RiskAtTimeResponse {
   status: 'success' | 'error';
   ft: number;
   mesh_risks: Record<string, number>;
-  mesh_coords?: Record<string, { lat: number; lon: number }>;
+  mesh_coords: Record<string, { lat: number; lon: number }>;
   error?: string;
 }
 

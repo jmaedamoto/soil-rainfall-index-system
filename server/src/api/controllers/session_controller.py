@@ -227,7 +227,7 @@ class SessionController:
 
         Parameters:
             ft: 予報時刻（必須）
-            include_coords: 座標を含めるか（省略時true、初回のみtrueで2回目以降はfalse推奨）
+            include_coords: 互換用パラメータ（現在は常に座標を返す）
         """
         try:
             trace_prefix = self._trace_prefix(session_id)
@@ -239,11 +239,14 @@ class SessionController:
                     "error": "Parameter 'ft' is required"
                 }), 400
 
-            # include_coords パラメータ（デフォルトtrue、後方互換性のため）
+            # include_coords は後方互換性のため受け取るが、
+            # 本システムでは常に座標付きレスポンスを返す。
             include_coords_str = request.args.get('include_coords', 'true').lower()
-            include_coords = include_coords_str == 'true'
+            requested_include_coords = include_coords_str == 'true'
+            include_coords = True
             logger.info(
-                f"{trace_prefix} 時刻別リスク取得開始: ft={ft} include_coords={include_coords}"
+                f"{trace_prefix} 時刻別リスク取得開始: ft={ft} "
+                f"requested_include_coords={requested_include_coords} include_coords={include_coords}"
             )
 
             session = self.session_service.get_session(session_id)
