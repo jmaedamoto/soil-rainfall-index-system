@@ -440,41 +440,19 @@ class MainController:
                 }
                 return jsonify(cached_result)
 
-            # 非同期キャッシュ保存中のtmpが見えている場合は、既存セッション再利用
-            # または短時間待機で確定済みキャッシュを返す
+            # 非同期キャッシュ保存中のtmpが見えている場合は、途中状態を返さず
+            # gz完成まで待機してから返す。クライアント側ではローディング表示を継続する。
             base_session_id = self.cache_service.get_base_session_id(cache_key)
             cache_write_in_progress = self.cache_service.is_cache_write_in_progress(cache_key)
-            if base_session_id or cache_write_in_progress:
+            if cache_write_in_progress:
                 logger.info(
-                    "キャッシュ確定待ち: %s, session=%s, tmp=%s",
+                    "キャッシュ保存中のため完了待機: %s, session=%s, tmp=%s",
                     cache_key,
                     base_session_id,
                     cache_write_in_progress,
                 )
 
-                if base_session_id and self.session_service:
-                    session = self.session_service.get_session(base_session_id)
-                    if session:
-                        logger.info(f"既存セッション再利用（キャッシュ確定前）: {base_session_id}")
-                        return self._build_lightweight_session_response(
-                            base_session_id,
-                            session['prefectures'],
-                            swi_initial,
-                            guidance_initial,
-                            session.get('guidance_type', guidance_type),
-                            session.get('risk_rule', risk_rule),
-                            {
-                                "cache_key": cache_key,
-                                "cache_hit": False,
-                                "cache_metadata": None,
-                                "served_from_existing_session": True,
-                                "cache_materializing": cache_write_in_progress,
-                            },
-                            swi_url,
-                            guidance_url,
-                        )
-
-                if self.cache_service.wait_for_cache_materialization(cache_key):
+                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=30.0):
                     cached_result = self.cache_service.get_cached_result(cache_key)
                     cache_metadata = self.cache_service.get_metadata(cache_key)
                     if cached_result:
@@ -496,8 +474,8 @@ class MainController:
                                 guidance_initial,
                                 guidance_type,
                                 risk_rule,
-                            {
-                                "cache_key": cache_key,
+                                {
+                                    "cache_key": cache_key,
                                     "cache_hit": True,
                                     "cache_metadata": cache_metadata,
                                     "served_after_cache_wait": True,
@@ -524,6 +502,37 @@ class MainController:
                             "risk_rule": risk_rule,
                         }
                         return jsonify(cached_result)
+
+                logger.warning(f"キャッシュ保存待機タイムアウト: {cache_key}")
+
+            if base_session_id:
+                logger.info(
+                    "既存セッション再利用を試行: %s, session=%s",
+                    cache_key,
+                    base_session_id,
+                )
+
+                if base_session_id and self.session_service:
+                    session = self.session_service.get_session(base_session_id)
+                    if session:
+                        logger.info(f"既存セッション再利用: {base_session_id}")
+                        return self._build_lightweight_session_response(
+                            base_session_id,
+                            session['prefectures'],
+                            swi_initial,
+                            guidance_initial,
+                            session.get('guidance_type', guidance_type),
+                            session.get('risk_rule', risk_rule),
+                            {
+                                "cache_key": cache_key,
+                                "cache_hit": False,
+                                "cache_metadata": None,
+                                "served_from_existing_session": True,
+                                "cache_materializing": False,
+                            },
+                            swi_url,
+                            guidance_url,
+                        )
 
             # ========================================
             # 重複計算防止: ロック機構
