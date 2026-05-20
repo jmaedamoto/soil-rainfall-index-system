@@ -104,6 +104,58 @@ class MainController:
                 "name": name,
             })
         return details
+
+    @staticmethod
+    def _extract_available_times(prefectures: dict) -> list:
+        """先頭メッシュから利用可能なFT一覧を抽出する"""
+        if not prefectures:
+            return []
+
+        first_pref = next(iter(prefectures.values()))
+        if not first_pref.get("areas") or not first_pref["areas"][0].get("meshes"):
+            return []
+
+        first_mesh = first_pref["areas"][0]["meshes"][0]
+        return sorted(set(
+            [point["ft"] for point in first_mesh.get("risk_3hour_max_timeline", [])] +
+            [point["ft"] for point in first_mesh.get("risk_hourly_timeline", [])]
+        ))
+
+    def _build_lightweight_session_response(
+        self,
+        session_id: str,
+        prefectures: dict,
+        swi_initial,
+        guidance_initial,
+        guidance_type: str,
+        risk_rule: str,
+        cache_info: dict,
+        swi_url: str,
+        guidance_url: str,
+    ):
+        """軽量セッションレスポンスを組み立てる"""
+        return jsonify({
+            "status": "success",
+            "session_id": session_id,
+            "swi_initial_time": swi_initial.isoformat() + 'Z',
+            "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+            "guidance_type": guidance_type,
+            "risk_rule": risk_rule,
+            "available_prefectures": list(prefectures.keys()),
+            "available_prefecture_details": self._build_available_prefecture_details(
+                prefectures
+            ),
+            "available_times": self._extract_available_times(prefectures),
+            "cache_info": cache_info,
+            "used_urls": {
+                "swi_url": swi_url,
+                "swi_initial_time": swi_initial.isoformat() + 'Z',
+                "guidance_url": guidance_url,
+                "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+                "guidance_type": guidance_type,
+                "risk_rule": risk_rule,
+            }
+        })
     
     def data_check(self):
         """データファイル確認エンドポイント"""
@@ -335,6 +387,57 @@ class MainController:
                 guidance_type,
                 risk_rule,
             )
+            cache_metadata = self.cache_service.get_metadata(cache_key)
+
+            # 先にキャッシュを確認し、ヒット時はGRIB2取得前に即返却する
+            cached_result = self.cache_service.get_cached_result(cache_key)
+            if cached_result:
+                logger.info(f"キャッシュ即時返却: {cache_key}")
+
+                if self.session_service:
+                    session_id = self.session_service.create_session(
+                        cached_result['prefectures'],
+                        swi_initial.isoformat(),
+                        guidance_initial.isoformat(),
+                        datetime.now().isoformat(),
+                        guidance_type,
+                        risk_rule,
+                    )
+                    return self._build_lightweight_session_response(
+                        session_id,
+                        cached_result['prefectures'],
+                        swi_initial,
+                        guidance_initial,
+                        guidance_type,
+                        risk_rule,
+                        {
+                            "cache_key": cache_key,
+                            "cache_hit": True,
+                            "cache_metadata": cache_metadata,
+                            "served_without_recompute": True,
+                        },
+                        swi_url,
+                        guidance_url,
+                    )
+
+                cached_result["status"] = "success"
+                cached_result["guidance_type"] = guidance_type
+                cached_result["risk_rule"] = risk_rule
+                cached_result["cache_info"] = {
+                    "cache_key": cache_key,
+                    "cache_hit": True,
+                    "cache_metadata": cache_metadata,
+                    "served_without_recompute": True,
+                }
+                cached_result["used_urls"] = {
+                    "swi_url": swi_url,
+                    "swi_initial_time": swi_initial.isoformat() + 'Z',
+                    "guidance_url": guidance_url,
+                    "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+                    "guidance_type": guidance_type,
+                    "risk_rule": risk_rule,
+                }
+                return jsonify(cached_result)
 
             # ========================================
             # 重複計算防止: ロック機構
@@ -354,43 +457,22 @@ class MainController:
                     session = self.session_service.get_session(base_session_id)
                     if session:
                         logger.info(f"既存セッション再利用: {base_session_id}")
-
-                        # 利用可能な時刻を抽出
-                        available_times = []
-                        first_pref = next(iter(session['prefectures'].values()))
-                        if first_pref['areas'] and first_pref['areas'][0]['meshes']:
-                            first_mesh = first_pref['areas'][0]['meshes'][0]
-                            available_times = sorted(set(
-                                [point['ft'] for point in first_mesh.get('risk_3hour_max_timeline', [])] +
-                                [point['ft'] for point in first_mesh.get('risk_hourly_timeline', [])]
-                            ))
-
-                        return jsonify({
-                            "status": "success",
-                            "session_id": base_session_id,
-                            "swi_initial_time": swi_initial.isoformat() + 'Z',
-                            "guidance_initial_time": guidance_initial.isoformat() + 'Z',
-                            "guidance_type": session.get('guidance_type', guidance_type),
-                            "risk_rule": session.get('risk_rule', risk_rule),
-                            "available_prefectures": list(session['prefectures'].keys()),
-                            "available_prefecture_details": self._build_available_prefecture_details(
-                                session['prefectures']
-                            ),
-                            "available_times": available_times,
-                            "cache_info": {
+                        return self._build_lightweight_session_response(
+                            base_session_id,
+                            session['prefectures'],
+                            swi_initial,
+                            guidance_initial,
+                            session.get('guidance_type', guidance_type),
+                            session.get('risk_rule', risk_rule),
+                            {
                                 "cache_key": cache_key,
                                 "cache_hit": True,
-                                "waited_for_calculation": True
+                                "cache_metadata": cache_metadata,
+                                "waited_for_calculation": True,
                             },
-                            "used_urls": {
-                                "swi_url": swi_url,
-                                "swi_initial_time": swi_initial.isoformat() + 'Z',
-                                "guidance_url": guidance_url,
-                                "guidance_initial_time": guidance_initial.isoformat() + 'Z',
-                                "guidance_type": session.get('guidance_type', guidance_type),
-                                "risk_rule": session.get('risk_rule', risk_rule),
-                            }
-                        })
+                            swi_url,
+                            guidance_url,
+                        )
 
                 # 待機失敗（タイムアウトまたはセッション不在）→ 自分で計算を試みる
                 logger.warning(f"待機失敗、自身で計算を試みます: {cache_key}")
@@ -400,12 +482,6 @@ class MainController:
             session_id = None
 
             try:
-                # キャッシュ存在確認
-                cache_exists = self.cache_service.exists(cache_key)
-                cache_metadata = None
-                if cache_exists:
-                    cache_metadata = self.cache_service.get_metadata(cache_key)
-
                 # メイン処理実行（個別URLを使用、use_cache=True でキャッシュ有効）
                 result = self.main_service.main_process_from_separate_urls(
                     swi_url,
@@ -430,46 +506,21 @@ class MainController:
                     # ロック解放時にベースセッションIDを保存
                     if lock_acquired:
                         self.cache_service.release_calculation_lock(cache_key, session_id)
-
-                    # 利用可能な時刻を抽出（最初のメッシュから）
-                    available_times = []
-                    first_pref = next(iter(result['prefectures'].values()))
-                    if first_pref['areas'] and first_pref['areas'][0]['meshes']:
-                        first_mesh = first_pref['areas'][0]['meshes'][0]
-                        available_times = sorted(set(
-                            [point['ft'] for point in first_mesh['risk_3hour_max_timeline']] +
-                            [point['ft'] for point in first_mesh['risk_hourly_timeline']]
-                        ))
-
-                    # 軽量レスポンスを返す
-                    available_prefs = list(result['prefectures'].keys())
-
-                    return jsonify({
-                        "status": "success",
-                        "session_id": session_id,
-                        "swi_initial_time": swi_initial.isoformat() + 'Z',
-                        "guidance_initial_time": guidance_initial.isoformat() + 'Z',
-                        "guidance_type": guidance_type,
-                        "risk_rule": risk_rule,
-                        "available_prefectures": available_prefs,
-                        "available_prefecture_details": self._build_available_prefecture_details(
-                            result['prefectures']
-                        ),
-                        "available_times": available_times,
-                        "cache_info": {
+                    return self._build_lightweight_session_response(
+                        session_id,
+                        result['prefectures'],
+                        swi_initial,
+                        guidance_initial,
+                        guidance_type,
+                        risk_rule,
+                        {
                             "cache_key": cache_key,
-                            "cache_hit": cache_exists,
-                            "cache_metadata": cache_metadata
+                            "cache_hit": False,
+                            "cache_metadata": cache_metadata,
                         },
-                        "used_urls": {
-                            "swi_url": swi_url,
-                            "swi_initial_time": swi_initial.isoformat() + 'Z',
-                            "guidance_url": guidance_url,
-                            "guidance_initial_time": guidance_initial.isoformat() + 'Z',
-                            "guidance_type": guidance_type,
-                            "risk_rule": risk_rule,
-                        }
-                    })
+                        swi_url,
+                        guidance_url,
+                    )
 
                 # セッションサービスが無効な場合、従来通り全データを返す
                 if lock_acquired:
@@ -490,7 +541,7 @@ class MainController:
 
                 result["cache_info"] = {
                     "cache_key": cache_key,
-                    "cache_hit": cache_exists,
+                    "cache_hit": False,
                     "cache_metadata": cache_metadata
                 }
 
