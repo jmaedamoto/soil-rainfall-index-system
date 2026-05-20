@@ -14,6 +14,8 @@ import secrets
 import logging
 import copy
 import json
+import os
+import tempfile
 from typing import Dict, Optional, Any, List
 from datetime import datetime, timedelta
 from threading import Lock
@@ -75,6 +77,24 @@ class SessionService:
     def _get_session_ref_path(self, session_id: str) -> Path:
         return self.session_ref_dir / f"{session_id}.json"
 
+    def _write_json_atomic(self, path: Path, data: Dict[str, Any]) -> None:
+        fd, temp_path = tempfile.mkstemp(
+            prefix=f"{path.name}.",
+            suffix=".tmp",
+            dir=str(path.parent),
+            text=True,
+        )
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, path)
+        except Exception:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
+
     def _save_session_reference(
         self,
         session_id: str,
@@ -94,8 +114,7 @@ class SessionService:
             "risk_rule": session_data.get('risk_rule', 'legacy'),
             "calculation_time": session_data.get('calculation_time'),
         }
-        with open(ref_path, 'w', encoding='utf-8') as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
+        self._write_json_atomic(ref_path, payload)
 
     def _restore_session_from_reference(self, session_id: str) -> Optional[Dict[str, Any]]:
         ref_path = self._get_session_ref_path(session_id)
