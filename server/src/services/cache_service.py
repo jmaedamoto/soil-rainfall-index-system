@@ -80,6 +80,10 @@ class CacheService:
         """メタデータファイルパス取得（.meta.json）"""
         return self.cache_dir / f"{cache_key}.meta.json"
 
+    def _get_cache_temp_glob(self, cache_key: str) -> str:
+        """キャッシュ保存中の一時ファイルglob"""
+        return f"{cache_key}.json.gz.*.tmp"
+
     def _write_json_atomic(self, path: Path, data: dict) -> None:
         """JSONを一時ファイル経由で原子的に保存する"""
         fd, temp_path = tempfile.mkstemp(
@@ -127,6 +131,29 @@ class CacheService:
             存在する場合True
         """
         return self._get_cache_path(cache_key).exists()
+
+    def is_cache_write_in_progress(self, cache_key: str) -> bool:
+        """キャッシュ保存用tmpファイルが存在するか確認"""
+        return any(self.cache_dir.glob(self._get_cache_temp_glob(cache_key)))
+
+    def wait_for_cache_materialization(
+        self,
+        cache_key: str,
+        timeout_seconds: float = 10.0,
+        poll_interval: float = 0.2,
+    ) -> bool:
+        """
+        保存中tmpの完了または本体gzの出現を短時間待機する
+        """
+        cache_path = self._get_cache_path(cache_key)
+        start_time = time.time()
+
+        while time.time() - start_time < timeout_seconds:
+            if cache_path.exists() and not self.is_cache_write_in_progress(cache_key):
+                return True
+            time.sleep(poll_interval)
+
+        return cache_path.exists()
 
     def get_cached_result(self, cache_key: str) -> Optional[dict]:
         """
