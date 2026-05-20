@@ -1,4 +1,4 @@
-import type { CacheInfo, Mesh, RiskRule } from './api';
+import type { Mesh, RiskRule } from './api';
 import type { TimeSeriesPoint, RiskTimePoint } from './api';
 import type { AdjustmentMode, InputMode } from '../features/rainfall-adjustment/types';
 
@@ -34,7 +34,6 @@ export interface LightweightCalculationResult {
     name: string;
   }>;
   available_times: number[];
-  cache_info?: CacheInfo;
   used_urls?: {
     swi_url: string;
     swi_initial_time: string;

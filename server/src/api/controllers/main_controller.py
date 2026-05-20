@@ -129,7 +129,6 @@ class MainController:
         guidance_initial,
         guidance_type: str,
         risk_rule: str,
-        cache_info: dict,
         swi_url: str,
         guidance_url: str,
     ):
@@ -146,7 +145,6 @@ class MainController:
                 prefectures
             ),
             "available_times": self._extract_available_times(prefectures),
-            "cache_info": cache_info,
             "used_urls": {
                 "swi_url": swi_url,
                 "swi_initial_time": swi_initial.isoformat() + 'Z',
@@ -387,7 +385,6 @@ class MainController:
                 guidance_type,
                 risk_rule,
             )
-            cache_metadata = self.cache_service.get_metadata(cache_key)
 
             # 先にキャッシュを確認し、ヒット時はGRIB2取得前に即返却する
             cached_result = self.cache_service.get_cached_result(cache_key)
@@ -411,12 +408,6 @@ class MainController:
                         guidance_initial,
                         guidance_type,
                         risk_rule,
-                        {
-                            "cache_key": cache_key,
-                            "cache_hit": True,
-                            "cache_metadata": cache_metadata,
-                            "served_without_recompute": True,
-                        },
                         swi_url,
                         guidance_url,
                     )
@@ -424,12 +415,6 @@ class MainController:
                 cached_result["status"] = "success"
                 cached_result["guidance_type"] = guidance_type
                 cached_result["risk_rule"] = risk_rule
-                cached_result["cache_info"] = {
-                    "cache_key": cache_key,
-                    "cache_hit": True,
-                    "cache_metadata": cache_metadata,
-                    "served_without_recompute": True,
-                }
                 cached_result["used_urls"] = {
                     "swi_url": swi_url,
                     "swi_initial_time": swi_initial.isoformat() + 'Z',
@@ -440,21 +425,18 @@ class MainController:
                 }
                 return jsonify(cached_result)
 
-            # 非同期キャッシュ保存中のtmpが見えている場合は、途中状態を返さず
-            # gz完成まで待機してから返す。クライアント側ではローディング表示を継続する。
-            base_session_id = self.cache_service.get_base_session_id(cache_key)
             cache_write_in_progress = self.cache_service.is_cache_write_in_progress(cache_key)
-            if cache_write_in_progress:
+            calculation_in_progress = self.cache_service.is_calculation_in_progress(cache_key)
+            if cache_write_in_progress or calculation_in_progress:
                 logger.info(
-                    "キャッシュ保存中のため完了待機: %s, session=%s, tmp=%s",
+                    "キャッシュ作成中のため完了待機: %s, calculating=%s, tmp=%s",
                     cache_key,
-                    base_session_id,
+                    calculation_in_progress,
                     cache_write_in_progress,
                 )
 
-                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=30.0):
+                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=300.0):
                     cached_result = self.cache_service.get_cached_result(cache_key)
-                    cache_metadata = self.cache_service.get_metadata(cache_key)
                     if cached_result:
                         logger.info(f"キャッシュ確定後返却: {cache_key}")
                         if self.session_service:
@@ -474,12 +456,6 @@ class MainController:
                                 guidance_initial,
                                 guidance_type,
                                 risk_rule,
-                                {
-                                    "cache_key": cache_key,
-                                    "cache_hit": True,
-                                    "cache_metadata": cache_metadata,
-                                    "served_after_cache_wait": True,
-                                },
                                 swi_url,
                                 guidance_url,
                             )
@@ -487,12 +463,6 @@ class MainController:
                         cached_result["status"] = "success"
                         cached_result["guidance_type"] = guidance_type
                         cached_result["risk_rule"] = risk_rule
-                        cached_result["cache_info"] = {
-                            "cache_key": cache_key,
-                            "cache_hit": True,
-                            "cache_metadata": cache_metadata,
-                            "served_after_cache_wait": True,
-                        }
                         cached_result["used_urls"] = {
                             "swi_url": swi_url,
                             "swi_initial_time": swi_initial.isoformat() + 'Z',
@@ -503,74 +473,11 @@ class MainController:
                         }
                         return jsonify(cached_result)
 
-                logger.warning(f"キャッシュ保存待機タイムアウト: {cache_key}")
-
-            if base_session_id:
-                logger.info(
-                    "既存セッション再利用を試行: %s, session=%s",
-                    cache_key,
-                    base_session_id,
-                )
-
-                if base_session_id and self.session_service:
-                    session = self.session_service.get_session(base_session_id)
-                    if session:
-                        logger.info(f"既存セッション再利用: {base_session_id}")
-                        return self._build_lightweight_session_response(
-                            base_session_id,
-                            session['prefectures'],
-                            swi_initial,
-                            guidance_initial,
-                            session.get('guidance_type', guidance_type),
-                            session.get('risk_rule', risk_rule),
-                            {
-                                "cache_key": cache_key,
-                                "cache_hit": False,
-                                "cache_metadata": None,
-                                "served_from_existing_session": True,
-                                "cache_materializing": False,
-                            },
-                            swi_url,
-                            guidance_url,
-                        )
+                logger.warning(f"キャッシュ作成待機タイムアウト: {cache_key}")
 
             # ========================================
             # 重複計算防止: ロック機構
             # ========================================
-
-            # 既に計算中かチェック
-            if self.cache_service.is_calculation_in_progress(cache_key):
-                logger.info(f"計算中検出、待機開始: {cache_key}")
-
-                # 計算完了を待機（最大5分）
-                success, base_session_id = self.cache_service.wait_for_calculation(
-                    cache_key, timeout_seconds=300, poll_interval=2.0
-                )
-
-                if success and base_session_id and self.session_service:
-                    # ベースセッションが存在するか確認
-                    session = self.session_service.get_session(base_session_id)
-                    if session:
-                        logger.info(f"既存セッション再利用: {base_session_id}")
-                        return self._build_lightweight_session_response(
-                            base_session_id,
-                            session['prefectures'],
-                            swi_initial,
-                            guidance_initial,
-                            session.get('guidance_type', guidance_type),
-                            session.get('risk_rule', risk_rule),
-                            {
-                                "cache_key": cache_key,
-                                "cache_hit": False,
-                                "cache_metadata": None,
-                                "waited_for_calculation": True,
-                            },
-                            swi_url,
-                            guidance_url,
-                        )
-
-                # 待機失敗（タイムアウトまたはセッション不在）→ 自分で計算を試みる
-                logger.warning(f"待機失敗、自身で計算を試みます: {cache_key}")
 
             # 計算ロック取得を試みる
             lock_acquired = self.cache_service.acquire_calculation_lock(cache_key)
@@ -609,11 +516,6 @@ class MainController:
                         guidance_initial,
                         guidance_type,
                         risk_rule,
-                        {
-                            "cache_key": cache_key,
-                            "cache_hit": False,
-                            "cache_metadata": cache_metadata,
-                        },
                         swi_url,
                         guidance_url,
                     )
@@ -634,12 +536,6 @@ class MainController:
                 }
                 result["guidance_type"] = guidance_type
                 result["risk_rule"] = risk_rule
-
-                result["cache_info"] = {
-                    "cache_key": cache_key,
-                    "cache_hit": False,
-                    "cache_metadata": cache_metadata
-                }
 
                 return jsonify(result)
 
@@ -726,7 +622,6 @@ class MainController:
                         result['prefectures']
                     ),
                     "available_times": available_times,
-                    "cache_info": None,  # テストモードではキャッシュなし
                     "used_urls": {
                         "swi_url": f"file://{swi_file}",
                         "swi_initial_time": swi_initial_time,
