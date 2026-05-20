@@ -84,6 +84,47 @@ class CacheService:
         """旧メタデータファイルパス取得（後方互換の削除用）"""
         return self.cache_dir / f"{cache_key}.meta.json"
 
+    @staticmethod
+    def _extract_cache_sample(result: dict) -> dict:
+        """キャッシュ内容比較用に先頭府県・先頭エリア・先頭メッシュの要約を返す"""
+        prefectures = result.get("prefectures") or {}
+        if not prefectures:
+            return {"prefecture_count": 0}
+
+        pref_code, prefecture = next(iter(prefectures.items()))
+        areas = prefecture.get("areas") or []
+        if not areas:
+            return {
+                "prefecture_count": len(prefectures),
+                "pref_code": pref_code,
+                "area_count": 0,
+            }
+
+        area = areas[0]
+        meshes = area.get("meshes") or []
+        if not meshes:
+            return {
+                "prefecture_count": len(prefectures),
+                "pref_code": pref_code,
+                "area_name": area.get("name"),
+                "mesh_count": 0,
+                "area_risk_timeline": area.get("risk_timeline", [])[:3],
+            }
+
+        mesh = meshes[0]
+        return {
+            "prefecture_count": len(prefectures),
+            "pref_code": pref_code,
+            "area_name": area.get("name"),
+            "mesh_count": len(meshes),
+            "mesh_code": mesh.get("code"),
+            "mesh_swi_timeline": mesh.get("swi_timeline", [])[:3],
+            "mesh_risk_3hour_max_timeline": mesh.get("risk_3hour_max_timeline", [])[:3],
+            "mesh_risk_hourly_timeline": mesh.get("risk_hourly_timeline", [])[:6],
+            "area_risk_timeline": area.get("risk_timeline", [])[:3],
+            "prefecture_risk_timeline": prefecture.get("prefecture_risk_timeline", [])[:3],
+        }
+
     def _write_json_atomic(self, path: Path, data: dict) -> None:
         """JSONを一時ファイル経由で原子的に保存する"""
         fd, temp_path = tempfile.mkstemp(
@@ -208,9 +249,11 @@ class CacheService:
 
             elapsed = (datetime.now() - start_time).total_seconds()
             file_size_mb = cache_path.stat().st_size / (1024 * 1024)
+            sample = self._extract_cache_sample(result)
 
             logger.info(f"キャッシュ読み込み完了: {cache_key} "
                        f"({file_size_mb:.1f}MB, {elapsed:.2f}秒)")
+            logger.info("キャッシュ読み込み内容サンプル: cache_key=%s sample=%s", cache_key, sample)
 
             return result
 

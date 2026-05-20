@@ -123,6 +123,47 @@ class MainController:
             [point["ft"] for point in first_mesh.get("risk_hourly_timeline", [])]
         ))
 
+    @staticmethod
+    def _extract_cache_sample(result: dict) -> dict:
+        """キャッシュ内容比較用に先頭府県・先頭エリア・先頭メッシュの要約を返す"""
+        prefectures = result.get("prefectures") or {}
+        if not prefectures:
+            return {"prefecture_count": 0}
+
+        pref_code, prefecture = next(iter(prefectures.items()))
+        areas = prefecture.get("areas") or []
+        if not areas:
+            return {
+                "prefecture_count": len(prefectures),
+                "pref_code": pref_code,
+                "area_count": 0,
+            }
+
+        area = areas[0]
+        meshes = area.get("meshes") or []
+        if not meshes:
+            return {
+                "prefecture_count": len(prefectures),
+                "pref_code": pref_code,
+                "area_name": area.get("name"),
+                "mesh_count": 0,
+                "area_risk_timeline": area.get("risk_timeline", [])[:3],
+            }
+
+        mesh = meshes[0]
+        return {
+            "prefecture_count": len(prefectures),
+            "pref_code": pref_code,
+            "area_name": area.get("name"),
+            "mesh_count": len(meshes),
+            "mesh_code": mesh.get("code"),
+            "mesh_swi_timeline": mesh.get("swi_timeline", [])[:3],
+            "mesh_risk_3hour_max_timeline": mesh.get("risk_3hour_max_timeline", [])[:3],
+            "mesh_risk_hourly_timeline": mesh.get("risk_hourly_timeline", [])[:6],
+            "area_risk_timeline": area.get("risk_timeline", [])[:3],
+            "prefecture_risk_timeline": prefecture.get("prefecture_risk_timeline", [])[:3],
+        }
+
     def _build_lightweight_session_response(
         self,
         session_id: str,
@@ -169,6 +210,13 @@ class MainController:
         guidance_url: str,
     ):
         """キャッシュ済み結果から返却レスポンスを組み立てる"""
+        sample = self._extract_cache_sample(cached_result)
+        logger.info(
+            "キャッシュ返却内容サンプル: cache_key=%s sample=%s",
+            cache_key,
+            sample,
+        )
+
         if self.session_service:
             session_id = self.session_service.create_session(
                 cached_result['prefectures'],
