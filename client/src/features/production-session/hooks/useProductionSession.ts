@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiClient_ } from '../../../services/api';
 import { sessionApiClient } from '../../../services/sessionApi';
 import type {
@@ -40,6 +40,7 @@ export const useProductionSession = ({
   const [selectedPrefecture, setSelectedPrefecture] = useState('');
   const [isTimeChanging, setIsTimeChanging] = useState(false);
   const [isAdjustedData, setIsAdjustedData] = useState(false);
+  const activeLoadRequestIdRef = useRef(0);
 
   useEffect(() => {
     if (Object.keys(meshRisksAtTime).length > 0) {
@@ -47,12 +48,20 @@ export const useProductionSession = ({
     }
   }, [meshRisksAtTime]);
 
-  const loadRiskAtTime = async (targetSessionId: string, ft: number) => {
+  const isLatestLoadRequest = (requestId?: number) => (
+    requestId === undefined || requestId === activeLoadRequestIdRef.current
+  );
+
+  const loadRiskAtTime = async (targetSessionId: string, ft: number, requestId?: number) => {
     try {
       const needCoords = Object.keys(meshCoords).length === 0;
       const response = await sessionApiClient.getRiskAtTime(targetSessionId, ft, {
         includeCoords: needCoords,
       });
+
+      if (!isLatestLoadRequest(requestId)) {
+        return;
+      }
 
       if (response.status === 'success') {
         setMeshRisksAtTime(response.mesh_risks);
@@ -66,7 +75,11 @@ export const useProductionSession = ({
     }
   };
 
-  const loadPrefectureData = async (targetSessionId: string, prefectureCode: string) => {
+  const loadPrefectureData = async (
+    targetSessionId: string,
+    prefectureCode: string,
+    requestId?: number
+  ) => {
     if (prefectureRiskData[prefectureCode]) {
       return;
     }
@@ -74,6 +87,9 @@ export const useProductionSession = ({
     try {
       setLoadingPrefecture(prefectureCode);
       const response = await sessionApiClient.getPrefectureData(targetSessionId, prefectureCode);
+      if (!isLatestLoadRequest(requestId)) {
+        return;
+      }
       if (response.status === 'success') {
         setPrefectureRiskData((prev) => ({
           ...prev,
@@ -83,7 +99,9 @@ export const useProductionSession = ({
     } catch (err) {
       console.error(`府県データ読み込みエラー (${prefectureCode}):`, err);
     } finally {
-      setLoadingPrefecture(null);
+      if (isLatestLoadRequest(requestId)) {
+        setLoadingPrefecture(null);
+      }
     }
   };
 
@@ -121,10 +139,14 @@ export const useProductionSession = ({
       return;
     }
 
+    const requestId = activeLoadRequestIdRef.current + 1;
+    activeLoadRequestIdRef.current = requestId;
+
     try {
       setLoading(true);
       setError(null);
       setIsAdjustedData(false);
+      setMeshRisksAtTime({});
       setMeshCoords({});
 
       const result = await apiClient_.calculateProductionSoilRainfallIndexWithUrls({
@@ -134,6 +156,10 @@ export const useProductionSession = ({
         risk_rule: riskRule,
       });
 
+      if (!isLatestLoadRequest(requestId)) {
+        return;
+      }
+
       setSessionInfo(result);
       setSessionId(result.session_id);
       setPrefectureRiskData({});
@@ -141,18 +167,22 @@ export const useProductionSession = ({
       if (result.available_prefectures.length > 0) {
         const firstPrefCode = result.available_prefectures[0];
         setSelectedPrefecture(firstPrefCode);
-        await loadPrefectureData(result.session_id, firstPrefCode);
+        await loadPrefectureData(result.session_id, firstPrefCode, requestId);
       }
 
       if (result.available_times.length > 0) {
         const initialTime = result.available_times[0];
         setSelectedTime(initialTime);
-        await loadRiskAtTime(result.session_id, initialTime);
+        await loadRiskAtTime(result.session_id, initialTime, requestId);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '予期しないエラーが発生しました');
+      if (isLatestLoadRequest(requestId)) {
+        setError(err instanceof Error ? err.message : '予期しないエラーが発生しました');
+      }
     } finally {
-      setLoading(false);
+      if (isLatestLoadRequest(requestId)) {
+        setLoading(false);
+      }
     }
   };
 
