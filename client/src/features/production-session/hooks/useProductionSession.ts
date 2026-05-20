@@ -43,9 +43,17 @@ export const useProductionSession = ({
     requestId === undefined || requestId === activeLoadRequestIdRef.current
   );
 
-  const loadRiskAtTime = async (targetSessionId: string, ft: number, requestId?: number) => {
+  const loadRiskAtTime = async (
+    targetSessionId: string,
+    ft: number,
+    requestId?: number,
+    options?: { forceIncludeCoords?: boolean }
+  ) => {
     try {
-      const needCoords = Object.keys(meshCoords).length === 0;
+      const needCoords =
+        options?.forceIncludeCoords === true ||
+        Object.keys(meshCoords).length === 0 ||
+        targetSessionId !== sessionId;
       const response = await sessionApiClient.getRiskAtTime(targetSessionId, ft, {
         includeCoords: needCoords,
       });
@@ -164,7 +172,9 @@ export const useProductionSession = ({
       if (result.available_times.length > 0) {
         const initialTime = result.available_times[0];
         setSelectedTime(initialTime);
-        await loadRiskAtTime(result.session_id, initialTime, requestId);
+        await loadRiskAtTime(result.session_id, initialTime, requestId, {
+          forceIncludeCoords: true,
+        });
       }
     } catch (err) {
       if (isLatestLoadRequest(requestId)) {
