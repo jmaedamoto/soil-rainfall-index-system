@@ -13,10 +13,13 @@
 import secrets
 import logging
 import copy
+import json
 from typing import Dict, Optional, Any, List
 from datetime import datetime, timedelta
 from threading import Lock
+from pathlib import Path
 from models import Prefecture
+from services.cache_service import get_cache_service
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +39,100 @@ class SessionService:
         self.sessions: Dict[str, Dict[str, Any]] = {}
         self.lock = Lock()
         self.ttl_hours = ttl_hours
+        self.cache_service = get_cache_service()
+        self.session_ref_dir = self.cache_service.cache_dir / "session_refs"
+        self.session_ref_dir.mkdir(exist_ok=True)
         logger.info(f"SessionService initialized with TTL={ttl_hours}h")
+
+    def _build_base_session_data(
+        self,
+        prefectures: Dict[str, Prefecture],
+        swi_initial_time: str,
+        guidance_initial_time: str,
+        calculation_time: str,
+        guidance_type: str,
+        risk_rule: str,
+        cache_key: Optional[str],
+    ) -> Dict[str, Any]:
+        now = datetime.now()
+        expires_at = now + timedelta(hours=self.ttl_hours)
+        return {
+            'is_fork': False,
+            'prefectures': prefectures,
+            'swi_initial_time': swi_initial_time,
+            'guidance_initial_time': guidance_initial_time,
+            'guidance_type': guidance_type,
+            'risk_rule': risk_rule,
+            'input_mode': '3hour',
+            'adjustment_mode': 'ratio_3hour',
+            'calculation_time': calculation_time,
+            'cache_key': cache_key,
+            'created_at': now,
+            'expires_at': expires_at,
+            'last_accessed': now,
+        }
+
+    def _get_session_ref_path(self, session_id: str) -> Path:
+        return self.session_ref_dir / f"{session_id}.json"
+
+    def _save_session_reference(
+        self,
+        session_id: str,
+        session_data: Dict[str, Any]
+    ) -> None:
+        cache_key = session_data.get('cache_key')
+        if not cache_key:
+            return
+
+        ref_path = self._get_session_ref_path(session_id)
+        payload = {
+            "session_id": session_id,
+            "cache_key": cache_key,
+            "swi_initial_time": session_data['swi_initial_time'],
+            "guidance_initial_time": session_data['guidance_initial_time'],
+            "guidance_type": session_data.get('guidance_type', 'msm'),
+            "risk_rule": session_data.get('risk_rule', 'legacy'),
+            "calculation_time": session_data.get('calculation_time'),
+        }
+        with open(ref_path, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    def _restore_session_from_reference(self, session_id: str) -> Optional[Dict[str, Any]]:
+        ref_path = self._get_session_ref_path(session_id)
+        if not ref_path.exists():
+            return None
+
+        try:
+            with open(ref_path, 'r', encoding='utf-8') as f:
+                ref_data = json.load(f)
+        except Exception as e:
+            logger.error(f"Session reference read error: {session_id} - {e}")
+            return None
+
+        cache_key = ref_data.get("cache_key")
+        if not cache_key:
+            return None
+
+        cached_result = self.cache_service.get_cached_result(cache_key)
+        if not cached_result or 'prefectures' not in cached_result:
+            logger.warning(f"Session restore skipped, cache unavailable: {session_id} -> {cache_key}")
+            return None
+
+        session_data = self._build_base_session_data(
+            cached_result['prefectures'],
+            ref_data['swi_initial_time'],
+            ref_data['guidance_initial_time'],
+            ref_data.get('calculation_time') or datetime.now().isoformat(),
+            ref_data.get('guidance_type', 'msm'),
+            ref_data.get('risk_rule', 'legacy'),
+            cache_key,
+        )
+
+        with self.lock:
+            self.sessions[session_id] = session_data
+
+        logger.info(f"Session restored from cache reference: {session_id} -> {cache_key}")
+        return session_data
 
     def create_session(
         self,
@@ -45,7 +141,8 @@ class SessionService:
         guidance_initial_time: str,
         calculation_time: str,
         guidance_type: str = 'msm',
-        risk_rule: str = 'legacy'
+        risk_rule: str = 'legacy',
+        cache_key: Optional[str] = None
     ) -> str:
         """
         新しいベースセッションを作成
@@ -60,29 +157,24 @@ class SessionService:
             session_id: セッションID
         """
         session_id = secrets.token_urlsafe(16)
-
-        now = datetime.now()
-        expires_at = now + timedelta(hours=self.ttl_hours)
+        session_data = self._build_base_session_data(
+            prefectures,
+            swi_initial_time,
+            guidance_initial_time,
+            calculation_time,
+            guidance_type,
+            risk_rule,
+            cache_key,
+        )
 
         with self.lock:
-            self.sessions[session_id] = {
-                'is_fork': False,  # ベースセッション
-                'prefectures': prefectures,
-                'swi_initial_time': swi_initial_time,
-                'guidance_initial_time': guidance_initial_time,
-                'guidance_type': guidance_type,
-                'risk_rule': risk_rule,
-                'input_mode': '3hour',
-                'adjustment_mode': 'ratio_3hour',
-                'calculation_time': calculation_time,
-                'created_at': now,
-                'expires_at': expires_at,
-                'last_accessed': now
-            }
+            self.sessions[session_id] = session_data
+
+        self._save_session_reference(session_id, session_data)
 
         logger.info(
             f"Base session created: {session_id}, "
-            f"expires at {expires_at.isoformat()}, "
+            f"expires at {session_data['expires_at'].isoformat()}, "
             f"prefectures: {list(prefectures.keys())}"
         )
 
@@ -214,9 +306,15 @@ class SessionService:
         with self.lock:
             session = self.sessions.get(session_id)
 
+        if session is None:
+            logger.warning(f"Session not found in memory: {session_id}")
+            session = self._restore_session_from_reference(session_id)
             if session is None:
-                logger.warning(f"Session not found: {session_id}")
                 return None
+
+        with self.lock:
+            # 復元直後に別スレッドが更新している可能性があるため再取得
+            session = self.sessions.get(session_id, session)
 
             # 期限チェック
             if datetime.now() > session['expires_at']:
@@ -443,6 +541,9 @@ class SessionService:
         with self.lock:
             if session_id in self.sessions:
                 del self.sessions[session_id]
+                ref_path = self._get_session_ref_path(session_id)
+                if ref_path.exists():
+                    ref_path.unlink()
                 logger.info(f"Session deleted: {session_id}")
                 return True
             return False
@@ -464,6 +565,9 @@ class SessionService:
 
             for session_id in expired_ids:
                 del self.sessions[session_id]
+                ref_path = self._get_session_ref_path(session_id)
+                if ref_path.exists():
+                    ref_path.unlink()
 
         if expired_ids:
             logger.info(f"Cleaned up {len(expired_ids)} expired sessions")

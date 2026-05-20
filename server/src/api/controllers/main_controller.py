@@ -402,6 +402,7 @@ class MainController:
                         datetime.now().isoformat(),
                         guidance_type,
                         risk_rule,
+                        cache_key,
                     )
                     return self._build_lightweight_session_response(
                         session_id,
@@ -501,6 +502,7 @@ class MainController:
                         datetime.now().isoformat(),
                         guidance_type,
                         risk_rule,
+                        cache_key,
                     )
 
                     # ロック解放時にベースセッションIDを保存
