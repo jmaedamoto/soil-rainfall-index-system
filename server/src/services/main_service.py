@@ -78,7 +78,8 @@ class MainService:
         guidance_url: str,
         guidance_type: str = "msm",
         risk_rule: str = "legacy",
-        use_cache: bool = True
+        use_cache: bool = True,
+        async_cache_save: bool = True,
     ) -> Dict[str, Any]:
         """
         個別URLベースのメイン処理（SWIとガイダンスのURLを個別指定）
@@ -134,14 +135,24 @@ class MainService:
 
             # キャッシュ保存はレスポンスをブロックしないよう非同期で実行
             if use_cache:
-                self.cache_service.set_cached_result_async(
-                    cache_key,
-                    result,
-                    swi_initial_time.isoformat(),
-                    guidance_initial_time.isoformat(),
-                    normalized_guidance_type,
-                    normalized_risk_rule,
-                )
+                if async_cache_save:
+                    self.cache_service.set_cached_result_async(
+                        cache_key,
+                        result,
+                        swi_initial_time.isoformat(),
+                        guidance_initial_time.isoformat(),
+                        normalized_guidance_type,
+                        normalized_risk_rule,
+                    )
+                else:
+                    self.cache_service.set_cached_result(
+                        cache_key,
+                        result,
+                        swi_initial_time.isoformat(),
+                        guidance_initial_time.isoformat(),
+                        normalized_guidance_type,
+                        normalized_risk_rule,
+                    )
 
             return result
 

@@ -426,13 +426,15 @@ class MainController:
                 return jsonify(cached_result)
 
             cache_write_in_progress = self.cache_service.is_cache_write_in_progress(cache_key)
+            cache_materializing = self.cache_service.is_cache_materializing(cache_key)
             calculation_in_progress = self.cache_service.is_calculation_in_progress(cache_key)
-            if cache_write_in_progress or calculation_in_progress:
+            if cache_write_in_progress or cache_materializing or calculation_in_progress:
                 logger.info(
-                    "キャッシュ作成中のため完了待機: %s, calculating=%s, tmp=%s",
+                    "キャッシュ作成中のため完了待機: %s, calculating=%s, tmp=%s, materializing=%s",
                     cache_key,
                     calculation_in_progress,
                     cache_write_in_progress,
+                    cache_materializing,
                 )
 
                 if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=300.0):
@@ -491,6 +493,7 @@ class MainController:
                     guidance_type=guidance_type,
                     risk_rule=risk_rule,
                     use_cache=True,
+                    async_cache_save=False,
                 )
 
                 # セッションサービスが有効な場合、セッション作成して軽量レスポンスを返す
