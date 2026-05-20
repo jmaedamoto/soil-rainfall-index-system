@@ -576,6 +576,14 @@ class MainController:
                 cache_metadata = None
                 if cache_exists:
                     cache_metadata = self.cache_service.get_metadata(cache_key)
+                on_cache_saved = None
+                if lock_acquired:
+                    def on_cache_saved(success: bool) -> None:
+                        if success:
+                            logger.info(f"非同期キャッシュ保存完了によりロック解放: {cache_key}")
+                        else:
+                            logger.warning(f"非同期キャッシュ保存失敗によりロック解放: {cache_key}")
+                        self.cache_service.release_calculation_lock(cache_key, session_id)
 
                 # メイン処理実行（個別URLを使用、use_cache=True でキャッシュ有効）
                 result = self.main_service.main_process_from_separate_urls(
@@ -584,7 +592,8 @@ class MainController:
                     guidance_type=guidance_type,
                     risk_rule=risk_rule,
                     use_cache=True,
-                    async_cache_save=False,
+                    async_cache_save=True,
+                    on_cache_saved=on_cache_saved,
                 )
 
                 # セッションサービスが有効な場合、セッション作成して軽量レスポンスを返す
@@ -600,52 +609,25 @@ class MainController:
                         cache_key,
                     )
 
-                    # ロック解放時にベースセッションIDを保存
-                    if lock_acquired:
-                        self.cache_service.release_calculation_lock(cache_key, session_id)
-
-                    # 利用可能な時刻を抽出（最初のメッシュから）
-                    available_times = []
-                    first_pref = next(iter(result['prefectures'].values()))
-                    if first_pref['areas'] and first_pref['areas'][0]['meshes']:
-                        first_mesh = first_pref['areas'][0]['meshes'][0]
-                        available_times = sorted(set(
-                            [point['ft'] for point in first_mesh['risk_3hour_max_timeline']] +
-                            [point['ft'] for point in first_mesh['risk_hourly_timeline']]
-                        ))
-
-                    # 軽量レスポンスを返す
-                    available_prefs = list(result['prefectures'].keys())
-
-                    return jsonify({
-                        "status": "success",
-                        "session_id": session_id,
-                        "swi_initial_time": swi_initial.isoformat() + 'Z',
-                        "guidance_initial_time": guidance_initial.isoformat() + 'Z',
-                        "guidance_type": guidance_type,
-                        "risk_rule": risk_rule,
-                        "available_prefectures": available_prefs,
-                        "available_prefecture_details": self._build_available_prefecture_details(
-                            result['prefectures']
-                        ),
-                        "available_times": available_times,
-                        "cache_info": {
+                    return self._build_lightweight_session_response(
+                        session_id,
+                        result['prefectures'],
+                        swi_initial,
+                        guidance_initial,
+                        guidance_type,
+                        risk_rule,
+                        {
                             "cache_key": cache_key,
                             "cache_hit": cache_exists,
-                            "cache_metadata": cache_metadata
+                            "cache_metadata": cache_metadata,
                         },
-                        "used_urls": {
-                            "swi_url": swi_url,
-                            "swi_initial_time": swi_initial.isoformat() + 'Z',
-                            "guidance_url": guidance_url,
-                            "guidance_initial_time": guidance_initial.isoformat() + 'Z',
-                            "guidance_type": guidance_type,
-                            "risk_rule": risk_rule,
-                        }
-                    })
+                        swi_url,
+                        guidance_url,
+                    )
 
                 # セッションサービスが無効な場合、従来通り全データを返す
                 if lock_acquired:
+                    # セッションを使わない経路ではレスポンス前にロックを解放してよい
                     self.cache_service.release_calculation_lock(cache_key)
 
                 result["status"] = "success"
