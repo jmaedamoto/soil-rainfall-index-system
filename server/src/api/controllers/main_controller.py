@@ -440,6 +440,91 @@ class MainController:
                 }
                 return jsonify(cached_result)
 
+            # 非同期キャッシュ保存中のtmpが見えている場合は、既存セッション再利用
+            # または短時間待機で確定済みキャッシュを返す
+            base_session_id = self.cache_service.get_base_session_id(cache_key)
+            cache_write_in_progress = self.cache_service.is_cache_write_in_progress(cache_key)
+            if base_session_id or cache_write_in_progress:
+                logger.info(
+                    "キャッシュ確定待ち: %s, session=%s, tmp=%s",
+                    cache_key,
+                    base_session_id,
+                    cache_write_in_progress,
+                )
+
+                if base_session_id and self.session_service:
+                    session = self.session_service.get_session(base_session_id)
+                    if session:
+                        logger.info(f"既存セッション再利用（キャッシュ確定前）: {base_session_id}")
+                        return self._build_lightweight_session_response(
+                            base_session_id,
+                            session['prefectures'],
+                            swi_initial,
+                            guidance_initial,
+                            session.get('guidance_type', guidance_type),
+                            session.get('risk_rule', risk_rule),
+                            {
+                                "cache_key": cache_key,
+                                "cache_hit": True,
+                                "cache_metadata": cache_metadata,
+                                "served_from_existing_session": True,
+                                "cache_materializing": cache_write_in_progress,
+                            },
+                            swi_url,
+                            guidance_url,
+                        )
+
+                if self.cache_service.wait_for_cache_materialization(cache_key):
+                    cached_result = self.cache_service.get_cached_result(cache_key)
+                    cache_metadata = self.cache_service.get_metadata(cache_key)
+                    if cached_result:
+                        logger.info(f"キャッシュ確定後返却: {cache_key}")
+                        if self.session_service:
+                            session_id = self.session_service.create_session(
+                                cached_result['prefectures'],
+                                swi_initial.isoformat(),
+                                guidance_initial.isoformat(),
+                                datetime.now().isoformat(),
+                                guidance_type,
+                                risk_rule,
+                                cache_key,
+                            )
+                            return self._build_lightweight_session_response(
+                                session_id,
+                                cached_result['prefectures'],
+                                swi_initial,
+                                guidance_initial,
+                                guidance_type,
+                                risk_rule,
+                                {
+                                    "cache_key": cache_key,
+                                    "cache_hit": True,
+                                    "cache_metadata": cache_metadata,
+                                    "served_after_cache_wait": True,
+                                },
+                                swi_url,
+                                guidance_url,
+                            )
+
+                        cached_result["status"] = "success"
+                        cached_result["guidance_type"] = guidance_type
+                        cached_result["risk_rule"] = risk_rule
+                        cached_result["cache_info"] = {
+                            "cache_key": cache_key,
+                            "cache_hit": True,
+                            "cache_metadata": cache_metadata,
+                            "served_after_cache_wait": True,
+                        }
+                        cached_result["used_urls"] = {
+                            "swi_url": swi_url,
+                            "swi_initial_time": swi_initial.isoformat() + 'Z',
+                            "guidance_url": guidance_url,
+                            "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+                            "guidance_type": guidance_type,
+                            "risk_rule": risk_rule,
+                        }
+                        return jsonify(cached_result)
+
             # ========================================
             # 重複計算防止: ロック機構
             # ========================================
