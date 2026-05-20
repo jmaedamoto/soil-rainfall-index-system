@@ -474,10 +474,6 @@ class CacheService:
             with open(lock_path, 'r', encoding='utf-8') as f:
                 lock_data = json.load(f)
 
-            # 計算完了済みならロック中ではない
-            if lock_data.get('completed_at') or lock_data.get('base_session_id'):
-                return False
-
             started_at = datetime.fromisoformat(lock_data['started_at'])
             if datetime.now() - started_at > timedelta(minutes=10):
                 # タイムアウト: 古いロックを削除
@@ -505,7 +501,6 @@ class CacheService:
             lock_data = {
                 "cache_key": cache_key,
                 "started_at": datetime.now().isoformat(),
-                "base_session_id": None  # 計算完了後に設定
             }
             fd = os.open(
                 lock_path,
@@ -542,96 +537,16 @@ class CacheService:
 
         Args:
             cache_key: キャッシュキー
-            base_session_id: 計算完了後のベースセッションID（オプション）
+            base_session_id: 互換性維持のための未使用引数
         """
         lock_path = self._get_lock_path(cache_key)
 
-        if base_session_id:
-            # ベースセッションIDを保存してからロック解放
-            try:
-                if lock_path.exists():
-                    with open(lock_path, 'r', encoding='utf-8') as f:
-                        lock_data = json.load(f)
-                    lock_data['base_session_id'] = base_session_id
-                    lock_data['completed_at'] = datetime.now().isoformat()
-                    self._write_json_atomic(lock_path, lock_data)
-                    logger.info(f"ベースセッションID保存: {cache_key} -> {base_session_id}")
-            except Exception as e:
-                logger.error(f"ベースセッションID保存エラー: {cache_key} - {e}")
-            # 完了済みロックは待機中リクエストが参照できるようファイルを残す
-            logger.info(f"計算ロック解放: {cache_key}")
-            return
-
-        # エラー時やセッション未生成時はロックファイルを削除して再試行可能にする
         try:
             if lock_path.exists():
                 lock_path.unlink()
             logger.info(f"計算ロック削除: {cache_key}")
         except Exception as e:
             logger.error(f"計算ロック削除エラー: {cache_key} - {e}")
-
-    def get_base_session_id(self, cache_key: str) -> Optional[str]:
-        """
-        計算完了後のベースセッションIDを取得
-
-        Args:
-            cache_key: キャッシュキー
-
-        Returns:
-            ベースセッションID、未完了または存在しない場合None
-        """
-        lock_path = self._get_lock_path(cache_key)
-
-        if not lock_path.exists():
-            return None
-
-        try:
-            with open(lock_path, 'r', encoding='utf-8') as f:
-                lock_data = json.load(f)
-            return lock_data.get('base_session_id')
-        except Exception as e:
-            logger.error(f"ベースセッションID取得エラー: {cache_key} - {e}")
-            return None
-
-    def wait_for_calculation(
-        self,
-        cache_key: str,
-        timeout_seconds: int = 300,
-        poll_interval: float = 1.0
-    ) -> Tuple[bool, Optional[str]]:
-        """
-        計算完了を待機
-
-        Args:
-            cache_key: キャッシュキー
-            timeout_seconds: タイムアウト秒数（デフォルト5分）
-            poll_interval: ポーリング間隔秒数
-
-        Returns:
-            (成功フラグ, ベースセッションID)
-            - 計算完了: (True, session_id)
-            - タイムアウト: (False, None)
-        """
-        logger.info(f"計算完了待機開始: {cache_key} (timeout={timeout_seconds}s)")
-        start_time = time.time()
-
-        while time.time() - start_time < timeout_seconds:
-            # ベースセッションIDが設定されているか確認
-            base_session_id = self.get_base_session_id(cache_key)
-            if base_session_id:
-                elapsed = time.time() - start_time
-                logger.info(f"計算完了検出: {cache_key} ({elapsed:.1f}秒待機)")
-                return True, base_session_id
-
-            # 計算中でなければ（異常終了など）待機終了
-            if not self.is_calculation_in_progress(cache_key):
-                logger.warning(f"計算中ステータス消失: {cache_key}")
-                return False, None
-
-            time.sleep(poll_interval)
-
-        logger.warning(f"計算完了待機タイムアウト: {cache_key}")
-        return False, None
 
     def cleanup_calculation_locks(self, max_age_minutes: int = 30) -> int:
         """
