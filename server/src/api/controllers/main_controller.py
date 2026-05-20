@@ -392,12 +392,15 @@ class MainController:
             # gz完成まで待機してから返す。クライアント側ではローディング表示を継続する。
             base_session_id = self.cache_service.get_base_session_id(cache_key)
             cache_write_in_progress = self.cache_service.is_cache_write_in_progress(cache_key)
-            if cache_write_in_progress:
+            cache_materializing = self.cache_service.is_cache_materializing(cache_key)
+            calculation_in_progress = self.cache_service.is_calculation_in_progress(cache_key)
+            if cache_write_in_progress or cache_materializing or calculation_in_progress:
                 logger.info(
-                    "キャッシュ保存中のため完了待機: %s, session=%s, tmp=%s",
+                    "キャッシュ作成中のため完了待機: %s, calculating=%s, tmp=%s, materializing=%s",
                     cache_key,
-                    base_session_id,
+                    calculation_in_progress,
                     cache_write_in_progress,
+                    cache_materializing,
                 )
 
                 if base_session_id and self.session_service:
@@ -581,6 +584,7 @@ class MainController:
                     guidance_type=guidance_type,
                     risk_rule=risk_rule,
                     use_cache=True,
+                    async_cache_save=False,
                 )
 
                 # セッションサービスが有効な場合、セッション作成して軽量レスポンスを返す

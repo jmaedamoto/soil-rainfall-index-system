@@ -136,6 +136,12 @@ class CacheService:
         """キャッシュ保存用tmpファイルが存在するか確認"""
         return any(self.cache_dir.glob(self._get_cache_temp_glob(cache_key)))
 
+    def is_cache_materializing(self, cache_key: str) -> bool:
+        """キャッシュ本体とメタデータのどちらか片方だけが存在する中間状態か確認"""
+        cache_exists = self._get_cache_path(cache_key).exists()
+        meta_exists = self._get_meta_path(cache_key).exists()
+        return cache_exists != meta_exists
+
     def wait_for_cache_materialization(
         self,
         cache_key: str,
@@ -146,14 +152,19 @@ class CacheService:
         保存中tmpの完了または本体gzの出現を短時間待機する
         """
         cache_path = self._get_cache_path(cache_key)
+        meta_path = self._get_meta_path(cache_key)
         start_time = time.time()
 
         while time.time() - start_time < timeout_seconds:
-            if cache_path.exists() and not self.is_cache_write_in_progress(cache_key):
+            if (
+                cache_path.exists()
+                and meta_path.exists()
+                and not self.is_cache_write_in_progress(cache_key)
+            ):
                 return True
             time.sleep(poll_interval)
 
-        return cache_path.exists()
+        return cache_path.exists() and meta_path.exists()
 
     def get_cached_result(self, cache_key: str) -> Optional[dict]:
         """
@@ -166,9 +177,14 @@ class CacheService:
             キャッシュされたデータ、存在しない場合None
         """
         cache_path = self._get_cache_path(cache_key)
+        meta_path = self._get_meta_path(cache_key)
 
         if not cache_path.exists():
             logger.info(f"キャッシュ未存在: {cache_key}")
+            return None
+
+        if not meta_path.exists():
+            logger.info(f"キャッシュメタデータ未存在（保存途中）: {cache_key}")
             return None
 
         # TTLチェック
