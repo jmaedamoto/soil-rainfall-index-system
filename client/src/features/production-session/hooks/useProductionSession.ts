@@ -65,7 +65,7 @@ export const useProductionSession = ({
     prefectureCode: string,
     requestId?: number
   ) => {
-    if (prefectureRiskData[prefectureCode]) {
+    if (targetSessionId === sessionId && prefectureRiskData[prefectureCode]) {
       return;
     }
 
