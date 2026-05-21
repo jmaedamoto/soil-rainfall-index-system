@@ -457,10 +457,6 @@ class CacheService:
             with open(lock_path, 'r', encoding='utf-8') as f:
                 lock_data = json.load(f)
 
-            # 計算完了済みならロック中ではない
-            if lock_data.get('completed_at') or lock_data.get('base_session_id'):
-                return False
-
             started_at = datetime.fromisoformat(lock_data['started_at'])
             if datetime.now() - started_at > timedelta(minutes=10):
                 # タイムアウト: 古いロックを削除
@@ -525,27 +521,10 @@ class CacheService:
 
         Args:
             cache_key: キャッシュキー
-            base_session_id: 計算完了後のベースセッションID（オプション）
+            base_session_id: 互換性維持のための未使用引数
         """
         lock_path = self._get_lock_path(cache_key)
 
-        if base_session_id:
-            # ベースセッションIDを保存してからロック解放
-            try:
-                if lock_path.exists():
-                    with open(lock_path, 'r', encoding='utf-8') as f:
-                        lock_data = json.load(f)
-                    lock_data['base_session_id'] = base_session_id
-                    lock_data['completed_at'] = datetime.now().isoformat()
-                    self._write_json_atomic(lock_path, lock_data)
-                    logger.info(f"ベースセッションID保存: {cache_key} -> {base_session_id}")
-            except Exception as e:
-                logger.error(f"ベースセッションID保存エラー: {cache_key} - {e}")
-            # 完了済みロックは待機中リクエストが参照できるようファイルを残す
-            logger.info(f"計算ロック解放: {cache_key}")
-            return
-
-        # エラー時やセッション未生成時はロックファイルを削除して再試行可能にする
         try:
             if lock_path.exists():
                 lock_path.unlink()
@@ -597,8 +576,18 @@ class CacheService:
         """
         logger.info(f"計算完了待機開始: {cache_key} (timeout={timeout_seconds}s)")
         start_time = time.time()
+        wait_interval = min(poll_interval, 0.5)
 
         while time.time() - start_time < timeout_seconds:
+            if self.wait_for_cache_materialization(
+                cache_key,
+                timeout_seconds=wait_interval,
+                poll_interval=min(wait_interval, 0.2),
+            ):
+                elapsed = time.time() - start_time
+                logger.info(f"計算完了検出: {cache_key} ({elapsed:.1f}秒待機)")
+                return True, None
+
             # ベースセッションIDが設定されているか確認
             base_session_id = self.get_base_session_id(cache_key)
             if base_session_id:
@@ -608,6 +597,10 @@ class CacheService:
 
             # 計算中でなければ（異常終了など）待機終了
             if not self.is_calculation_in_progress(cache_key):
+                if self.exists(cache_key):
+                    elapsed = time.time() - start_time
+                    logger.info(f"計算完了検出: {cache_key} ({elapsed:.1f}秒待機)")
+                    return True, None
                 logger.warning(f"計算中ステータス消失: {cache_key}")
                 return False, None
 

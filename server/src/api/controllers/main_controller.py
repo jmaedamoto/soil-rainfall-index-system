@@ -572,48 +572,77 @@ class MainController:
                     cache_key, timeout_seconds=300, poll_interval=2.0
                 )
 
-                if success and base_session_id and self.session_service:
-                    # ベースセッションが存在するか確認
-                    session = self.session_service.get_session(base_session_id)
-                    if session:
-                        logger.info(f"既存セッション再利用: {base_session_id}")
+                if success:
+                    if base_session_id and self.session_service:
+                        # ベースセッションが存在するか確認
+                        session = self.session_service.get_session(base_session_id)
+                        if session:
+                            logger.info(f"既存セッション再利用: {base_session_id}")
+                            return self._build_lightweight_session_response(
+                                base_session_id,
+                                session['prefectures'],
+                                swi_initial,
+                                guidance_initial,
+                                session.get('guidance_type', guidance_type),
+                                session.get('risk_rule', risk_rule),
+                                {
+                                    "cache_key": cache_key,
+                                    "cache_hit": True,
+                                    "waited_for_calculation": True,
+                                },
+                                swi_url,
+                                guidance_url,
+                            )
 
-                        # 利用可能な時刻を抽出
-                        available_times = []
-                        first_pref = next(iter(session['prefectures'].values()))
-                        if first_pref['areas'] and first_pref['areas'][0]['meshes']:
-                            first_mesh = first_pref['areas'][0]['meshes'][0]
-                            available_times = sorted(set(
-                                [point['ft'] for point in first_mesh.get('risk_3hour_max_timeline', [])] +
-                                [point['ft'] for point in first_mesh.get('risk_hourly_timeline', [])]
-                            ))
+                    cached_result = self.cache_service.get_cached_result(cache_key)
+                    cache_metadata = self.cache_service.get_metadata(cache_key)
+                    if cached_result:
+                        logger.info(f"待機後キャッシュ返却: {cache_key}")
+                        if self.session_service:
+                            session_id = self.session_service.create_session(
+                                cached_result['prefectures'],
+                                swi_initial.isoformat(),
+                                guidance_initial.isoformat(),
+                                datetime.now().isoformat(),
+                                guidance_type,
+                                risk_rule,
+                                cache_key,
+                            )
+                            return self._build_lightweight_session_response(
+                                session_id,
+                                cached_result['prefectures'],
+                                swi_initial,
+                                guidance_initial,
+                                guidance_type,
+                                risk_rule,
+                                {
+                                    "cache_key": cache_key,
+                                    "cache_hit": True,
+                                    "cache_metadata": cache_metadata,
+                                    "waited_for_calculation": True,
+                                },
+                                swi_url,
+                                guidance_url,
+                            )
 
-                        return jsonify({
-                            "status": "success",
-                            "session_id": base_session_id,
+                        cached_result["status"] = "success"
+                        cached_result["guidance_type"] = guidance_type
+                        cached_result["risk_rule"] = risk_rule
+                        cached_result["cache_info"] = {
+                            "cache_key": cache_key,
+                            "cache_hit": True,
+                            "cache_metadata": cache_metadata,
+                            "waited_for_calculation": True,
+                        }
+                        cached_result["used_urls"] = {
+                            "swi_url": swi_url,
                             "swi_initial_time": swi_initial.isoformat() + 'Z',
+                            "guidance_url": guidance_url,
                             "guidance_initial_time": guidance_initial.isoformat() + 'Z',
-                            "guidance_type": session.get('guidance_type', guidance_type),
-                            "risk_rule": session.get('risk_rule', risk_rule),
-                            "available_prefectures": list(session['prefectures'].keys()),
-                            "available_prefecture_details": self._build_available_prefecture_details(
-                                session['prefectures']
-                            ),
-                            "available_times": available_times,
-                            "cache_info": {
-                                "cache_key": cache_key,
-                                "cache_hit": True,
-                                "waited_for_calculation": True
-                            },
-                            "used_urls": {
-                                "swi_url": swi_url,
-                                "swi_initial_time": swi_initial.isoformat() + 'Z',
-                                "guidance_url": guidance_url,
-                                "guidance_initial_time": guidance_initial.isoformat() + 'Z',
-                                "guidance_type": session.get('guidance_type', guidance_type),
-                                "risk_rule": session.get('risk_rule', risk_rule),
-                            }
-                        })
+                            "guidance_type": guidance_type,
+                            "risk_rule": risk_rule,
+                        }
+                        return jsonify(cached_result)
 
                 # 待機失敗（タイムアウトまたはセッション不在）→ 自分で計算を試みる
                 logger.warning(f"待機失敗、自身で計算を試みます: {cache_key}")
