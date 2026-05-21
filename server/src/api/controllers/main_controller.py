@@ -104,6 +104,58 @@ class MainController:
                 "name": name,
             })
         return details
+
+    @staticmethod
+    def _extract_available_times(prefectures: dict) -> list:
+        """先頭メッシュから利用可能なFT一覧を抽出する"""
+        if not prefectures:
+            return []
+
+        first_pref = next(iter(prefectures.values()))
+        if not first_pref.get("areas") or not first_pref["areas"][0].get("meshes"):
+            return []
+
+        first_mesh = first_pref["areas"][0]["meshes"][0]
+        return sorted(set(
+            [point["ft"] for point in first_mesh.get("risk_3hour_max_timeline", [])] +
+            [point["ft"] for point in first_mesh.get("risk_hourly_timeline", [])]
+        ))
+
+    def _build_lightweight_session_response(
+        self,
+        session_id: str,
+        prefectures: dict,
+        swi_initial,
+        guidance_initial,
+        guidance_type: str,
+        risk_rule: str,
+        cache_info: dict,
+        swi_url: str,
+        guidance_url: str,
+    ):
+        """軽量セッションレスポンスを組み立てる"""
+        return jsonify({
+            "status": "success",
+            "session_id": session_id,
+            "swi_initial_time": swi_initial.isoformat() + 'Z',
+            "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+            "guidance_type": guidance_type,
+            "risk_rule": risk_rule,
+            "available_prefectures": list(prefectures.keys()),
+            "available_prefecture_details": self._build_available_prefecture_details(
+                prefectures
+            ),
+            "available_times": self._extract_available_times(prefectures),
+            "cache_info": cache_info,
+            "used_urls": {
+                "swi_url": swi_url,
+                "swi_initial_time": swi_initial.isoformat() + 'Z',
+                "guidance_url": guidance_url,
+                "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+                "guidance_type": guidance_type,
+                "risk_rule": risk_rule,
+            }
+        })
     
     def data_check(self):
         """データファイル確認エンドポイント"""
