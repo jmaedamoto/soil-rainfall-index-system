@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { sessionApiClient } from '../services/sessionApi';
 import SoilRainfallMap from '../components/map/SoilRainfallMap';
 import AreaRiskBarChart from '../components/charts/AreaRiskBarChart';
-import CacheInfo from '../components/CacheInfo';
 import RainfallAdjustmentModalSession from '../components/RainfallAdjustmentModalSession';
 import type { Prefecture as PrefectureType } from '../types/api';
 import {
@@ -345,11 +344,6 @@ const ProductionSession: React.FC = () => {
           </button>
         )}
       </div>
-
-      {/* キャッシュ情報 */}
-      {sessionInfo?.cache_info && (
-        <CacheInfo cacheInfo={sessionInfo.cache_info} />
-      )}
 
       {/* データ表示エリア */}
       {sessionInfo && (

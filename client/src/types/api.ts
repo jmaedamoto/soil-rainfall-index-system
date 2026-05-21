@@ -61,23 +61,6 @@ export interface Prefecture {
   rain_3hour_timeline?: TimeSeriesPoint[];  // 府県内の前3時間雨量最大値
 }
 
-export interface CacheMetadata {
-  cache_key: string;
-  created_at: string;           // ISO8601形式
-  swi_initial: string;
-  guidance_initial: string;
-  mesh_count: number;
-  file_size_mb: number;
-  compressed: boolean;
-  compression_format: string;
-}
-
-export interface CacheInfo {
-  cache_key: string;
-  cache_hit: boolean;           // キャッシュヒットフラグ
-  cache_metadata: CacheMetadata | null;
-}
-
 export interface HealthStatus {
   status: 'success' | 'error';
   message?: string;
@@ -136,7 +119,6 @@ export interface LightweightCalculationResult {
   risk_rule?: RiskRule;
   available_prefectures: string[];  // 利用可能な府県コード
   available_times: number[];        // 利用可能なFT値
-  cache_info?: CacheInfo;           // キャッシュ情報
   used_urls?: {                     // 使用したGRIB2 URL
     swi_url: string;
     swi_initial_time: string;

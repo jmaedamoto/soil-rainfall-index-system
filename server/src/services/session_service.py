@@ -152,6 +152,7 @@ class SessionService:
                     timeout_seconds=300.0,
                 ):
                     cached_result = self.cache_service.get_cached_result(cache_key)
+
         if not cached_result or 'prefectures' not in cached_result:
             logger.warning(f"Session restore skipped, cache unavailable: {session_id} -> {cache_key}")
             return None
@@ -171,6 +172,7 @@ class SessionService:
 
         logger.info(f"Session restored from cache reference: {session_id} -> {cache_key}")
         return session_data
+
     def create_session(
         self,
         prefectures: Dict[str, Prefecture],
@@ -344,15 +346,15 @@ class SessionService:
             session = self.sessions.get(session_id)
 
         if session is None:
-            restored = self._restore_session_from_reference(session_id)
-            if restored is None:
-                logger.warning(f"Session not found in memory: {session_id}")
+            logger.warning(f"Session not found in memory: {session_id}")
+            session = self._restore_session_from_reference(session_id)
+            if session is None:
                 return None
-            session = restored
 
         with self.lock:
             # 復元直後に別スレッドが更新している可能性があるため再取得
             session = self.sessions.get(session_id, session)
+
             # 期限チェック
             if datetime.now() > session['expires_at']:
                 logger.warning(f"Session expired: {session_id}")

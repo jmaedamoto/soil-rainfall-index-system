@@ -28,6 +28,12 @@ class SessionController:
         self.rainfall_adjustment_service = RainfallAdjustmentService()
 
     @staticmethod
+    def _trace_prefix(session_id: str) -> str:
+        forwarded_for = request.headers.get('X-Forwarded-For')
+        remote_addr = forwarded_for.split(',')[0].strip() if forwarded_for else request.remote_addr
+        return f"[session_id={session_id} pid={os.getpid()} remote={remote_addr or 'unknown'}]"
+
+    @staticmethod
     def _build_max_timeline_from_meshes(
         meshes: List[Dict[str, Any]],
         timeline_key: str
@@ -85,15 +91,23 @@ class SessionController:
         GET /session/<session_id>
         """
         try:
+            trace_prefix = self._trace_prefix(session_id)
+            logger.info(f"{trace_prefix} セッション情報取得開始")
             info = self.session_service.get_session_info(session_id)
 
             if info is None:
+                logger.warning(f"{trace_prefix} セッション情報取得失敗: session not found")
                 return jsonify({
                     "status": "error",
                     "error": "Session not found or expired",
                     "session_id": session_id
                 }), 404
 
+            logger.info(
+                f"{trace_prefix} セッション情報取得成功: "
+                f"prefecture_count={info.get('prefecture_count')} "
+                f"guidance_type={info.get('guidance_type')} risk_rule={info.get('risk_rule')}"
+            )
             return jsonify({
                 "status": "success",
                 "session": info
@@ -120,12 +134,17 @@ class SessionController:
             - 府県全体危険度時系列
         """
         try:
+            trace_prefix = self._trace_prefix(session_id)
+            logger.info(f"{trace_prefix} 府県データ取得開始: prefecture_code={prefecture_code}")
             prefecture = self.session_service.get_prefecture(
                 session_id,
                 prefecture_code
             )
 
             if prefecture is None:
+                logger.warning(
+                    f"{trace_prefix} 府県データ取得失敗: prefecture_code={prefecture_code}"
+                )
                 return jsonify({
                     "status": "error",
                     "error": "Session or prefecture not found",
@@ -172,12 +191,20 @@ class SessionController:
             }
 
             # デバッグ: レスポンスデータの確認
-            logger.info(f"Prefecture {prefecture_code}: {len(response_data['areas'])} areas")
+            logger.info(
+                f"{trace_prefix} 府県データ取得成功: prefecture_code={prefecture_code} "
+                f"areas={len(response_data['areas'])} "
+                f"secondary_subdivisions={len(response_data['secondary_subdivisions'])} "
+                f"prefecture_risk_timeline_length={len(response_data['prefecture_risk_timeline'])}"
+            )
             if response_data['areas']:
                 first_area = response_data['areas'][0]
-                logger.info(f"First area: {first_area['name']}, risk_timeline length: {len(first_area.get('risk_timeline', []))}")
+                logger.info(
+                    f"{trace_prefix} First area: {first_area['name']}, "
+                    f"risk_timeline length: {len(first_area.get('risk_timeline', []))}"
+                )
                 if first_area.get('risk_timeline'):
-                    logger.info(f"First risk point: {first_area['risk_timeline'][0]}")
+                    logger.info(f"{trace_prefix} First risk point: {first_area['risk_timeline'][0]}")
 
             return jsonify({
                 "status": "success",
@@ -203,9 +230,10 @@ class SessionController:
             include_coords: 互換用パラメータ（現在は常に座標を返す）
         """
         try:
-            trace_prefix = f"[session_id={session_id}]"
+            trace_prefix = self._trace_prefix(session_id)
             ft = request.args.get('ft', type=int)
             if ft is None:
+                logger.warning(f"{trace_prefix} 時刻別リスク取得失敗: ft パラメータ不足")
                 return jsonify({
                     "status": "error",
                     "error": "Parameter 'ft' is required"
@@ -223,6 +251,7 @@ class SessionController:
 
             session = self.session_service.get_session(session_id)
             if session is None:
+                logger.warning(f"{trace_prefix} 時刻別リスク取得失敗: session not found")
                 return jsonify({
                     "status": "error",
                     "error": "Session not found or expired",
@@ -297,6 +326,11 @@ class SessionController:
             # 座標は要求された場合のみ含める
             if include_coords:
                 response_data["mesh_coords"] = mesh_coords
+
+            logger.info(
+                f"{trace_prefix} 時刻別リスク取得成功: ft={ft} "
+                f"mesh_count={len(mesh_risks)} coords_included={include_coords}"
+            )
 
             return jsonify(response_data)
 

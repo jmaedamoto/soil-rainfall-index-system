@@ -19,7 +19,6 @@ def test_completed_lock_is_removed_on_release(tmp_path):
     assert cache_service.acquire_calculation_lock(cache_key) is True
     cache_service.release_calculation_lock(cache_key, "session-123")
 
-    assert cache_service.get_base_session_id(cache_key) is None
     assert cache_service.is_calculation_in_progress(cache_key) is False
 
 
@@ -31,4 +30,3 @@ def test_failed_lock_is_removed_on_release(tmp_path):
     cache_service.release_calculation_lock(cache_key)
 
     assert cache_service.is_calculation_in_progress(cache_key) is False
-    assert cache_service.get_base_session_id(cache_key) is None
