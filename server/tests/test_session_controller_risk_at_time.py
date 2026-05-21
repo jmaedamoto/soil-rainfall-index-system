@@ -83,3 +83,4 @@ def test_get_risk_at_time_returns_mesh_risks_when_requested_ft_exists():
     assert body["status"] == "success"
     assert body["ft"] == 0
     assert body["mesh_risks"] == {"mesh-1": 2}
+    assert body["mesh_coords"] == {"mesh-1": {"lat": 35.0, "lon": 135.0}}

@@ -137,6 +137,7 @@ class SessionController:
             include_coords: 互換用パラメータ（現在は常に座標を返す）
         """
         try:
+            trace_prefix = f"[session_id={session_id}]"
             ft = request.args.get('ft', type=int)
             if ft is None:
                 return jsonify({
