@@ -17,7 +17,7 @@ import io
 from threading import Thread
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Dict, List, Callable
+from typing import Optional, Dict, List, Callable, Tuple
 import os
 
 logger = logging.getLogger(__name__)
