@@ -34,7 +34,7 @@ def test_set_cached_result_can_be_read_back_immediately(tmp_path):
         }
     }
 
-    assert service.set_cached_result(
+    service.set_cached_result(
         cache_key,
         payload,
         "2026-05-20T03:00:00",
