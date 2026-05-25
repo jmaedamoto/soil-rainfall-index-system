@@ -109,9 +109,11 @@ class CalculationServiceNumpy:
     def calc_hourly_risk_vectorized(
         self,
         swi_hourly: np.ndarray,
+        rain_hourly: np.ndarray,
         advisory_bounds: np.ndarray,
         warning_bounds: np.ndarray,
         dosyakei_bounds: np.ndarray,
+        level4_curves: Optional[np.ndarray] = None,
         risk_rule: str = "legacy"
     ) -> np.ndarray:
         """
@@ -119,6 +121,7 @@ class CalculationServiceNumpy:
 
         Args:
             swi_hourly: SWI時系列 (n_times, n_meshes)
+            rain_hourly: 1時間雨量時系列 (n_times-1, n_meshes)
             advisory_bounds: 注意報基準値 (n_meshes,)
             warning_bounds: 警報基準値 (n_meshes,)
             dosyakei_bounds: 土砂災害基準値 (n_meshes,)
@@ -133,11 +136,15 @@ class CalculationServiceNumpy:
         advisory = np.floor(advisory_bounds).astype(np.int32).reshape(1, -1)
         warning = np.floor(warning_bounds).astype(np.int32).reshape(1, -1)
         dosyakei = np.floor(dosyakei_bounds).astype(np.int32).reshape(1, -1)
+        level4_thresholds, level4_valid = self.build_level4_thresholds_vectorized(
+            rain_hourly,
+            dosyakei,
+            level4_curves,
+        )
 
         # ベクトル化された条件判定（高い閾値から判定）
-        # np.selectを使用してより明確な条件分岐
         conditions = [
-            swi_hourly >= dosyakei,  # レベル4
+            level4_valid & (swi_hourly >= level4_thresholds),  # レベル4
             swi_hourly >= warning,    # レベル3
             swi_hourly >= advisory,   # レベル2
         ]
@@ -146,6 +153,44 @@ class CalculationServiceNumpy:
         risk = np.select(conditions, choices, default=0).astype(np.int32)
 
         return self.apply_risk_rule_vectorized(risk, normalized_risk_rule)
+
+    def build_level4_thresholds_vectorized(
+        self,
+        rain_hourly: np.ndarray,
+        dosyakei_bounds: np.ndarray,
+        level4_curves: Optional[np.ndarray] = None,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """1時間雨量ごとのレベル4閾値をメッシュ単位で展開する。"""
+        _, n_meshes = dosyakei_bounds.shape
+
+        rain_with_ft0 = np.vstack([
+            np.zeros((1, n_meshes), dtype=np.float64),
+            rain_hourly,
+        ])
+        rain_indices = np.clip(
+            np.rint(rain_with_ft0).astype(np.int32),
+            0,
+            150,
+        )
+
+        if level4_curves is None:
+            thresholds = np.broadcast_to(dosyakei_bounds, rain_indices.shape)
+            valid = thresholds < 999
+            return thresholds, valid
+
+        safe_curves = np.array(level4_curves, dtype=np.int32, copy=True)
+        has_curve = np.any(safe_curves >= 0, axis=1).reshape(1, -1)
+        safe_curves = np.where(safe_curves >= 0, safe_curves, 999)
+        curve_thresholds = np.take_along_axis(
+            safe_curves[np.newaxis, :, :],
+            rain_indices[:, :, np.newaxis],
+            axis=2,
+        ).squeeze(axis=2)
+
+        fallback_thresholds = np.broadcast_to(dosyakei_bounds, rain_indices.shape)
+        thresholds = np.where(has_curve, curve_thresholds, fallback_thresholds)
+        valid = np.where(has_curve, curve_thresholds < 999, fallback_thresholds < 999)
+        return thresholds, valid
 
     def apply_risk_rule_vectorized(
         self,
@@ -162,26 +207,11 @@ class CalculationServiceNumpy:
         for mesh_index in range(n_meshes):
             level4_indices = np.where(adjusted[:, mesh_index] >= 4)[0]
             if len(level4_indices) == 0:
-                adjusted[:, mesh_index] = np.where(
-                    adjusted[:, mesh_index] >= 2,
-                    0,
-                    adjusted[:, mesh_index],
-                )
                 continue
 
             first_level4_index = int(level4_indices[0])
             last_level4_index = int(level4_indices[-1])
-            level2_start = max(0, first_level4_index - 6)
-            level3_start = max(0, first_level4_index - 2)
-
-            adjusted[:, mesh_index] = np.where(
-                adjusted[:, mesh_index] >= 2,
-                0,
-                adjusted[:, mesh_index],
-            )
-
-            if level2_start < first_level4_index:
-                adjusted[level2_start:first_level4_index, mesh_index] = 2
+            level3_start = max(0, first_level4_index - 3)
 
             if level3_start < first_level4_index:
                 adjusted[level3_start:first_level4_index, mesh_index] = 3
@@ -311,9 +341,11 @@ class CalculationServiceNumpy:
         # 1時間ごとリスク計算
         risk_hourly = self.calc_hourly_risk_vectorized(
             swi_hourly,
+            rain_1hour,
             mesh_data['advisory_bounds'],
             mesh_data['warning_bounds'],
-            mesh_data['dosyakei_bounds']
+            mesh_data['dosyakei_bounds'],
+            mesh_data.get('level4_curves'),
         )
 
         # 3時間最大リスク計算
@@ -368,6 +400,19 @@ class CalculationServiceNumpy:
         advisory_bounds = np.array([m['advisory_bound'] for m in mesh_data_list])
         warning_bounds = np.array([m['warning_bound'] for m in mesh_data_list])
         dosyakei_bounds = np.array([m['dosyakei_bound'] for m in mesh_data_list])
+        level4_curves = np.full((n_meshes, 151), -1, dtype=np.int32)
+        for i, mesh in enumerate(mesh_data_list):
+            curve = mesh.get('level4_curve')
+            if curve is None:
+                continue
+            if len(curve) != 151:
+                logger.warning(
+                    "Invalid level4_curve length for mesh %s: %s",
+                    mesh.get('mesh_code'),
+                    len(curve),
+                )
+                continue
+            level4_curves[i] = np.array(curve, dtype=np.int32)
 
         # 3時間雨量を配列化
         rain_3h = np.zeros((n_periods, n_meshes), dtype=np.float64)
@@ -405,7 +450,13 @@ class CalculationServiceNumpy:
 
         # 1時間ごとリスク計算
         risk_hourly = self.calc_hourly_risk_vectorized(
-            swi_hourly, advisory_bounds, warning_bounds, dosyakei_bounds, risk_rule=risk_rule
+            swi_hourly,
+            rain_1hour,
+            advisory_bounds,
+            warning_bounds,
+            dosyakei_bounds,
+            level4_curves=level4_curves,
+            risk_rule=risk_rule,
         )
 
         # 3時間最大リスク計算

@@ -450,9 +450,6 @@ class RainfallController:
                             "code": mesh.code,
                             "lat": mesh.lat,
                             "lon": mesh.lon,
-                            "advisary_bound": mesh.advisary_bound,
-                            "warning_bound": mesh.warning_bound,
-                            "dosyakei_bound": mesh.dosyakei_bound,
                             "swi_timeline": [
                                 {"ft": s.ft, "value": s.value}
                                 for s in mesh.swi

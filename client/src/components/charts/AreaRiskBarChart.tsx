@@ -41,7 +41,6 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
   type DisplayRow = {
     name: string;
     risk_timeline: Array<{ ft: number; value: number }>;
-    level4_threshold?: number;
     swi_timeline?: Array<{ ft: number; value: number }>;
     rain_3hour_timeline?: Array<{ ft: number; value: number }>;
   };
@@ -62,7 +61,6 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
         rows = selectedPref.areas.map(area => ({
           name: area.name,
           risk_timeline: area.risk_timeline,
-          level4_threshold: area.level4_threshold,
           swi_timeline: area.swi_timeline,
           rain_3hour_timeline: area.rain_3hour_timeline,
         }));
@@ -77,7 +75,6 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
         rows = selectedPref.secondary_subdivisions.map(subdiv => ({
           name: subdiv.name,
           risk_timeline: subdiv.risk_timeline,
-          level4_threshold: subdiv.level4_threshold,
           swi_timeline: subdiv.swi_timeline,
           rain_3hour_timeline: subdiv.rain_3hour_timeline,
         }));
@@ -90,7 +87,6 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
       rows = prefectures.map(pref => ({
         name: pref.name,
         risk_timeline: pref.prefecture_risk_timeline || [],
-        level4_threshold: pref.level4_threshold,
         swi_timeline: pref.swi_timeline,
         rain_3hour_timeline: pref.rain_3hour_timeline,
       }));
@@ -322,11 +318,6 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                   lineHeight: 1.35
                 }}>
                   <div>{row.name}</div>
-                  {typeof row.level4_threshold === 'number' && row.level4_threshold > 0 && (
-                    <div style={{ fontSize: '11px', fontWeight: 'normal', color: '#555' }}>
-                      L4: {row.level4_threshold}
-                    </div>
-                  )}
                 </td>
 
                 {/* 各時刻のセル */}

@@ -107,21 +107,11 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
       else if (currentMeshes && currentMeshes.length > 0) {
         // 時刻インデックス取得
         let timeIndex = 0;
-        timeIndex = currentMeshes[0].swi_timeline.findIndex(point => point.ft === currentSelectedTime);
+        timeIndex = currentMeshes[0].risk_3hour_max_timeline.findIndex(point => point.ft === currentSelectedTime);
         if (timeIndex === -1) timeIndex = 0;
 
         currentMeshes.forEach(mesh => {
-          // SWI値とリスクレベル計算
-          const swiValue = mesh.swi_timeline[timeIndex]?.value || 0;
-
-          let riskLevel = RiskLevel.NORMAL;
-          if (swiValue >= mesh.dosyakei_bound) {
-            riskLevel = RiskLevel.DISASTER;
-          } else if (swiValue >= mesh.warning_bound) {
-            riskLevel = RiskLevel.WARNING;
-          } else if (swiValue >= mesh.advisary_bound) {
-            riskLevel = RiskLevel.CAUTION;
-          }
+          const riskLevel = mesh.risk_3hour_max_timeline[timeIndex]?.value || RiskLevel.NORMAL;
 
           // 危険度0は描画しない
           if (riskLevel === RiskLevel.NORMAL) return;

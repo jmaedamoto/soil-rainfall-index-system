@@ -47,14 +47,12 @@ export interface LightweightCalculationResult {
 export interface LightweightPrefectureData {
   name: string;
   code: string;
-  level4_threshold?: number;
   swi_timeline?: TimeSeriesPoint[];
   rain_3hour_timeline?: TimeSeriesPoint[];
   areas: Array<{
     name: string;
     secondary_subdivision_name: string;
     risk_timeline: RiskTimePoint[];
-    level4_threshold?: number;
     swi_timeline?: TimeSeriesPoint[];
     rain_3hour_timeline?: TimeSeriesPoint[];
   }>;
@@ -62,7 +60,6 @@ export interface LightweightPrefectureData {
     name: string;
     area_names: string[];
     risk_timeline: RiskTimePoint[];
-    level4_threshold?: number;
     swi_timeline?: TimeSeriesPoint[];
     rain_3hour_timeline?: TimeSeriesPoint[];
   }>;

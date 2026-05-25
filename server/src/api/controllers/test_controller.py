@@ -128,9 +128,6 @@ class TestController:
                         "area": mesh.area_name,
                         "lat": float(mesh.lat),
                         "lon": float(mesh.lon),
-                        "advisary_bound": int(mesh.advisary_bound),
-                        "warning_bound": int(mesh.warning_bound),
-                        "dosyakei_bound": int(mesh.dosyakei_bound)
                     })
                     sample_count += 1
                 if sample_count >= 3:
@@ -317,9 +314,6 @@ class TestController:
                             "code": mesh.code,
                             "lat": float(mesh.lat),
                             "lon": float(mesh.lon),
-                            "advisary_bound": int(mesh.advisary_bound),
-                            "warning_bound": int(mesh.warning_bound),
-                            "dosyakei_bound": int(mesh.dosyakei_bound),
                             "swi_timeline": [
                                 {"ft": int(s.ft), "value": float(s.value)} for s in mesh.swi
                             ],

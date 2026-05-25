@@ -36,6 +36,37 @@ class CalculationService:
             raise ValueError(f"Unsupported risk_rule: {risk_rule}")
         return normalized
 
+    @staticmethod
+    def _normalize_rainfall_index(rain_value: float) -> int:
+        """1時間雨量から level4_curve 参照用インデックスを作る。"""
+        try:
+            rainfall_index = int(round(float(rain_value)))
+        except (TypeError, ValueError):
+            rainfall_index = 0
+        return max(0, min(150, rainfall_index))
+
+    def get_level4_threshold(
+        self,
+        level4_curve,
+        rain_value: float,
+        fallback_dosyakei_bound: int
+    ) -> Optional[int]:
+        """1時間雨量に対応するレベル4閾値を取得する。"""
+        if level4_curve is None:
+            return fallback_dosyakei_bound
+
+        rainfall_index = self._normalize_rainfall_index(rain_value)
+
+        try:
+            threshold = int(level4_curve[rainfall_index])
+        except (IndexError, TypeError, ValueError):
+            return fallback_dosyakei_bound
+
+        if threshold >= 999:
+            return None
+
+        return threshold
+
     def get_data_num(self, lat: float, lon: float, base_info: Any) -> int:
         """
         VBA Function get_data_num の完全再現
@@ -304,6 +335,8 @@ class CalculationService:
     def calc_hourly_risk(self, swi_hourly: List[SwiTimeSeries],
                          advisary_bound: int, warning_bound: int,
                          dosyakei_bound: int,
+                         rain_hourly: Optional[List[GuidanceTimeSeries]] = None,
+                         level4_curve=None,
                          risk_rule: str = "legacy") -> List[Risk]:
         """
         1時間ごとの危険度を判定
@@ -320,12 +353,22 @@ class CalculationService:
         try:
             risk_hourly = []
             normalized_risk_rule = self.normalize_risk_rule(risk_rule)
+            rain_by_ft = {
+                int(rain.ft): float(rain.value)
+                for rain in (rain_hourly or [])
+            }
 
             for swi_item in swi_hourly:
                 swi_value = swi_item.value
+                rain_value = rain_by_ft.get(int(swi_item.ft), 0.0)
+                level4_threshold = self.get_level4_threshold(
+                    level4_curve,
+                    rain_value,
+                    dosyakei_bound,
+                )
 
                 # リスクレベル判定（政府ガイドライン準拠: レベル0,2,3,4）
-                if swi_value >= dosyakei_bound:
+                if level4_threshold is not None and swi_value >= level4_threshold:
                     risk = 4  # レベル4: 土砂災害
                 elif swi_value >= warning_bound:
                     risk = 3  # レベル3: 警報
@@ -362,25 +405,12 @@ class CalculationService:
             )
 
             if first_level4_index is None:
-                for risk in adjusted:
-                    if risk.value in {2, 3, 4}:
-                        risk.value = 0
                 return adjusted
 
             last_level4_index = max(
                 index for index, risk in enumerate(adjusted) if risk.value >= 4
             )
-
-            level2_start = max(0, first_level4_index - 6)
-            level3_start = max(0, first_level4_index - 2)
-
-            # 従来ルール由来のレベル2/3は無効化し、レベル4先行ルールで全期間を作り直す
-            for risk in adjusted:
-                if risk.value in {2, 3, 4}:
-                    risk.value = 0
-
-            for index in range(level2_start, first_level4_index):
-                adjusted[index].value = 2
+            level3_start = max(0, first_level4_index - 3)
 
             for index in range(level3_start, first_level4_index):
                 adjusted[index].value = 3
@@ -648,6 +678,8 @@ class CalculationService:
                     mesh.advisary_bound,
                     mesh.warning_bound,
                     mesh.dosyakei_bound,
+                    rain_hourly=mesh.rain_1hour,
+                    level4_curve=getattr(mesh, 'level4_curve', None),
                     risk_rule=risk_rule,
                 )
 
@@ -705,6 +737,8 @@ class CalculationService:
                     mesh.advisary_bound,
                     mesh.warning_bound,
                     mesh.dosyakei_bound,
+                    rain_hourly=mesh.rain_1hour,
+                    level4_curve=getattr(mesh, 'level4_curve', None),
                     risk_rule=risk_rule,
                 )
 
