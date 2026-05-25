@@ -6,6 +6,7 @@
 from dataclasses import dataclass
 from typing import List, Optional
 from datetime import datetime
+import numpy as np
 
 
 @dataclass
@@ -63,6 +64,7 @@ class Mesh:
     rain_3hour: List[GuidanceTimeSeries]  # 3時間ごとの合計雨量
     risk_hourly: List[Risk]  # 1時間ごとの危険度
     risk_3hour_max: List[Risk]  # 3時間ごとの最大危険度（1時間雨量ベース）
+    level4_curve: Optional[np.ndarray] = None  # 将来用のレベル4基準値カーブ（60分雨量0-150mm）
     vba_x: Optional[int] = None  # VBA X座標（GRIB2データアクセス用）
     vba_y: Optional[int] = None  # VBA Y座標（GRIB2データアクセス用）
 

@@ -16,6 +16,7 @@ sys.path.append(project_root)
 from services.session_service import SessionService
 from services.rainfall_adjustment_service import RainfallAdjustmentService
 from services.calculation_service_numpy import CalculationServiceNumpy
+from services.data_service import DataService
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,8 @@ class SessionController:
     def __init__(self, session_service: SessionService):
         self.session_service = session_service
         self.rainfall_adjustment_service = RainfallAdjustmentService()
+        data_dir = os.path.join(os.path.dirname(project_root), "data")
+        self.data_service = DataService(data_dir=data_dir)
 
     @staticmethod
     def _trace_prefix(session_id: str) -> str:
@@ -54,14 +57,7 @@ class SessionController:
 
     @staticmethod
     def _build_row_metrics_from_meshes(meshes: List[Dict[str, Any]]) -> Dict[str, Any]:
-        positive_thresholds = [
-            int(mesh.get("dosyakei_bound", 0))
-            for mesh in meshes
-            if int(mesh.get("dosyakei_bound", 0)) > 0
-        ]
-
         return {
-            "level4_threshold": min(positive_thresholds, default=0),
             "swi_timeline": SessionController._build_max_timeline_from_meshes(
                 meshes, "swi_timeline"
             ),
@@ -841,6 +837,10 @@ class SessionController:
                         new_rain_timeline = adjusted_mesh_rainfall.get(mesh_code)
                         if not new_rain_timeline:
                             continue
+                        static_info = self.data_service.get_mesh_static_info_by_mesh_code(mesh_code)
+                        if static_info is None:
+                            logger.warning("Static mesh info not found for mesh_code=%s", mesh_code)
+                            continue
 
                         # 初期SWI値を取得
                         swi_timeline = mesh_dict.get('swi_timeline', [])
@@ -850,9 +850,14 @@ class SessionController:
                         mesh_data_list.append({
                             'mesh_code': mesh_code,
                             'initial_swi': initial_swi,
-                            'advisory_bound': mesh_dict['advisary_bound'],
-                            'warning_bound': mesh_dict['warning_bound'],
-                            'dosyakei_bound': mesh_dict['dosyakei_bound'],
+                            'advisory_bound': static_info['advisary_bound'],
+                            'warning_bound': static_info['warning_bound'],
+                            'dosyakei_bound': static_info['dosyakei_bound'],
+                            'level4_curve': (
+                                static_info['level4_curve'].tolist()
+                                if static_info['level4_curve'] is not None
+                                else None
+                            ),
                             'rain_3hour': new_rain_timeline,
                             'original_rain_3hour': [
                                 (int(point['ft']), float(point['value']))

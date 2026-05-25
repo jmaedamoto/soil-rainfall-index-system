@@ -34,14 +34,7 @@ class ResponseBuilder:
     @staticmethod
     def _build_row_metrics_from_meshes(meshes) -> Dict[str, Any]:
         """タイムライン表で使う集約値を構築する"""
-        positive_thresholds = [
-            int(mesh.get("dosyakei_bound", 0))
-            for mesh in meshes
-            if int(mesh.get("dosyakei_bound", 0)) > 0
-        ]
-
         return {
-            "level4_threshold": min(positive_thresholds, default=0),
             "swi_timeline": ResponseBuilder._build_max_timeline_from_meshes(
                 meshes, "swi_timeline"
             ),
@@ -166,9 +159,6 @@ class ResponseBuilder:
             "lon": float(mesh.lon),
             "x": int(mesh.x),
             "y": int(mesh.y),
-            "advisary_bound": int(mesh.advisary_bound),
-            "warning_bound": int(mesh.warning_bound),
-            "dosyakei_bound": int(mesh.dosyakei_bound),
             "swi_timeline": ResponseBuilder._build_swi_timeline(mesh.swi),
             "swi_hourly_timeline": ResponseBuilder._build_swi_timeline(mesh.swi_hourly),
             "rain_1hour_timeline": ResponseBuilder._build_guidance_timeline(mesh.rain_1hour),
