@@ -405,12 +405,19 @@ class CalculationService:
             )
 
             if first_level4_index is None:
+                for risk in adjusted:
+                    if risk.value >= 3:
+                        risk.value = 0
                 return adjusted
 
             last_level4_index = max(
                 index for index, risk in enumerate(adjusted) if risk.value >= 4
             )
             level3_start = max(0, first_level4_index - 3)
+
+            for risk in adjusted:
+                if risk.value == 3:
+                    risk.value = 0
 
             for index in range(level3_start, first_level4_index):
                 adjusted[index].value = 3

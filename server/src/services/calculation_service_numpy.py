@@ -207,11 +207,22 @@ class CalculationServiceNumpy:
         for mesh_index in range(n_meshes):
             level4_indices = np.where(adjusted[:, mesh_index] >= 4)[0]
             if len(level4_indices) == 0:
+                adjusted[:, mesh_index] = np.where(
+                    adjusted[:, mesh_index] >= 3,
+                    0,
+                    adjusted[:, mesh_index],
+                )
                 continue
 
             first_level4_index = int(level4_indices[0])
             last_level4_index = int(level4_indices[-1])
             level3_start = max(0, first_level4_index - 3)
+
+            adjusted[:, mesh_index] = np.where(
+                adjusted[:, mesh_index] == 3,
+                0,
+                adjusted[:, mesh_index],
+            )
 
             if level3_start < first_level4_index:
                 adjusted[level3_start:first_level4_index, mesh_index] = 3
