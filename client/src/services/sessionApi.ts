@@ -111,6 +111,8 @@ class SessionAPIClient {
       status: string;
       area_rainfall: RainfallDataResponse['area_rainfall'];
       subdivision_rainfall: RainfallDataResponse['subdivision_rainfall'];
+      area_orders?: RainfallDataResponse['area_orders'];
+      subdivision_orders?: RainfallDataResponse['subdivision_orders'];
       area_rainfall_24hour?: RainfallDataResponse['area_rainfall_24hour'];
       subdivision_rainfall_24hour?: RainfallDataResponse['subdivision_rainfall_24hour'];
       guidance_type?: RainfallDataResponse['guidance_type'];
@@ -123,6 +125,8 @@ class SessionAPIClient {
     return {
       area_rainfall: response.data.area_rainfall,
       subdivision_rainfall: response.data.subdivision_rainfall,
+      area_orders: response.data.area_orders,
+      subdivision_orders: response.data.subdivision_orders,
       area_rainfall_24hour: response.data.area_rainfall_24hour,
       subdivision_rainfall_24hour: response.data.subdivision_rainfall_24hour,
       guidance_type: response.data.guidance_type,

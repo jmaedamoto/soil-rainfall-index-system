@@ -89,6 +89,8 @@ export interface MeshDetailResponse {
 export interface RainfallDataResponse {
   area_rainfall: Record<string, TimeSeriesPoint[]>;
   subdivision_rainfall: Record<string, TimeSeriesPoint[]>;
+  area_orders?: Record<string, string[]>;
+  subdivision_orders?: Record<string, string[]>;
   area_rainfall_24hour?: Record<string, TimeSeriesPoint[]>;
   subdivision_rainfall_24hour?: Record<string, TimeSeriesPoint[]>;
   guidance_type?: 'msm' | 'gsm';

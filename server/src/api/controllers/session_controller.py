@@ -512,15 +512,20 @@ class SessionController:
             prefectures = session['prefectures']
             area_rainfall = {}
             subdivision_rainfall = {}
+            area_orders = {}
+            subdivision_orders = {}
             area_rainfall_24hour, subdivision_rainfall_24hour = \
                 self.rainfall_adjustment_service.aggregate_rainfall_24hour_from_session(prefectures)
 
             for pref_code, prefecture in prefectures.items():
                 pref_name = prefecture["name"]
+                area_orders[pref_name] = []
+                subdivision_orders[pref_name] = []
 
                 # 市町村別雨量
                 for area in prefecture["areas"]:
                     area_key = f"{pref_name}_{area['name']}"
+                    area_orders[pref_name].append(area_key)
 
                     # 市町村内の全メッシュから雨量タイムラインを集約
                     if area["meshes"]:
@@ -546,6 +551,7 @@ class SessionController:
                 # 二次細分別雨量
                 for subdiv in prefecture.get("secondary_subdivisions", []):
                     subdiv_key = f"{pref_name}_{subdiv['name']}"
+                    subdivision_orders[pref_name].append(subdiv_key)
 
                     # 二次細分内の全メッシュから雨量タイムラインを集約
                     all_meshes = []
@@ -578,6 +584,8 @@ class SessionController:
                 "status": "success",
                 "area_rainfall": area_rainfall,
                 "subdivision_rainfall": subdivision_rainfall,
+                "area_orders": area_orders,
+                "subdivision_orders": subdivision_orders,
                 "area_rainfall_24hour": area_rainfall_24hour,
                 "subdivision_rainfall_24hour": subdivision_rainfall_24hour,
                 "guidance_type": session.get('guidance_type', 'msm'),
