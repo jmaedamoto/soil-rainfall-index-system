@@ -101,6 +101,8 @@ export interface RecalculateResponse {
   session_id: string;
   adjusted: boolean;
   ft: number;
+  guidance_type?: 'msm' | 'gsm';
+  risk_rule?: RiskRule;
   mesh_risks: Record<string, number>;
   mesh_coords: Record<string, { lat: number; lon: number }>;
 }

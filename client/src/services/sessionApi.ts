@@ -152,6 +152,8 @@ class SessionAPIClient {
       session_id: RecalculateResponse['session_id'];
       adjusted: RecalculateResponse['adjusted'];
       ft: RecalculateResponse['ft'];
+      guidance_type?: RecalculateResponse['guidance_type'];
+      risk_rule?: RecalculateResponse['risk_rule'];
       mesh_risks: RecalculateResponse['mesh_risks'];
       mesh_coords: RecalculateResponse['mesh_coords'];
     }>(
@@ -173,6 +175,8 @@ class SessionAPIClient {
       session_id: response.data.session_id,
       adjusted: response.data.adjusted,
       ft: response.data.ft,
+      guidance_type: response.data.guidance_type,
+      risk_rule: response.data.risk_rule,
       mesh_risks: response.data.mesh_risks,
       mesh_coords: response.data.mesh_coords,
     };

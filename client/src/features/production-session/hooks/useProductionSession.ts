@@ -222,5 +222,6 @@ export const useProductionSession = ({
     setSelectedPrefecture,
     setSelectedTime,
     setSessionId,
+    setSessionInfo,
   };
 };
