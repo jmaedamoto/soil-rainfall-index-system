@@ -1,6 +1,17 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { sessionApiClient } from '../services/sessionApi';
-import { TimeSeriesPoint, Prefecture } from '../types/api';
+import type { RiskRule, TimeSeriesPoint } from '../types/api';
+import type { AdjustmentMode, CellSelection, InputMode, RainfallViewMode } from '../features/rainfall-adjustment/types';
+import {
+  buildRainfallAdjustments,
+  cloneRainfallMap,
+  countModifiedCells,
+  getAdjustmentModeLabel,
+  getAllowedAdjustmentModes,
+  getDefaultAdjustmentMode,
+  getCellKey,
+  groupRainfallByPrefecture,
+} from '../features/rainfall-adjustment/utils';
 
 interface RainfallAdjustmentModalSessionProps {
   isOpen: boolean;
@@ -8,13 +19,19 @@ interface RainfallAdjustmentModalSessionProps {
   sessionId: string;
   swiInitial: string;
   guidanceInitial: string;
+  guidanceType?: 'msm' | 'gsm';
+  riskRule?: RiskRule;
+  prefectureDetails?: Array<{ code: string; name: string }>;
   dataSource: 'test' | 'production';
-  onSessionRecalculated: (sessionId: string, meshRisks: Record<string, number>, meshCoords: Record<string, { lat: number; lon: number }>) => void;
-}
-
-interface CellSelection {
-  areaName: string;
-  ft: number;
+  onSessionRecalculated: (
+    sessionId: string,
+    meshRisks: Record<string, number>,
+    meshCoords: Record<string, { lat: number; lon: number }>,
+    metadata?: {
+      guidanceType?: 'msm' | 'gsm';
+      riskRule?: RiskRule;
+    }
+  ) => void;
 }
 
 const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionProps> = ({
@@ -23,6 +40,9 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
   sessionId,
   swiInitial,
   guidanceInitial,
+  guidanceType = 'msm',
+  riskRule,
+  prefectureDetails = [],
   dataSource,
   onSessionRecalculated
 }) => {
@@ -30,11 +50,20 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
   const [adjustedRainfall, setAdjustedRainfall] = useState<Record<string, TimeSeriesPoint[]>>({});
   const [originalSubdivisionRainfall, setOriginalSubdivisionRainfall] = useState<Record<string, TimeSeriesPoint[]>>({});
   const [adjustedSubdivisionRainfall, setAdjustedSubdivisionRainfall] = useState<Record<string, TimeSeriesPoint[]>>({});
+  const [originalRainfall24Hour, setOriginalRainfall24Hour] = useState<Record<string, TimeSeriesPoint[]>>({});
+  const [adjustedRainfall24Hour, setAdjustedRainfall24Hour] = useState<Record<string, TimeSeriesPoint[]>>({});
+  const [originalSubdivisionRainfall24Hour, setOriginalSubdivisionRainfall24Hour] = useState<Record<string, TimeSeriesPoint[]>>({});
+  const [adjustedSubdivisionRainfall24Hour, setAdjustedSubdivisionRainfall24Hour] = useState<Record<string, TimeSeriesPoint[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<'loading' | 'editing' | 'calculating'>('loading');
   const [selectedPrefecture, setSelectedPrefecture] = useState<string>('');
-  const [viewMode, setViewMode] = useState<'municipality' | 'subdivision'>('municipality');
+  const [prefectureOrder, setPrefectureOrder] = useState<string[]>([]);
+  const [areaOrders, setAreaOrders] = useState<Record<string, string[]>>({});
+  const [subdivisionOrders, setSubdivisionOrders] = useState<Record<string, string[]>>({});
+  const [viewMode, setViewMode] = useState<RainfallViewMode>('municipality');
+  const [inputMode, setInputMode] = useState<InputMode>('3hour');
+  const [adjustmentMode, setAdjustmentMode] = useState<AdjustmentMode>('ratio_3hour');
 
   // セル選択状態
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
@@ -45,40 +74,21 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
   // 府県別にグループ化（市町村）
   const rainfallByPrefecture = useMemo(() => {
-    const grouped: Record<string, Record<string, TimeSeriesPoint[]>> = {};
-
-    Object.entries(adjustedRainfall).forEach(([areaName, timeseries]) => {
-      const parts = areaName.split('_');
-      if (parts.length >= 2) {
-        const prefName = parts[0];
-        if (!grouped[prefName]) {
-          grouped[prefName] = {};
-        }
-        grouped[prefName][areaName] = timeseries;
-      }
-    });
-
-    return grouped;
+    return groupRainfallByPrefecture(adjustedRainfall);
   }, [adjustedRainfall]);
 
   // 府県別にグループ化（二次細分）
   const subdivisionRainfallByPrefecture = useMemo(() => {
-    const grouped: Record<string, Record<string, TimeSeriesPoint[]>> = {};
-    Object.entries(adjustedSubdivisionRainfall).forEach(([subdivName, timeseries]) => {
-      const parts = subdivName.split('_');
-      if (parts.length >= 2) {
-        const prefName = parts[0];
-        if (!grouped[prefName]) {
-          grouped[prefName] = {};
-        }
-        grouped[prefName][subdivName] = timeseries;
-      }
-    });
-    return grouped;
+    return groupRainfallByPrefecture(adjustedSubdivisionRainfall);
   }, [adjustedSubdivisionRainfall]);
 
-  // セルキーを生成
-  const getCellKey = (areaName: string, ft: number) => `${areaName}:${ft}`;
+  const rainfall24HourByPrefecture = useMemo(() => {
+    return groupRainfallByPrefecture(adjustedRainfall24Hour);
+  }, [adjustedRainfall24Hour]);
+
+  const subdivisionRainfall24HourByPrefecture = useMemo(() => {
+    return groupRainfallByPrefecture(adjustedSubdivisionRainfall24Hour);
+  }, [adjustedSubdivisionRainfall24Hour]);
 
   // モーダルが開かれたときの初期化
   useEffect(() => {
@@ -86,8 +96,64 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
       setStep('loading');
       setSelectedCells(new Set());
       setError(null);
+      setInputMode('3hour');
+      setAdjustmentMode('ratio_3hour');
     }
   }, [isOpen]);
+
+  const currentAdjustedMap = useMemo(() => {
+    if (inputMode === '24hour') {
+      return viewMode === 'municipality' ? adjustedRainfall24Hour : adjustedSubdivisionRainfall24Hour;
+    }
+    return viewMode === 'municipality' ? adjustedRainfall : adjustedSubdivisionRainfall;
+  }, [inputMode, viewMode, adjustedRainfall24Hour, adjustedSubdivisionRainfall24Hour, adjustedRainfall, adjustedSubdivisionRainfall]);
+
+  const currentOriginalMap = useMemo(() => {
+    if (inputMode === '24hour') {
+      return viewMode === 'municipality' ? originalRainfall24Hour : originalSubdivisionRainfall24Hour;
+    }
+    return viewMode === 'municipality' ? originalRainfall : originalSubdivisionRainfall;
+  }, [inputMode, viewMode, originalRainfall24Hour, originalSubdivisionRainfall24Hour, originalRainfall, originalSubdivisionRainfall]);
+
+  const currentGroupedMap = useMemo(() => {
+    if (inputMode === '24hour') {
+      return viewMode === 'municipality'
+        ? rainfall24HourByPrefecture
+        : subdivisionRainfall24HourByPrefecture;
+    }
+    return viewMode === 'municipality'
+      ? rainfallByPrefecture
+      : subdivisionRainfallByPrefecture;
+  }, [inputMode, viewMode, rainfall24HourByPrefecture, subdivisionRainfall24HourByPrefecture, rainfallByPrefecture, subdivisionRainfallByPrefecture]);
+
+  const currentDisplayOrder = useMemo(() => {
+    const currentData = currentGroupedMap[selectedPrefecture] || {};
+    const preferredOrder = (
+      viewMode === 'municipality'
+        ? areaOrders[selectedPrefecture]
+        : subdivisionOrders[selectedPrefecture]
+    ) || [];
+    const currentKeys = Object.keys(currentData);
+    const currentKeySet = new Set(currentKeys);
+    const orderedKeys = preferredOrder.filter((key) => currentKeySet.has(key));
+    const remainingKeys = currentKeys.filter((key) => !orderedKeys.includes(key));
+    return [...orderedKeys, ...remainingKeys];
+  }, [areaOrders, currentGroupedMap, selectedPrefecture, subdivisionOrders, viewMode]);
+
+  const availablePrefectures = useMemo(() => {
+    const currentPrefectureNames = Object.keys(currentGroupedMap);
+    if (prefectureOrder.length === 0) {
+      return currentPrefectureNames;
+    }
+
+    const currentPrefectureSet = new Set(currentPrefectureNames);
+    const orderedPrefectures = prefectureOrder.filter((prefName) => currentPrefectureSet.has(prefName));
+    const remainingPrefectures = currentPrefectureNames.filter(
+      (prefName) => !prefectureOrder.includes(prefName)
+    );
+
+    return [...orderedPrefectures, ...remainingPrefectures];
+  }, [currentGroupedMap, prefectureOrder]);
 
   // セルが選択されているか判定
   const isCellSelected = (areaName: string, ft: number) => {
@@ -138,17 +204,15 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
   // 範囲選択
   const selectRange = (start: CellSelection, end: CellSelection) => {
-    const currentData = viewMode === 'municipality'
-      ? rainfallByPrefecture[selectedPrefecture] || {}
-      : subdivisionRainfallByPrefecture[selectedPrefecture] || {};
+    const currentData = currentGroupedMap[selectedPrefecture] || {};
 
-    const areaNames = Object.keys(currentData);
+    const areaNames = currentDisplayOrder;
     const startAreaIndex = areaNames.indexOf(start.areaName);
     const endAreaIndex = areaNames.indexOf(end.areaName);
 
     if (startAreaIndex === -1 || endAreaIndex === -1) return;
 
-    const firstTimeseries = Object.values(currentData)[0];
+    const firstTimeseries = areaNames.length > 0 ? currentData[areaNames[0]] : undefined;
     if (!firstTimeseries || firstTimeseries.length === 0) return;
 
     const ftValues = firstTimeseries.map(p => p.ft);
@@ -182,34 +246,32 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
     const intValue = Math.round(value);
 
-    if (viewMode === 'municipality') {
-      setAdjustedRainfall(prev => {
-        const updated = { ...prev };
-        selectedCells.forEach(cellKey => {
-          const [areaName, ftStr] = cellKey.split(':');
-          const ft = parseInt(ftStr);
-          if (updated[areaName]) {
-            updated[areaName] = updated[areaName].map(point =>
-              point.ft === ft ? { ...point, value: intValue } : point
-            );
-          }
-        });
-        return updated;
+    const applyEdit = (prev: Record<string, TimeSeriesPoint[]>) => {
+      const updated = { ...prev };
+      selectedCells.forEach(cellKey => {
+        const [areaName, ftStr] = cellKey.split(':');
+        const ft = parseInt(ftStr);
+        if (updated[areaName]) {
+          updated[areaName] = updated[areaName].map(point =>
+            point.ft === ft ? { ...point, value: intValue } : point
+          );
+        }
       });
+      return updated;
+    };
+
+    if (inputMode === '24hour') {
+      if (viewMode === 'municipality') {
+        setAdjustedRainfall24Hour(applyEdit);
+      } else {
+        setAdjustedSubdivisionRainfall24Hour(applyEdit);
+      }
     } else {
-      setAdjustedSubdivisionRainfall(prev => {
-        const updated = { ...prev };
-        selectedCells.forEach(cellKey => {
-          const [areaName, ftStr] = cellKey.split(':');
-          const ft = parseInt(ftStr);
-          if (updated[areaName]) {
-            updated[areaName] = updated[areaName].map(point =>
-              point.ft === ft ? { ...point, value: intValue } : point
-            );
-          }
-        });
-        return updated;
-      });
+      if (viewMode === 'municipality') {
+        setAdjustedRainfall(applyEdit);
+      } else {
+        setAdjustedSubdivisionRainfall(applyEdit);
+      }
     }
 
     setShowBulkEdit(false);
@@ -224,37 +286,46 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
     const intValue = Math.round(numValue);
 
-    if (viewMode === 'municipality') {
-      setAdjustedRainfall(prev => {
-        const updated = { ...prev };
-        const areaData = updated[areaName];
-        if (areaData) {
-          updated[areaName] = areaData.map(point =>
-            point.ft === ft ? { ...point, value: intValue } : point
-          );
-        }
-        return updated;
-      });
+    const applyEdit = (prev: Record<string, TimeSeriesPoint[]>) => {
+      const updated = { ...prev };
+      const areaData = updated[areaName];
+      if (areaData) {
+        updated[areaName] = areaData.map(point =>
+          point.ft === ft ? { ...point, value: intValue } : point
+        );
+      }
+      return updated;
+    };
+
+    if (inputMode === '24hour') {
+      if (viewMode === 'municipality') {
+        setAdjustedRainfall24Hour(applyEdit);
+      } else {
+        setAdjustedSubdivisionRainfall24Hour(applyEdit);
+      }
     } else {
-      setAdjustedSubdivisionRainfall(prev => {
-        const updated = { ...prev };
-        const subdivData = updated[areaName];
-        if (subdivData) {
-          updated[areaName] = subdivData.map(point =>
-            point.ft === ft ? { ...point, value: intValue } : point
-          );
-        }
-        return updated;
-      });
+      if (viewMode === 'municipality') {
+        setAdjustedRainfall(applyEdit);
+      } else {
+        setAdjustedSubdivisionRainfall(applyEdit);
+      }
     }
   };
 
   // 元に戻す
   const resetToOriginal = () => {
-    if (viewMode === 'municipality') {
-      setAdjustedRainfall(JSON.parse(JSON.stringify(originalRainfall)));
+    if (inputMode === '24hour') {
+      if (viewMode === 'municipality') {
+        setAdjustedRainfall24Hour(cloneRainfallMap(originalRainfall24Hour));
+      } else {
+        setAdjustedSubdivisionRainfall24Hour(cloneRainfallMap(originalSubdivisionRainfall24Hour));
+      }
     } else {
-      setAdjustedSubdivisionRainfall(JSON.parse(JSON.stringify(originalSubdivisionRainfall)));
+      if (viewMode === 'municipality') {
+        setAdjustedRainfall(cloneRainfallMap(originalRainfall));
+      } else {
+        setAdjustedSubdivisionRainfall(cloneRainfallMap(originalSubdivisionRainfall));
+      }
     }
     setSelectedCells(new Set());
   };
@@ -269,16 +340,44 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
         try {
           const data = await sessionApiClient.getRainfallData(sessionId);
 
+          const orderedPrefectureNames = prefectureDetails.map(
+            (prefecture) => prefecture.name
+          );
+          setPrefectureOrder(orderedPrefectureNames);
+
           // area_rainfallとsubdivision_rainfallを直接使用
           setOriginalRainfall(data.area_rainfall);
-          setAdjustedRainfall(JSON.parse(JSON.stringify(data.area_rainfall)));
+          setAdjustedRainfall(cloneRainfallMap(data.area_rainfall));
           setOriginalSubdivisionRainfall(data.subdivision_rainfall);
-          setAdjustedSubdivisionRainfall(JSON.parse(JSON.stringify(data.subdivision_rainfall)));
+          setAdjustedSubdivisionRainfall(cloneRainfallMap(data.subdivision_rainfall));
+          setAreaOrders(data.area_orders ?? {});
+          setSubdivisionOrders(data.subdivision_orders ?? {});
+          setOriginalRainfall24Hour(cloneRainfallMap(data.area_rainfall_24hour ?? {}));
+          setAdjustedRainfall24Hour(cloneRainfallMap(data.area_rainfall_24hour ?? {}));
+          setOriginalSubdivisionRainfall24Hour(cloneRainfallMap(data.subdivision_rainfall_24hour ?? {}));
+          setAdjustedSubdivisionRainfall24Hour(cloneRainfallMap(data.subdivision_rainfall_24hour ?? {}));
+          const nextInputMode = data.input_mode ?? '3hour';
+          setInputMode(nextInputMode);
+          const nextAdjustmentMode = data.adjustment_mode ?? getDefaultAdjustmentMode(nextInputMode);
+          setAdjustmentMode(
+            getAllowedAdjustmentModes(nextInputMode).includes(nextAdjustmentMode)
+              ? nextAdjustmentMode
+              : getDefaultAdjustmentMode(nextInputMode)
+          );
 
           // 最初の府県を選択
-          const allAreas = Object.keys(data.area_rainfall);
-          if (allAreas.length > 0) {
-            const firstPrefName = allAreas[0].split('_')[0];
+          const allPrefecturesFromRainfall = Array.from(new Set(
+            Object.keys(data.area_rainfall).map((areaName) => areaName.split('_')[0])
+          ));
+          const orderedAvailablePrefectures = orderedPrefectureNames.filter(
+            (prefName) => allPrefecturesFromRainfall.includes(prefName)
+          );
+
+          if (orderedAvailablePrefectures.length > 0) {
+            const firstPrefName = orderedAvailablePrefectures[0];
+            setSelectedPrefecture(firstPrefName);
+          } else if (allPrefecturesFromRainfall.length > 0) {
+            const firstPrefName = allPrefecturesFromRainfall[0];
             setSelectedPrefecture(firstPrefName);
           }
 
@@ -292,7 +391,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
       fetchRainfallData();
     }
-  }, [isOpen, step, sessionId]);
+  }, [isOpen, step, sessionId, prefectureDetails]);
 
   // 再計算実行（セッションベース）
   const handleRecalculate = async () => {
@@ -300,41 +399,45 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
     setError(null);
 
     try {
-      const currentRainfall = viewMode === 'municipality' ? adjustedRainfall : adjustedSubdivisionRainfall;
-      const originalData = viewMode === 'municipality' ? originalRainfall : originalSubdivisionRainfall;
-
-      // 変更があったエリアのみを抽出して送信（パフォーマンス最適化）
-      const adjustments: Record<string, Array<{ ft: number; value: number }>> = {};
-      Object.entries(currentRainfall).forEach(([areaName, timeseries]) => {
-        const originalTimeseries = originalData[areaName];
-        if (originalTimeseries) {
-          // このエリアに変更があるかチェック
-          const hasChange = timeseries.some((point, index) =>
-            Math.abs(point.value - originalTimeseries[index].value) > 0.01
-          );
-          if (hasChange) {
-            adjustments[areaName] = timeseries;
-          }
-        }
-      });
+      const adjustments = inputMode === '3hour'
+        ? buildRainfallAdjustments(currentOriginalMap, currentAdjustedMap)
+        : {};
+      const aggregateAdjustments = inputMode === '24hour'
+        ? buildRainfallAdjustments(currentOriginalMap, currentAdjustedMap)
+        : {};
 
       // 変更がない場合は何もせずに閉じる
-      if (Object.keys(adjustments).length === 0) {
+      if (Object.keys(adjustments).length === 0 && Object.keys(aggregateAdjustments).length === 0) {
         onClose();
         return;
       }
+
+      console.log(`[Recalculate] Sending ${Object.keys(inputMode === '24hour' ? aggregateAdjustments : adjustments).length} modified areas`);
 
       // セッションベースAPI呼び出し
       const result = await sessionApiClient.recalculateWithAdjustedRainfall(
         sessionId,
         adjustments,
+        aggregateAdjustments,
+        inputMode,
+        adjustmentMode,
         swiInitial,
         guidanceInitial,
-        dataSource
+        dataSource,
+        guidanceType,
+        riskRule
       );
 
       // 軽量レスポンス（meshRisksとmeshCoords）を親コンポーネントに返す
-      onSessionRecalculated(result.session_id, result.mesh_risks, result.mesh_coords);
+      onSessionRecalculated(
+        result.session_id,
+        result.mesh_risks,
+        result.mesh_coords,
+        {
+          guidanceType: result.guidance_type,
+          riskRule: result.risk_rule,
+        }
+      );
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : '再計算に失敗しました');
@@ -344,43 +447,15 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
   // 修正数カウント
   const totalModifiedCount = useMemo(() => {
-    const originalData = viewMode === 'municipality' ? originalRainfall : originalSubdivisionRainfall;
-    const adjustedData = viewMode === 'municipality' ? adjustedRainfall : adjustedSubdivisionRainfall;
+    return countModifiedCells(currentOriginalMap, currentAdjustedMap);
+  }, [currentOriginalMap, currentAdjustedMap]);
 
-    let count = 0;
-    Object.entries(adjustedData).forEach(([areaName, timeseries]) => {
-      const originalTimeseries = originalData[areaName];
-      if (originalTimeseries) {
-        timeseries.forEach((point, index) => {
-          if (Math.abs(point.value - originalTimeseries[index].value) > 0.01) {
-            count++;
-          }
-        });
-      }
-    });
-    return count;
-  }, [viewMode, originalRainfall, adjustedRainfall, originalSubdivisionRainfall, adjustedSubdivisionRainfall]);
-
-  const currentPrefectureData = viewMode === 'municipality'
-    ? rainfallByPrefecture[selectedPrefecture] || {}
-    : subdivisionRainfallByPrefecture[selectedPrefecture] || {};
+  const currentPrefectureData = currentGroupedMap[selectedPrefecture] || {};
 
   const modifiedCountInPrefecture = useMemo(() => {
-    const originalData = viewMode === 'municipality' ? originalRainfall : originalSubdivisionRainfall;
-
-    let count = 0;
-    Object.entries(currentPrefectureData).forEach(([areaName, timeseries]) => {
-      const originalTimeseries = originalData[areaName];
-      if (originalTimeseries) {
-        timeseries.forEach((point, index) => {
-          if (Math.abs(point.value - originalTimeseries[index].value) > 0.01) {
-            count++;
-          }
-        });
-      }
-    });
-    return count;
-  }, [currentPrefectureData, viewMode, originalRainfall, originalSubdivisionRainfall]);
+    const originalPrefectureData = groupRainfallByPrefecture(currentOriginalMap)[selectedPrefecture] || {};
+    return countModifiedCells(originalPrefectureData, currentPrefectureData);
+  }, [currentOriginalMap, currentPrefectureData, selectedPrefecture]);
 
   if (!isOpen) return null;
 
@@ -453,6 +528,64 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
         {step === 'editing' && (
           <>
             <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <label style={{ fontWeight: 'bold' }}>入力単位:</label>
+                <button
+                  onClick={() => {
+                    setInputMode('3hour');
+                    setAdjustmentMode(getDefaultAdjustmentMode('3hour'));
+                    setSelectedCells(new Set());
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: inputMode === '3hour' ? '#1976D2' : '#f5f5f5',
+                    color: inputMode === '3hour' ? 'white' : 'black',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  3時間ごと
+                </button>
+                <button
+                  onClick={() => {
+                    setInputMode('24hour');
+                    setAdjustmentMode(getDefaultAdjustmentMode('24hour'));
+                    setSelectedCells(new Set());
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: inputMode === '24hour' ? '#1976D2' : '#f5f5f5',
+                    color: inputMode === '24hour' ? 'white' : 'black',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  24時間合計
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <label style={{ fontWeight: 'bold' }}>調整方式:</label>
+                {getAllowedAdjustmentModes(inputMode).map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setAdjustmentMode(mode)}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: adjustmentMode === mode ? '#1976D2' : '#f5f5f5',
+                      color: adjustmentMode === mode ? 'white' : 'black',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {getAdjustmentModeLabel(mode)}
+                  </button>
+                ))}
+              </div>
+
               {/* 表示モード切り替え */}
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                 <label style={{ fontWeight: 'bold' }}>表示:</label>
@@ -497,7 +630,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                     fontSize: '14px'
                   }}
                 >
-                  {Object.keys(viewMode === 'municipality' ? rainfallByPrefecture : subdivisionRainfallByPrefecture).map(prefName => (
+                  {availablePrefectures.map(prefName => (
                     <option key={prefName} value={prefName}>{prefName}</option>
                   ))}
                 </select>
@@ -629,7 +762,13 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
             }}>
               <div>
                 <span style={{ marginRight: '20px' }}>
-                  表示中: {selectedPrefecture} - 全{Object.keys(currentPrefectureData).length}{viewMode === 'municipality' ? '市町村' : '二次細分'}
+                  入力単位: {inputMode === '24hour' ? '24時間合計' : '3時間ごと'}
+                </span>
+                <span style={{ marginRight: '20px' }}>
+                  調整方式: {getAdjustmentModeLabel(adjustmentMode)}
+                </span>
+                <span style={{ marginRight: '20px' }}>
+                  表示中: {selectedPrefecture} - 全{currentDisplayOrder.length}{viewMode === 'municipality' ? '市町村' : '二次細分'}
                 </span>
                 <span style={{ marginRight: '20px' }}>
                   現在の府県の修正数: {modifiedCountInPrefecture}セル
@@ -682,8 +821,8 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                     }}>
                       {viewMode === 'municipality' ? '市町村名' : '二次細分名'}
                     </th>
-                    {Object.keys(currentPrefectureData).length > 0 &&
-                      currentPrefectureData[Object.keys(currentPrefectureData)[0]]?.map(point => (
+                    {currentDisplayOrder.length > 0 &&
+                      currentPrefectureData[currentDisplayOrder[0]]?.map(point => (
                         <th key={point.ft} style={{
                           padding: '10px 8px',
                           borderRight: '1px solid #fff',
@@ -691,13 +830,19 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                           fontWeight: 'bold',
                           minWidth: '80px'
                         }}>
-                          FT{point.ft}
+                          {inputMode === '24hour'
+                            ? (point.ft === 24 ? '初期+24h' : point.ft === 48 ? '初期+48h' : `FT${point.ft}`)
+                            : `FT${point.ft}`}
                         </th>
                       ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(currentPrefectureData).map(([areaName, timeseries]) => {
+                  {currentDisplayOrder.map((areaName) => {
+                    const timeseries = currentPrefectureData[areaName];
+                    if (!timeseries) {
+                      return null;
+                    }
                     const originalData = viewMode === 'municipality' ? originalRainfall : originalSubdivisionRainfall;
                     return (
                       <tr key={areaName} style={{ borderBottom: '1px solid #eee' }}>
@@ -774,6 +919,9 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
             }}>
               <strong>操作方法:</strong>
               クリック=単一選択 | ドラッグ=範囲選択 | Ctrl+クリック=複数選択 | Shift+クリック=範囲拡張
+              {inputMode === '24hour' && (
+                <> | 24時間合計は初期+24h と 初期+48h の2区間を編集</>
+              )}
             </div>
 
             {/* ボタン */}

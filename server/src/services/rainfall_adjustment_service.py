@@ -3,7 +3,7 @@
 雨量調整サービス
 ユーザーが入力した雨量調整値に基づいてガイダンスデータを調整
 """
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Optional
 import logging
 import copy
 
@@ -14,6 +14,256 @@ logger = logging.getLogger(__name__)
 
 class RainfallAdjustmentService:
     """雨量調整サービス"""
+
+    WINDOW_24H_MAP: Dict[int, Tuple[int, ...]] = {
+        24: (3, 6, 9, 12, 15, 18, 21, 24),
+        48: (27, 30, 33, 36, 39, 42, 45, 48),
+    }
+
+    def calculate_mesh_ratios_from_session(
+        self,
+        prefectures_dict: Dict[str, Any],
+        area_adjustments: Dict[str, Dict[int, float]]
+    ) -> Dict[str, Dict[int, float]]:
+        """
+        セッション辞書形式データから、メッシュごとの調整比率を計算する。
+
+        Args:
+            prefectures_dict: session['prefectures'] 形式の辞書
+            area_adjustments: {"府県名_市町村名": {ft: value}}
+
+        Returns:
+            {"mesh_code": {ft: ratio}}
+        """
+        logger.info("セッション辞書からメッシュごとの調整比率を計算開始")
+
+        mesh_to_areas: Dict[str, List[str]] = {}
+        area_original_max: Dict[str, Dict[int, float]] = {}
+        for pref_dict in prefectures_dict.values():
+            pref_name = pref_dict["name"]
+            for area_dict in pref_dict.get("areas", []):
+                area_key = f"{pref_name}_{area_dict['name']}"
+                ft_max_values: Dict[int, float] = {}
+                for mesh_dict in area_dict.get("meshes", []):
+                    mesh_code = mesh_dict.get("code")
+                    if not mesh_code:
+                        continue
+                    mesh_to_areas.setdefault(mesh_code, []).append(area_key)
+                    for point in mesh_dict.get("rain_timeline", []):
+                        ft = int(point["ft"])
+                        value = float(point["value"])
+                        if ft not in ft_max_values or value > ft_max_values[ft]:
+                            ft_max_values[ft] = value
+
+                area_original_max[area_key] = ft_max_values
+
+        mesh_ratios: Dict[str, Dict[int, float]] = {}
+
+        for mesh_code, area_keys in mesh_to_areas.items():
+            ft_ratios_list: Dict[int, List[float]] = {}
+
+            for area_key in area_keys:
+                adjustments = area_adjustments.get(area_key)
+                if not adjustments:
+                    continue
+
+                for ft, adjusted_value in adjustments.items():
+                    ft_int = int(ft)
+                    original_max = area_original_max.get(area_key, {}).get(ft_int, 0.0)
+
+                    if original_max > 0:
+                        ratio = adjusted_value / original_max
+                    else:
+                        if adjusted_value > 0:
+                            logger.warning(
+                                "雨量調整をスキップ: original_max=0, area=%s, ft=%s, adjusted_value=%s",
+                                area_key,
+                                ft_int,
+                                adjusted_value,
+                            )
+                        ratio = 1.0
+
+                    ft_ratios_list.setdefault(ft_int, []).append(ratio)
+
+            if ft_ratios_list:
+                mesh_ratios[mesh_code] = {
+                    ft: max(ratios) if ratios else 1.0
+                    for ft, ratios in ft_ratios_list.items()
+                }
+
+        logger.info("セッション辞書からの調整比率計算完了: %sメッシュ", len(mesh_ratios))
+        return mesh_ratios
+
+    def build_adjusted_mesh_rainfall_from_session(
+        self,
+        prefectures_dict: Dict[str, Any],
+        mesh_ratios: Dict[str, Dict[int, float]]
+    ) -> Dict[str, List[Tuple[int, float]]]:
+        """
+        セッション辞書形式データから、比率適用後のメッシュ別3時間雨量を作成する。
+
+        Args:
+            prefectures_dict: session['prefectures'] 形式の辞書
+            mesh_ratios: {"mesh_code": {ft: ratio}}
+
+        Returns:
+            {"mesh_code": [(ft, adjusted_value), ...]}
+        """
+        adjusted_mesh_rainfall: Dict[str, List[Tuple[int, float]]] = {}
+
+        for pref_dict in prefectures_dict.values():
+            for area_dict in pref_dict.get("areas", []):
+                for mesh_dict in area_dict.get("meshes", []):
+                    mesh_code = mesh_dict.get("code")
+                    if mesh_code not in mesh_ratios:
+                        continue
+
+                    ratios = mesh_ratios[mesh_code]
+                    adjusted_mesh_rainfall[mesh_code] = [
+                        (
+                            int(point["ft"]),
+                            float(point["value"]) * ratios.get(int(point["ft"]), 1.0)
+                        )
+                        for point in mesh_dict.get("rain_timeline", [])
+                    ]
+
+        logger.info("比率適用後のメッシュ雨量生成完了: %sメッシュ", len(adjusted_mesh_rainfall))
+        return adjusted_mesh_rainfall
+
+    def build_filled_mesh_rainfall_from_session(
+        self,
+        prefectures_dict: Dict[str, Any],
+        area_adjustments: Dict[str, Dict[int, float]]
+    ) -> Dict[str, List[Tuple[int, float]]]:
+        """
+        セッション辞書形式データから、領域内を入力値で塗りつぶしたメッシュ別3時間雨量を作成する。
+
+        同じ mesh_code に複数領域の指示がかかった場合は、FT ごとに最大値を採用する。
+        """
+        logger.info("セッション辞書から塗りつぶし後のメッシュ雨量生成開始")
+
+        adjusted_mesh_rainfall: Dict[str, Dict[int, float]] = {}
+
+        for pref_dict in prefectures_dict.values():
+            pref_name = pref_dict["name"]
+            for area_dict in pref_dict.get("areas", []):
+                area_key = f"{pref_name}_{area_dict['name']}"
+                adjustments = area_adjustments.get(area_key)
+                if not adjustments:
+                    continue
+
+                for mesh_dict in area_dict.get("meshes", []):
+                    mesh_code = mesh_dict.get("code")
+                    if not mesh_code:
+                        continue
+
+                    current_values = {
+                        int(point["ft"]): float(point["value"])
+                        for point in mesh_dict.get("rain_timeline", [])
+                    }
+
+                    for ft, filled_value in adjustments.items():
+                        ft_int = int(ft)
+                        if ft_int not in current_values:
+                            continue
+                        if mesh_code not in adjusted_mesh_rainfall:
+                            adjusted_mesh_rainfall[mesh_code] = dict(current_values)
+                        adjusted_mesh_rainfall[mesh_code][ft_int] = max(
+                            adjusted_mesh_rainfall[mesh_code].get(ft_int, current_values[ft_int]),
+                            float(filled_value)
+                        )
+
+        filled_mesh_rainfall = {
+            mesh_code: [(ft, value) for ft, value in sorted(ft_values.items())]
+            for mesh_code, ft_values in adjusted_mesh_rainfall.items()
+        }
+
+        logger.info("塗りつぶし後のメッシュ雨量生成完了: %sメッシュ", len(filled_mesh_rainfall))
+        return filled_mesh_rainfall
+
+    def aggregate_rainfall_24hour_from_session(
+        self,
+        prefectures_dict: Dict[str, Any]
+    ) -> Tuple[Dict[str, List[Dict[str, float]]], Dict[str, List[Dict[str, float]]]]:
+        """
+        セッション辞書形式データから、市町村別・二次細分別の24時間代表雨量を集計する。
+
+        各領域では、各メッシュの24時間合計を求めたうえで最大値を代表値とする。
+        """
+        area_rainfall_24hour: Dict[str, List[Dict[str, float]]] = {}
+        subdivision_rainfall_24hour: Dict[str, List[Dict[str, float]]] = {}
+
+        for pref_dict in prefectures_dict.values():
+            pref_name = pref_dict["name"]
+
+            for area_dict in pref_dict.get("areas", []):
+                area_key = f"{pref_name}_{area_dict['name']}"
+                area_rainfall_24hour[area_key] = self._build_aggregate_timeline_for_meshes(
+                    area_dict.get("meshes", [])
+                )
+
+            for subdiv_dict in pref_dict.get("secondary_subdivisions", []):
+                subdiv_key = f"{pref_name}_{subdiv_dict['name']}"
+                meshes = self._collect_subdivision_meshes(pref_dict, subdiv_dict.get("area_names", []))
+                subdivision_rainfall_24hour[subdiv_key] = self._build_aggregate_timeline_for_meshes(meshes)
+
+        return area_rainfall_24hour, subdivision_rainfall_24hour
+
+    def build_fill_24hour_uniform_from_session(
+        self,
+        prefectures_dict: Dict[str, Any],
+        area_adjustments: Dict[str, Dict[int, float]]
+    ) -> Dict[str, List[Tuple[int, float]]]:
+        """
+        24時間入力値を8区間に均等按分し、対象領域を塗りつぶす。
+        """
+        return self._build_24hour_adjusted_mesh_rainfall(
+            prefectures_dict,
+            area_adjustments,
+            strategy='fill_uniform'
+        )
+
+    def build_ratio_24hour_uniform_from_session(
+        self,
+        prefectures_dict: Dict[str, Any],
+        area_adjustments: Dict[str, Dict[int, float]]
+    ) -> Dict[str, List[Tuple[int, float]]]:
+        """
+        24時間入力値を8区間に均等按分し、各FTで比率補正する。
+        """
+        return self._build_24hour_adjusted_mesh_rainfall(
+            prefectures_dict,
+            area_adjustments,
+            strategy='ratio_uniform'
+        )
+
+    def build_ratio_24hour_peak_mesh_from_session(
+        self,
+        prefectures_dict: Dict[str, Any],
+        area_adjustments: Dict[str, Dict[int, float]]
+    ) -> Dict[str, List[Tuple[int, float]]]:
+        """
+        領域内の24時間合計最大メッシュを基準に、24時間入力値へ比率補正する。
+        """
+        return self._build_24hour_adjusted_mesh_rainfall(
+            prefectures_dict,
+            area_adjustments,
+            strategy='ratio_peak_mesh'
+        )
+
+    def build_fill_24hour_peak_mesh_from_session(
+        self,
+        prefectures_dict: Dict[str, Any],
+        area_adjustments: Dict[str, Dict[int, float]]
+    ) -> Dict[str, List[Tuple[int, float]]]:
+        """
+        領域内の24時間合計最大メッシュの時間分布を使い、24時間入力値で領域を塗りつぶす。
+        """
+        return self._build_24hour_adjusted_mesh_rainfall(
+            prefectures_dict,
+            area_adjustments,
+            strategy='fill_peak_mesh'
+        )
 
     def extract_area_rainfall_timeseries(
         self,
@@ -334,6 +584,301 @@ class RainfallAdjustmentService:
         # prefecturesからメッシュを再取得して調整する方が確実
 
         logger.info("ガイダンスデータへの比率適用完了")
+
+    def _get_area_original_max_from_session(
+        self,
+        prefectures_dict: Dict[str, Any],
+        area_key: str,
+        ft: int
+    ) -> float:
+        """
+        セッション辞書形式データから、市町村の特定FTにおける元の最大3時間雨量を取得する。
+        """
+        pref_name, area_name = area_key.split('_', 1)
+
+        for pref_dict in prefectures_dict.values():
+            if pref_dict.get("name") != pref_name:
+                continue
+
+            for area_dict in pref_dict.get("areas", []):
+                if area_dict.get("name") != area_name:
+                    continue
+
+                max_value = 0.0
+                for mesh_dict in area_dict.get("meshes", []):
+                    for rain_point in mesh_dict.get("rain_timeline", []):
+                        if int(rain_point["ft"]) == ft:
+                            max_value = max(max_value, float(rain_point["value"]))
+
+                return max_value
+
+        return 0.0
+
+    def _build_aggregate_timeline_for_meshes(
+        self,
+        meshes: List[Dict[str, Any]]
+    ) -> List[Dict[str, float]]:
+        timeline: List[Dict[str, float]] = []
+
+        for window_end_ft, window_fts in self.WINDOW_24H_MAP.items():
+            max_value = 0.0
+            for mesh_dict in meshes:
+                total = self._sum_mesh_values_for_fts(mesh_dict, window_fts)
+                max_value = max(max_value, total)
+            timeline.append({"ft": window_end_ft, "value": round(max_value)})
+
+        return timeline
+
+    def _collect_subdivision_meshes(
+        self,
+        pref_dict: Dict[str, Any],
+        area_names: List[str]
+    ) -> List[Dict[str, Any]]:
+        meshes: List[Dict[str, Any]] = []
+        for area_name in area_names:
+            area_dict = next((a for a in pref_dict.get("areas", []) if a.get("name") == area_name), None)
+            if area_dict:
+                meshes.extend(area_dict.get("meshes", []))
+        return meshes
+
+    def _build_24hour_adjusted_mesh_rainfall(
+        self,
+        prefectures_dict: Dict[str, Any],
+        area_adjustments: Dict[str, Dict[int, float]],
+        strategy: str
+    ) -> Dict[str, List[Tuple[int, float]]]:
+        adjusted_mesh_rainfall: Dict[str, Dict[int, float]] = {}
+
+        for pref_dict in prefectures_dict.values():
+            pref_name = pref_dict["name"]
+            for area_dict in pref_dict.get("areas", []):
+                area_key = f"{pref_name}_{area_dict['name']}"
+                adjustments = area_adjustments.get(area_key)
+                if not adjustments:
+                    continue
+
+                if strategy == 'fill_uniform':
+                    self._apply_fill_24hour_uniform(area_dict.get("meshes", []), adjustments, adjusted_mesh_rainfall)
+                elif strategy == 'ratio_uniform':
+                    self._apply_ratio_24hour_uniform(area_dict.get("meshes", []), adjustments, adjusted_mesh_rainfall)
+                elif strategy == 'fill_peak_mesh':
+                    self._apply_fill_24hour_peak_mesh(area_key, area_dict.get("meshes", []), adjustments, adjusted_mesh_rainfall)
+                elif strategy == 'ratio_peak_mesh':
+                    self._apply_ratio_24hour_peak_mesh(area_key, area_dict.get("meshes", []), adjustments, adjusted_mesh_rainfall)
+
+        return {
+            mesh_code: [(ft, value) for ft, value in sorted(ft_values.items())]
+            for mesh_code, ft_values in adjusted_mesh_rainfall.items()
+        }
+
+    def _apply_fill_24hour_uniform(
+        self,
+        meshes: List[Dict[str, Any]],
+        adjustments: Dict[int, float],
+        adjusted_mesh_rainfall: Dict[str, Dict[int, float]]
+    ) -> None:
+        for mesh_dict in meshes:
+            mesh_code = mesh_dict.get("code")
+            if not mesh_code:
+                continue
+            current_values = self._mesh_timeline_to_dict(mesh_dict)
+
+            for window_end_ft, target_24h in adjustments.items():
+                window_fts = self._available_window_fts(current_values, int(window_end_ft))
+                if not window_fts:
+                    continue
+                per_ft_value = float(target_24h) / len(window_fts)
+                target_values = {ft: per_ft_value for ft in window_fts}
+                self._merge_mesh_values(mesh_code, current_values, target_values, adjusted_mesh_rainfall)
+
+    def _apply_ratio_24hour_uniform(
+        self,
+        meshes: List[Dict[str, Any]],
+        adjustments: Dict[int, float],
+        adjusted_mesh_rainfall: Dict[str, Dict[int, float]]
+    ) -> None:
+        original_max_by_ft = self._build_original_max_by_ft(meshes)
+
+        for mesh_dict in meshes:
+            mesh_code = mesh_dict.get("code")
+            if not mesh_code:
+                continue
+            current_values = self._mesh_timeline_to_dict(mesh_dict)
+            target_values: Dict[int, float] = {}
+
+            for window_end_ft, target_24h in adjustments.items():
+                window_fts = self._available_window_fts(current_values, int(window_end_ft))
+                if not window_fts:
+                    continue
+                per_ft_value = float(target_24h) / len(window_fts)
+
+                for ft in window_fts:
+                    original_max = original_max_by_ft.get(ft, 0.0)
+                    if original_max > 0:
+                        ratio = per_ft_value / original_max
+                        target_values[ft] = current_values[ft] * ratio
+                    else:
+                        if per_ft_value > 0:
+                            logger.warning(
+                                "24時間均等比率補正をスキップ: original_max=0, ft=%s, adjusted_value=%s",
+                                ft,
+                                per_ft_value,
+                            )
+                        target_values[ft] = current_values[ft]
+
+            self._merge_mesh_values(mesh_code, current_values, target_values, adjusted_mesh_rainfall)
+
+    def _apply_ratio_24hour_peak_mesh(
+        self,
+        area_key: str,
+        meshes: List[Dict[str, Any]],
+        adjustments: Dict[int, float],
+        adjusted_mesh_rainfall: Dict[str, Dict[int, float]]
+    ) -> None:
+        mesh_timelines = self._build_mesh_timelines(meshes)
+
+        for window_end_ft, target_24h in adjustments.items():
+            peak_window = self._resolve_peak_mesh_window(area_key, mesh_timelines, int(window_end_ft), target_24h)
+            if peak_window is None:
+                continue
+
+            _, peak_sum, mesh_sums, _ = peak_window
+
+            for mesh_code, timeline_dict in mesh_timelines.items():
+                window_fts = self._available_window_fts(timeline_dict, int(window_end_ft))
+                if not window_fts:
+                    continue
+
+                mesh_sum = mesh_sums.get(mesh_code, 0.0)
+                if mesh_sum <= 0:
+                    target_values = {ft: timeline_dict[ft] for ft in window_fts}
+                else:
+                    mesh_target_sum = float(target_24h) * (mesh_sum / peak_sum)
+                    target_values = {
+                        ft: mesh_target_sum * (timeline_dict[ft] / mesh_sum)
+                        for ft in window_fts
+                    }
+
+                self._merge_mesh_values(mesh_code, timeline_dict, target_values, adjusted_mesh_rainfall)
+
+    def _apply_fill_24hour_peak_mesh(
+        self,
+        area_key: str,
+        meshes: List[Dict[str, Any]],
+        adjustments: Dict[int, float],
+        adjusted_mesh_rainfall: Dict[str, Dict[int, float]]
+    ) -> None:
+        mesh_timelines = self._build_mesh_timelines(meshes)
+
+        for window_end_ft, target_24h in adjustments.items():
+            peak_window = self._resolve_peak_mesh_window(area_key, mesh_timelines, int(window_end_ft), target_24h)
+            if peak_window is None:
+                continue
+
+            _, _, _, peak_profile = peak_window
+            target_values = {
+                ft: float(target_24h) * ratio
+                for ft, ratio in peak_profile.items()
+            }
+
+            for mesh_code, timeline_dict in mesh_timelines.items():
+                window_fts = self._available_window_fts(timeline_dict, int(window_end_ft))
+                if not window_fts:
+                    continue
+
+                filled_values = {
+                    ft: target_values[ft]
+                    for ft in window_fts
+                    if ft in target_values
+                }
+                self._merge_mesh_values(mesh_code, timeline_dict, filled_values, adjusted_mesh_rainfall)
+
+    def _build_mesh_timelines(self, meshes: List[Dict[str, Any]]) -> Dict[str, Dict[int, float]]:
+        return {
+            mesh_dict.get("code"): self._mesh_timeline_to_dict(mesh_dict)
+            for mesh_dict in meshes
+            if mesh_dict.get("code")
+        }
+
+    def _resolve_peak_mesh_window(
+        self,
+        area_key: str,
+        mesh_timelines: Dict[str, Dict[int, float]],
+        window_end_ft: int,
+        target_24h: float
+    ) -> Optional[Tuple[str, float, Dict[str, float], Dict[int, float]]]:
+        if window_end_ft not in self.WINDOW_24H_MAP:
+            return None
+
+        peak_mesh_code = None
+        peak_sum = 0.0
+        mesh_sums: Dict[str, float] = {}
+        peak_profile: Dict[int, float] = {}
+
+        for mesh_code, timeline_dict in mesh_timelines.items():
+            window_fts = self._available_window_fts(timeline_dict, window_end_ft)
+            mesh_sum = sum(timeline_dict.get(ft, 0.0) for ft in window_fts)
+            mesh_sums[mesh_code] = mesh_sum
+            if mesh_sum > peak_sum:
+                peak_sum = mesh_sum
+                peak_mesh_code = mesh_code
+                peak_profile = {
+                    ft: (timeline_dict.get(ft, 0.0) / mesh_sum) if mesh_sum > 0 else 0.0
+                    for ft in window_fts
+                }
+
+        if peak_sum <= 0 or peak_mesh_code is None:
+            if float(target_24h) > 0:
+                logger.warning(
+                    "24時間最大格子補正をスキップ: original_sum_24h=0, area=%s, window_end_ft=%s, adjusted_value=%s",
+                    area_key,
+                    window_end_ft,
+                    target_24h,
+                )
+            return None
+
+        return peak_mesh_code, peak_sum, mesh_sums, peak_profile
+
+    def _build_original_max_by_ft(self, meshes: List[Dict[str, Any]]) -> Dict[int, float]:
+        original_max_by_ft: Dict[int, float] = {}
+        for mesh_dict in meshes:
+            for point in mesh_dict.get("rain_timeline", []):
+                ft = int(point["ft"])
+                value = float(point["value"])
+                if ft not in original_max_by_ft or value > original_max_by_ft[ft]:
+                    original_max_by_ft[ft] = value
+        return original_max_by_ft
+
+    def _mesh_timeline_to_dict(self, mesh_dict: Dict[str, Any]) -> Dict[int, float]:
+        return {
+            int(point["ft"]): float(point["value"])
+            for point in mesh_dict.get("rain_timeline", [])
+        }
+
+    def _available_window_fts(self, timeline_dict: Dict[int, float], window_end_ft: int) -> List[int]:
+        return [ft for ft in self.WINDOW_24H_MAP.get(window_end_ft, ()) if ft in timeline_dict]
+
+    def _sum_mesh_values_for_fts(self, mesh_dict: Dict[str, Any], fts: Tuple[int, ...]) -> float:
+        timeline_dict = self._mesh_timeline_to_dict(mesh_dict)
+        return sum(timeline_dict.get(ft, 0.0) for ft in fts)
+
+    def _merge_mesh_values(
+        self,
+        mesh_code: str,
+        current_values: Dict[int, float],
+        target_values: Dict[int, float],
+        adjusted_mesh_rainfall: Dict[str, Dict[int, float]]
+    ) -> None:
+        if not target_values:
+            return
+        if mesh_code not in adjusted_mesh_rainfall:
+            adjusted_mesh_rainfall[mesh_code] = dict(current_values)
+
+        for ft, value in target_values.items():
+            adjusted_mesh_rainfall[mesh_code][ft] = max(
+                adjusted_mesh_rainfall[mesh_code].get(ft, current_values.get(ft, 0.0)),
+                float(value)
+            )
 
     def adjust_mesh_rainfall_by_ratios(
         self,

@@ -1,261 +1,105 @@
 import React, { useState, useEffect } from 'react';
-import { apiClient_ } from '../services/api';
 import { sessionApiClient } from '../services/sessionApi';
 import SoilRainfallMap from '../components/map/SoilRainfallMap';
 import AreaRiskBarChart from '../components/charts/AreaRiskBarChart';
-import CacheInfo from '../components/CacheInfo';
 import RainfallAdjustmentModalSession from '../components/RainfallAdjustmentModalSession';
-import { LightweightPrefectureData, LightweightCalculationResult, Prefecture as PrefectureType } from '../types/api';
+import type { Prefecture as PrefectureType } from '../types/api';
+import {
+  buildIsoStringFromJst,
+  getDefaultJstSelection,
+  getGuidanceHourOptions,
+  MSM_HOUR_OPTIONS,
+} from '../features/production-session/utils/dateTime';
+import {
+  useProductionSession,
+} from '../features/production-session/hooks/useProductionSession';
+import type { RiskRule } from '../types/api';
 
 const ProductionSession: React.FC = () => {
-  // セッション情報
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [sessionInfo, setSessionInfo] = useState<LightweightCalculationResult | null>(null);
-
-  // 府県データ（危険度時系列のみ、オンデマンド読み込み）
-  const [prefectureRiskData, setPrefectureRiskData] = useState<Record<string, LightweightPrefectureData>>({});
-
-  // 地図表示用の時刻別リスク値（全メッシュ）
-  const [meshRisksAtTime, setMeshRisksAtTime] = useState<Record<string, number>>({});
-  const [meshCoords, setMeshCoords] = useState<Record<string, { lat: number; lon: number }>>({});
-
-  const [loading, setLoading] = useState(false);
-  const [loadingPrefecture, setLoadingPrefecture] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedTime, setSelectedTime] = useState(0);
-  const [selectedPrefecture, setSelectedPrefecture] = useState<string>('');
-  const [_isTimeChanging, setIsTimeChanging] = useState(false);
-  const [isAdjustedData, setIsAdjustedData] = useState(false);
-
-  // SWIとガイダンスの初期時刻を個別に管理
-  const [swiInitialTime, setSwiInitialTime] = useState<string>('');
-  const [guidanceInitialTime, setGuidanceInitialTime] = useState<string>('');
-
-  // 雨量調整モーダルの状態
   const [isRainfallModalOpen, setIsRainfallModalOpen] = useState(false);
-
-  // 時刻オプション（3時間刻み: 0, 3, 6, 9, 12, 15, 18, 21時）
-  const timeHourOptions = [0, 3, 6, 9, 12, 15, 18, 21];
-
-  // 日付と時刻を個別に管理（JST）
   const [swiDate, setSwiDate] = useState<string>('');
   const [swiHour, setSwiHour] = useState<number>(0);
   const [guidanceDate, setGuidanceDate] = useState<string>('');
   const [guidanceHour, setGuidanceHour] = useState<number>(0);
+  const [swiInitialTime, setSwiInitialTime] = useState<string>('');
+  const [guidanceInitialTime, setGuidanceInitialTime] = useState<string>('');
+  const [guidanceType, setGuidanceType] = useState<'msm' | 'gsm'>('msm');
+  const [riskRule, setRiskRule] = useState<RiskRule>('legacy');
 
-  // 日付と時刻からISO文字列（UTC）を生成
-  const buildIsoString = (date: string, hour: number): string => {
-    if (!date) return '';
-    // 入力はJSTなので、UTCに変換（-9時間）
-    const jstDate = new Date(`${date}T${hour.toString().padStart(2, '0')}:00:00+09:00`);
-    return jstDate.toISOString();
-  };
+  const {
+    error,
+    handlePrefectureChange,
+    handleTimeChange,
+    isAdjustedData,
+    loadAllPrefectures,
+    loadData,
+    loadRiskAtTime,
+    loading,
+    loadingPrefecture,
+    meshCoords,
+    meshRisksAtTime,
+    prefectureRiskData,
+    selectedPrefecture,
+    selectedTime,
+    sessionId,
+    sessionInfo,
+    setIsAdjustedData,
+    setPrefectureRiskData,
+    setSessionInfo,
+    setSessionId,
+  } = useProductionSession({
+    swiInitialTime,
+    guidanceInitialTime,
+    guidanceType,
+    riskRule,
+  });
 
   // 日付・時刻変更時にISO文字列を更新
   useEffect(() => {
-    const iso = buildIsoString(swiDate, swiHour);
+    const iso = buildIsoStringFromJst(swiDate, swiHour);
     if (iso) setSwiInitialTime(iso);
   }, [swiDate, swiHour]);
 
   useEffect(() => {
-    const iso = buildIsoString(guidanceDate, guidanceHour);
+    const iso = buildIsoStringFromJst(guidanceDate, guidanceHour);
     if (iso) setGuidanceInitialTime(iso);
   }, [guidanceDate, guidanceHour]);
 
   useEffect(() => {
-    // デフォルトの日付・時刻を設定
-    // 気象庁のGRIB2ファイルはデータ時刻から約3時間後に作成されるため、
-    // 現在時刻から3時間前の直近3時間刻みをデフォルトに設定
-    const now = new Date();
-    // JSTに変換し、3時間前に戻す
-    const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000 - 3 * 60 * 60 * 1000);
-    const year = jstNow.getUTCFullYear();
-    const month = (jstNow.getUTCMonth() + 1).toString().padStart(2, '0');
-    const day = jstNow.getUTCDate().toString().padStart(2, '0');
-    const hour = Math.floor(jstNow.getUTCHours() / 3) * 3;
-
-    const defaultDate = `${year}-${month}-${day}`;
-    setSwiDate(defaultDate);
-    setSwiHour(hour);
-    setGuidanceDate(defaultDate);
-    setGuidanceHour(hour);
+    const defaultSelection = getDefaultJstSelection();
+    setSwiDate(defaultSelection.date);
+    setSwiHour(defaultSelection.hour);
+    setGuidanceDate(defaultSelection.date);
+    setGuidanceHour(defaultSelection.hour);
   }, []);
 
-  const loadData = async () => {
-    if (!swiInitialTime || !guidanceInitialTime) {
-      setError('初期時刻を選択してください');
-      return;
-    }
+  useEffect(() => {
+    const guidanceOptions = getGuidanceHourOptions(guidanceType);
 
-    try {
-      setLoading(true);
-      setError(null);
-      setIsAdjustedData(false); // 新規読み込みなので調整済みフラグをクリア
-      setMeshCoords({}); // 座標キャッシュをクリア（新しいセッションで再取得）
-
-      // セッションベースAPIを呼び出し（軽量レスポンス）
-      const result = await apiClient_.calculateProductionSoilRainfallIndexWithUrls({
-        swi_initial: swiInitialTime,
-        guidance_initial: guidanceInitialTime
-      });
-
-      setSessionInfo(result);
-      setSessionId(result.session_id);
-
-      // セッションAPIを使用してデータを読み込み
-      // デフォルトで最初の都道府県を選択
-      if (result.available_prefectures.length > 0) {
-        const firstPrefCode = result.available_prefectures[0];
-        setSelectedPrefecture(firstPrefCode);
-        // 最初の府県データを読み込み
-        await loadPrefectureData(result.session_id, firstPrefCode);
+    if (!guidanceOptions.includes(guidanceHour)) {
+      const defaultSelection = getDefaultJstSelection(guidanceType);
+      setGuidanceHour(defaultSelection.hour);
+      if (!guidanceDate) {
+        setGuidanceDate(defaultSelection.date);
       }
-
-      // 初期時刻のメッシュリスク値を読み込み
-      if (result.available_times.length > 0) {
-        const initialTime = result.available_times[0];
-        setSelectedTime(initialTime);
-        await loadRiskAtTime(result.session_id, initialTime);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '予期しないエラーが発生しました');
-    } finally {
-      setLoading(false);
     }
-  };
-
-  const loadRiskAtTime = async (session: string, ft: number) => {
-    // セッションAPIを使用して指定時刻のリスク値を取得
-    try {
-      // 座標が未取得の場合のみ座標を含める（初回のみ）
-      // 座標は固定データなので、2回目以降は転送を省略してデータ量を50%削減
-      const needCoords = Object.keys(meshCoords).length === 0;
-
-      const response = await sessionApiClient.getRiskAtTime(session, ft, { includeCoords: needCoords });
-
-      if (response.status === 'success') {
-        setMeshRisksAtTime(response.mesh_risks);
-
-        // 座標は初回のみ更新
-        if (needCoords && response.mesh_coords) {
-          setMeshCoords(response.mesh_coords);
-        }
-      }
-    } catch {
-      // エラー時は静かに失敗（UIにはローディング状態で表示）
-    }
-  };
-
-  const loadPrefectureData = async (session: string, prefectureCode: string) => {
-    // 既に読み込み済みの場合はスキップ
-    if (prefectureRiskData[prefectureCode]) {
-      return;
-    }
-
-    try {
-      setLoadingPrefecture(prefectureCode);
-      const response = await sessionApiClient.getPrefectureData(session, prefectureCode);
-
-      if (response.status === 'success') {
-        setPrefectureRiskData(prev => ({
-          ...prev,
-          [prefectureCode]: response.prefecture
-        }));
-      }
-    } catch {
-      // エラー時はスキップ
-    } finally {
-      setLoadingPrefecture(null);
-    }
-  };
-
-  // 府県選択時のハンドラ
-  const handlePrefectureChange = async (prefCode: string) => {
-    setSelectedPrefecture(prefCode);
-    if (sessionId) {
-      await loadPrefectureData(sessionId, prefCode);
-    }
-  };
-
-  // 全府県データを読み込む（全府県一覧モード用）
-  const loadAllPrefectures = async () => {
-    if (!sessionId || !sessionInfo) return;
-
-    // 未読み込みの府県を特定
-    const unloadedPrefectures = sessionInfo.available_prefectures.filter(
-      code => !prefectureRiskData[code]
-    );
-
-    if (unloadedPrefectures.length === 0) {
-      return; // すべて読み込み済み
-    }
-
-    // 並列で読み込み
-    try {
-      const promises = unloadedPrefectures.map(prefCode =>
-        sessionApiClient.getPrefectureData(sessionId, prefCode)
-      );
-
-      const results = await Promise.all(promises);
-
-      // 結果を統合
-      const newData: Record<string, LightweightPrefectureData> = { ...prefectureRiskData };
-      results.forEach((response, index) => {
-        if (response.status === 'success') {
-          newData[unloadedPrefectures[index]] = response.prefecture;
-        }
-      });
-
-      setPrefectureRiskData(newData);
-    } catch (err) {
-      console.error('全府県データ読み込みエラー:', err);
-    }
-  };
-
-  // 日時フォーマット関数（JST表示）
-  const formatDateTime = (isoString: string) => {
-    const date = new Date(isoString);
-    const jstDate = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-    return `${jstDate.getUTCFullYear()}年${jstDate.getUTCMonth() + 1}月${jstDate.getUTCDate()}日 ${jstDate.getUTCHours()}時 (JST)`;
-  };
-
-  const handleTimeChange = async (newTime: number) => {
-    // 同じ時刻が選択された場合は何もしない
-    if (newTime === selectedTime) {
-      return;
-    }
-
-    // ローディング状態を即座に設定
-    setIsTimeChanging(true);
-
-    try {
-      // 状態更新
-      setSelectedTime(newTime);
-
-      // セッションIDがあれば、新しい時刻のメッシュリスク値を読み込み
-      if (sessionId) {
-        await loadRiskAtTime(sessionId, newTime);
-      }
-    } finally {
-      // ローディング解除
-      requestAnimationFrame(() => {
-        setTimeout(() => setIsTimeChanging(false), 50);
-      });
-    }
-  };
+  }, [guidanceDate, guidanceHour, guidanceType]);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (!sessionInfo) return;
-    const maxFt = Math.max(...sessionInfo.available_times);
+    const availableTimes = sessionInfo.available_times;
+    if (availableTimes.length === 0) return;
 
-    if (e.key === 'ArrowLeft' && selectedTime > 0) {
-      handleTimeChange(selectedTime - 3);
-    } else if (e.key === 'ArrowRight' && selectedTime < maxFt) {
-      handleTimeChange(selectedTime + 3);
+    const currentIndex = availableTimes.indexOf(selectedTime);
+    if (currentIndex === -1) return;
+
+    if (e.key === 'ArrowLeft' && currentIndex > 0) {
+      handleTimeChange(availableTimes[currentIndex - 1]);
+    } else if (e.key === 'ArrowRight' && currentIndex < availableTimes.length - 1) {
+      handleTimeChange(availableTimes[currentIndex + 1]);
     }
   };
-
-  const _availableTimes = sessionInfo?.available_times || [];
+  const guidanceHourOptions = getGuidanceHourOptions(guidanceType);
 
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
@@ -308,6 +152,70 @@ const ProductionSession: React.FC = () => {
           最新時刻を選択するとエラーになる場合があります。
         </div>
 
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+            危険度ルール
+          </label>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input
+                type="radio"
+                name="riskRule"
+                value="legacy"
+                checked={riskRule === 'legacy'}
+                onChange={() => setRiskRule('legacy')}
+              />
+              従来ルール
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input
+                type="radio"
+                name="riskRule"
+                value="lead_time_to_level4"
+                checked={riskRule === 'lead_time_to_level4'}
+                onChange={() => setRiskRule('lead_time_to_level4')}
+              />
+              レベル4先行ルール
+            </label>
+          </div>
+          <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
+            レベル4に最初に到達する2時間前以降をレベル3、6時間前以降をレベル2として扱います。
+          </div>
+        </div>
+
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+            ガイダンス種別
+          </label>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input
+                type="radio"
+                name="guidanceType"
+                value="msm"
+                checked={guidanceType === 'msm'}
+                onChange={() => setGuidanceType('msm')}
+              />
+              MSM
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input
+                type="radio"
+                name="guidanceType"
+                value="gsm"
+                checked={guidanceType === 'gsm'}
+                onChange={() => setGuidanceType('gsm')}
+              />
+              GSM
+            </label>
+          </div>
+          <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
+            {guidanceType === 'gsm'
+              ? 'GSM は JST では 03, 09, 15, 21 時を選択できます。'
+              : 'MSM は 3 時間ごとの初期時刻を選択できます。'}
+          </div>
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
           {/* SWI初期時刻選択 */}
           <div>
@@ -327,7 +235,7 @@ const ProductionSession: React.FC = () => {
                 onChange={(e) => setSwiHour(Number(e.target.value))}
                 style={{ flex: 1, padding: '8px', fontSize: '14px' }}
               >
-                {timeHourOptions.map(hour => (
+                {MSM_HOUR_OPTIONS.map(hour => (
                   <option key={hour} value={hour}>
                     {hour.toString().padStart(2, '0')}:00
                   </option>
@@ -359,7 +267,7 @@ const ProductionSession: React.FC = () => {
                 onChange={(e) => setGuidanceHour(Number(e.target.value))}
                 style={{ flex: 1, padding: '8px', fontSize: '14px' }}
               >
-                {timeHourOptions.map(hour => (
+                {guidanceHourOptions.map(hour => (
                   <option key={hour} value={hour}>
                     {hour.toString().padStart(2, '0')}:00
                   </option>
@@ -438,11 +346,6 @@ const ProductionSession: React.FC = () => {
         )}
       </div>
 
-      {/* キャッシュ情報 */}
-      {sessionInfo?.cache_info && (
-        <CacheInfo cacheInfo={sessionInfo.cache_info} />
-      )}
-
       {/* データ表示エリア */}
       {sessionInfo && (
         <div style={{ marginTop: '30px' }}>
@@ -456,7 +359,7 @@ const ProductionSession: React.FC = () => {
             >
               {sessionInfo.available_prefectures.map(code => (
                 <option key={code} value={code}>
-                  {code}
+                  {sessionInfo.available_prefecture_details?.find((pref) => pref.code === code)?.name || code}
                   {loadingPrefecture === code && ' (読み込み中...)'}
                   {prefectureRiskData[code] && ' ✓'}
                 </option>
@@ -484,17 +387,13 @@ const ProductionSession: React.FC = () => {
               <div style={{ marginTop: '30px' }}>
                 <AreaRiskBarChart
                   prefectures={Object.values(prefectureRiskData).filter(p => p !== undefined) as PrefectureType[]}
-                  availablePrefectures={sessionInfo.available_prefectures.map(code => {
-                    const nameMap: Record<string, string> = {
-                      'shiga': '滋賀県',
-                      'kyoto': '京都府',
-                      'osaka': '大阪府',
-                      'hyogo': '兵庫県',
-                      'nara': '奈良県',
-                      'wakayama': '和歌山県'
-                    };
-                    return { code, name: nameMap[code] || code };
-                  })}
+                  availablePrefectures={
+                    sessionInfo.available_prefecture_details ||
+                    sessionInfo.available_prefectures.map(code => ({
+                      code,
+                      name: code,
+                    }))
+                  }
                   selectedPrefecture={selectedPrefecture}
                   selectedTime={selectedTime}
                   onPrefectureChange={handlePrefectureChange}
@@ -520,11 +419,20 @@ const ProductionSession: React.FC = () => {
           sessionId={sessionId}
           swiInitial={swiInitialTime}
           guidanceInitial={guidanceInitialTime}
-          dataSource="test"
-          onSessionRecalculated={async (newSessionId, _meshRisks, _newMeshCoords) => {
+          guidanceType={sessionInfo.guidance_type ?? guidanceType}
+          riskRule={sessionInfo.risk_rule ?? riskRule}
+          prefectureDetails={sessionInfo.available_prefecture_details}
+          dataSource="production"
+          onSessionRecalculated={async (newSessionId, _meshRisks, _newMeshCoords, metadata) => {
             // フォークセッションIDに切り替え（以降の時刻変更で編集済みデータを取得するため）
             setSessionId(newSessionId);
             setIsAdjustedData(true);
+            setSessionInfo((prev) => prev ? ({
+              ...prev,
+              session_id: newSessionId,
+              guidance_type: metadata?.guidanceType ?? prev.guidance_type,
+              risk_rule: metadata?.riskRule ?? prev.risk_rule,
+            }) : prev);
             // 府県リスクデータキャッシュをクリア（ベースセッションのデータが古いため）
             setPrefectureRiskData({});
 
@@ -542,8 +450,8 @@ const ProductionSession: React.FC = () => {
                     [selectedPrefecture]: response.prefecture
                   }));
                 }
-              } catch {
-              // エラー時はスキップ
+              } catch (err) {
+                console.error('府県データ再読み込みエラー:', err);
               }
             }
           }}

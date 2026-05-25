@@ -1,11 +1,12 @@
 import axios from 'axios';
-import { HealthStatus, LightweightCalculationResult } from '../types/api';
+import { HealthStatus } from '../types/api';
+import type { LightweightCalculationResult } from '../types/session';
 import { API_BASE_URL } from '../config/apiConfig';
 
 // Axiosインスタンスの作成
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 300000, // 300秒（5分）タイムアウト
+  timeout: 600000, // 600秒（10分）タイムアウト
   headers: {
     'Content-Type': 'application/json',
   },
@@ -41,11 +42,13 @@ export class SoilRainfallAPIClient {
   /**
    * 本番用土壌雨量指数計算（SWIとガイダンスの初期時刻を個別指定）
    * セッションベースAPIを使用し、軽量レスポンスを返す
-   * リモートダウンロード失敗時はサーバー側でローカルbinファイルにフォールバック
+   * ローカルbin使用の有無はサーバー設定で制御される
    */
   async calculateProductionSoilRainfallIndexWithUrls(params: {
     swi_initial: string;
     guidance_initial: string;
+    guidance_type?: 'msm' | 'gsm';
+    risk_rule?: 'legacy' | 'lead_time_to_level4';
   }): Promise<LightweightCalculationResult> {
     const response = await apiClient.post<LightweightCalculationResult>(
       '/production-soil-rainfall-index-with-urls',

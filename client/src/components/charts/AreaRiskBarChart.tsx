@@ -41,6 +41,8 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
   type DisplayRow = {
     name: string;
     risk_timeline: Array<{ ft: number; value: number }>;
+    swi_timeline?: Array<{ ft: number; value: number }>;
+    rain_3hour_timeline?: Array<{ ft: number; value: number }>;
   };
 
   const displayData = useMemo((): { rows: DisplayRow[], dateGroups: Array<{ date: string; hours: Array<{ ft: number; hour: number }> }> } => {
@@ -58,7 +60,9 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
       if (selectedPref) {
         rows = selectedPref.areas.map(area => ({
           name: area.name,
-          risk_timeline: area.risk_timeline
+          risk_timeline: area.risk_timeline,
+          swi_timeline: area.swi_timeline,
+          rain_3hour_timeline: area.rain_3hour_timeline,
         }));
         selectedPref.areas.forEach(area => {
           area.risk_timeline.forEach(point => timeSet.add(point.ft));
@@ -70,7 +74,9 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
       if (selectedPref && selectedPref.secondary_subdivisions) {
         rows = selectedPref.secondary_subdivisions.map(subdiv => ({
           name: subdiv.name,
-          risk_timeline: subdiv.risk_timeline
+          risk_timeline: subdiv.risk_timeline,
+          swi_timeline: subdiv.swi_timeline,
+          rain_3hour_timeline: subdiv.rain_3hour_timeline,
         }));
         selectedPref.secondary_subdivisions.forEach(subdiv => {
           subdiv.risk_timeline.forEach(point => timeSet.add(point.ft));
@@ -80,7 +86,9 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
       // 全府県一覧表示
       rows = prefectures.map(pref => ({
         name: pref.name,
-        risk_timeline: pref.prefecture_risk_timeline || []
+        risk_timeline: pref.prefecture_risk_timeline || [],
+        swi_timeline: pref.swi_timeline,
+        rain_3hour_timeline: pref.rain_3hour_timeline,
       }));
       prefectures.forEach(pref => {
         if (pref.prefecture_risk_timeline) {
@@ -113,6 +121,9 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
 
     return { rows, dateGroups };
   }, [prefectures, selectedPrefecture, viewMode, initialTime]);
+
+  const getCellTextColor = (riskLevel: number) =>
+    riskLevel >= RiskLevel.WARNING ? '#FFFFFF' : '#111111';
 
   return (
     <div style={{ marginBottom: '30px' }}>
@@ -228,7 +239,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                 border: '2px solid #000',
                 borderRight: '2px solid #000',
                 padding: '4px',
-                width: '100px',
+                width: '160px',
                 textAlign: 'left',
                 fontWeight: 'bold'
               }}>
@@ -302,12 +313,11 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                   padding: '4px',
                   fontWeight: 'bold',
                   fontSize: '12px',
-                  width: '100px',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis'
+                  width: '160px',
+                  verticalAlign: 'top',
+                  lineHeight: 1.35
                 }}>
-                  {row.name}
+                  <div>{row.name}</div>
                 </td>
 
                 {/* 各時刻のセル */}
@@ -315,9 +325,12 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                   dateGroup.hours.map((hourInfo, hourIndex) => {
                     const riskPoint = row.risk_timeline.find(r => r.ft === hourInfo.ft);
                     const riskLevel = riskPoint ? riskPoint.value : 0;
+                    const swiPoint = row.swi_timeline?.find(point => point.ft === hourInfo.ft);
+                    const rainPoint = row.rain_3hour_timeline?.find(point => point.ft === hourInfo.ft);
                     const color = RISK_COLORS[riskLevel as RiskLevel];
                     const isSelected = hourInfo.ft === selectedTime;
                     const isLastRow = rowIndex === displayData.rows.length - 1;
+                    const textColor = getCellTextColor(riskLevel);
 
                     return (
                       <td
@@ -329,9 +342,13 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                           borderRight: isSelected ? '3px solid #FF0000' : '1px solid #000',
                           borderBottom: isSelected && isLastRow ? '3px solid #FF0000' : '1px solid #000',
                           padding: '0',
-                          height: '24px',
+                          height: '44px',
                           cursor: 'pointer',
-                          position: 'relative'
+                          position: 'relative',
+                          color: textColor,
+                          textAlign: 'center',
+                          fontSize: '10px',
+                          lineHeight: 1.2
                         }}
                         onClick={() => {
                           if (onTimeSelect) {
@@ -345,7 +362,12 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                         })}
                         onMouseLeave={() => setHoveredCell(null)}
                       >
-                        {/* 空セル（色のみで表現） */}
+                        <div style={{ fontWeight: 'bold', paddingTop: '2px' }}>
+                          SWI {swiPoint ? Math.round(swiPoint.value) : '-'}
+                        </div>
+                        <div>
+                          3h {rainPoint ? Math.round(rainPoint.value) : '-'}
+                        </div>
                       </td>
                     );
                   })

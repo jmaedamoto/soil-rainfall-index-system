@@ -5,7 +5,7 @@ VBA Module.basの完全再現によるCalculationService
 既存のcalculation_service.pyを完全に置き換え
 """
 
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 import logging
 from datetime import datetime, timedelta
 
@@ -13,6 +13,7 @@ from models import (
     BaseInfo, SwiTimeSeries, GuidanceTimeSeries, Risk,
     Mesh, Area, Prefecture, SecondarySubdivision
 )
+from .calculation_aggregation_service import CalculationAggregationService
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,48 @@ class CalculationService:
     l1, l2, l3, l4 = 15.0, 60.0, 15.0, 15.0
     a1, a2, a3, a4 = 0.1, 0.15, 0.05, 0.01
     b1, b2, b3 = 0.12, 0.05, 0.01
+
+    def __init__(self):
+        self.aggregation_service = CalculationAggregationService()
+
+    @staticmethod
+    def normalize_risk_rule(risk_rule: Optional[str]) -> str:
+        """危険度ルールを正規化する。"""
+        normalized = (risk_rule or "legacy").lower()
+        if normalized not in {"legacy", "lead_time_to_level4"}:
+            raise ValueError(f"Unsupported risk_rule: {risk_rule}")
+        return normalized
+
+    @staticmethod
+    def _normalize_rainfall_index(rain_value: float) -> int:
+        """1時間雨量から level4_curve 参照用インデックスを作る。"""
+        try:
+            rainfall_index = int(round(float(rain_value)))
+        except (TypeError, ValueError):
+            rainfall_index = 0
+        return max(0, min(150, rainfall_index))
+
+    def get_level4_threshold(
+        self,
+        level4_curve,
+        rain_value: float,
+        fallback_dosyakei_bound: int
+    ) -> Optional[int]:
+        """1時間雨量に対応するレベル4閾値を取得する。"""
+        if level4_curve is None:
+            return fallback_dosyakei_bound
+
+        rainfall_index = self._normalize_rainfall_index(rain_value)
+
+        try:
+            threshold = int(level4_curve[rainfall_index])
+        except (IndexError, TypeError, ValueError):
+            return fallback_dosyakei_bound
+
+        if threshold >= 999:
+            return None
+
+        return threshold
 
     def get_data_num(self, lat: float, lon: float, base_info: Any) -> int:
         """
@@ -215,6 +258,24 @@ class CalculationService:
             logger.error(f"Hourly rain calculation error: {e}")
             return []
 
+    def calc_hourly_rain_uniform(
+        self,
+        rain_3h: List[GuidanceTimeSeries]
+    ) -> List[GuidanceTimeSeries]:
+        """
+        3時間雨量を1時間ごとに均等按分する。
+        """
+        hourly_rain = []
+
+        for rain_item in rain_3h:
+            hourly_value = rain_item.value / 3.0
+            ft_base = rain_item.ft
+            hourly_rain.append(GuidanceTimeSeries(ft=ft_base - 2, value=hourly_value))
+            hourly_rain.append(GuidanceTimeSeries(ft=ft_base - 1, value=hourly_value))
+            hourly_rain.append(GuidanceTimeSeries(ft=ft_base, value=hourly_value))
+
+        return hourly_rain
+
     def calc_swi_hourly(self, initial_swi: float, initial_first_tunk: float,
                         initial_second_tunk: float, initial_third_tunk: float,
                         hourly_rain: List[GuidanceTimeSeries]) -> List[SwiTimeSeries]:
@@ -273,7 +334,10 @@ class CalculationService:
 
     def calc_hourly_risk(self, swi_hourly: List[SwiTimeSeries],
                          advisary_bound: int, warning_bound: int,
-                         dosyakei_bound: int) -> List[Risk]:
+                         dosyakei_bound: int,
+                         rain_hourly: Optional[List[GuidanceTimeSeries]] = None,
+                         level4_curve=None,
+                         risk_rule: str = "legacy") -> List[Risk]:
         """
         1時間ごとの危険度を判定
 
@@ -288,12 +352,23 @@ class CalculationService:
         """
         try:
             risk_hourly = []
+            normalized_risk_rule = self.normalize_risk_rule(risk_rule)
+            rain_by_ft = {
+                int(rain.ft): float(rain.value)
+                for rain in (rain_hourly or [])
+            }
 
             for swi_item in swi_hourly:
                 swi_value = swi_item.value
+                rain_value = rain_by_ft.get(int(swi_item.ft), 0.0)
+                level4_threshold = self.get_level4_threshold(
+                    level4_curve,
+                    rain_value,
+                    dosyakei_bound,
+                )
 
                 # リスクレベル判定（政府ガイドライン準拠: レベル0,2,3,4）
-                if swi_value >= dosyakei_bound:
+                if level4_threshold is not None and swi_value >= level4_threshold:
                     risk = 4  # レベル4: 土砂災害
                 elif swi_value >= warning_bound:
                     risk = 3  # レベル3: 警報
@@ -304,10 +379,56 @@ class CalculationService:
 
                 risk_hourly.append(Risk(ft=swi_item.ft, value=risk))
 
-            return risk_hourly
+            return self.apply_risk_rule_to_hourly(risk_hourly, normalized_risk_rule)
 
         except Exception as e:
             logger.error(f"Hourly risk calculation error: {e}")
+            return []
+
+    def apply_risk_rule_to_hourly(
+        self,
+        risk_hourly: List[Risk],
+        risk_rule: str = "legacy"
+    ) -> List[Risk]:
+        """1時間危険度系列へ危険度ルールを適用する。"""
+        try:
+            normalized_risk_rule = self.normalize_risk_rule(risk_rule)
+
+            if normalized_risk_rule == "legacy" or not risk_hourly:
+                return risk_hourly
+
+            adjusted = [Risk(ft=risk.ft, value=risk.value) for risk in risk_hourly]
+
+            first_level4_index = next(
+                (index for index, risk in enumerate(adjusted) if risk.value >= 4),
+                None,
+            )
+
+            if first_level4_index is None:
+                for risk in adjusted:
+                    if risk.value >= 3:
+                        risk.value = 0
+                return adjusted
+
+            last_level4_index = max(
+                index for index, risk in enumerate(adjusted) if risk.value >= 4
+            )
+            level3_start = max(0, first_level4_index - 3)
+
+            for risk in adjusted:
+                if risk.value == 3:
+                    risk.value = 0
+
+            for index in range(level3_start, first_level4_index):
+                adjusted[index].value = 3
+
+            for index in range(first_level4_index, last_level4_index + 1):
+                adjusted[index].value = 4
+
+            return adjusted
+
+        except Exception as e:
+            logger.error(f"Risk rule application error: {e}")
             return []
 
     def calc_3hour_max_risk_from_hourly(self, risk_hourly: List[Risk]) -> List[Risk]:
@@ -387,41 +508,33 @@ class CalculationService:
 
             # guidance_indexは上で既に計算済み
             python_guidance_index = guidance_index - 1
-
-            # VBA: ReDim swi_time_siries(UBound(guidance_grib2.data) + 1)
-            swi_time_series = []
-
-            # VBA: swi_time_siries(1).ft = 0
-            # VBA: swi_time_siries(1).value = swi
-            swi_time_series.append(SwiTimeSeries(ft=0, value=swi))
-
-            # VBA: tmp_f = 0, tmp_s = 0, tmp_t = 0 (VBAでは初期化)
-            # しかし実際には初期タンク値が使用される
-            current_first_tunk = first_tunk
-            current_second_tunk = second_tunk
-            current_third_tunk = third_tunk
-
-            # VBA: For i = 1 To UBound(guidance_grib2.data)
-            for i in range(len(guidance_grib2['data'])):  # Python 0-based
+            rain_3hour = []
+            for i in range(len(guidance_grib2['data'])):
                 guidance_item = guidance_grib2['data'][i]
-
                 if python_guidance_index < len(guidance_item['value']):
-                    # VBA: Call calc_tunk_model(first_tunk, second_tunk, third_tunk, 3, guidance_grib2.data(i).value(guidance_index), tmp_f, tmp_s, tmp_t)
-                    rain_value = guidance_item['value'][python_guidance_index]
-                    tmp_f, tmp_s, tmp_t = self.calc_tunk_model(current_first_tunk, current_second_tunk, current_third_tunk, 3, rain_value)
+                    rain_3hour.append(
+                        GuidanceTimeSeries(
+                            ft=guidance_item['ft'],
+                            value=guidance_item['value'][python_guidance_index],
+                        )
+                    )
 
-                    # VBA: swi_time_siries(i + 1).ft = guidance_grib2.data(i).ft
-                    # VBA: swi_time_siries(i + 1).value = tmp_f + tmp_s + tmp_t
-                    swi_value = tmp_f + tmp_s + tmp_t
-                    swi_time_series.append(SwiTimeSeries(
-                        ft=guidance_item['ft'],
-                        value=swi_value
-                    ))
+            hourly_rain_uniform = self.calc_hourly_rain_uniform(rain_3hour)
+            swi_hourly = self.calc_swi_hourly(
+                swi,
+                first_tunk,
+                second_tunk,
+                third_tunk,
+                hourly_rain_uniform,
+            )
 
-                    # VBA: first_tunk = tmp_f, second_tunk = tmp_s, third_tunk = tmp_t
-                    current_first_tunk = tmp_f
-                    current_second_tunk = tmp_s
-                    current_third_tunk = tmp_t
+            swi_by_ft = {point.ft: point.value for point in swi_hourly}
+            swi_time_series = [SwiTimeSeries(ft=0, value=swi)]
+            for rain_item in rain_3hour:
+                if rain_item.ft in swi_by_ft:
+                    swi_time_series.append(
+                        SwiTimeSeries(ft=rain_item.ft, value=swi_by_ft[rain_item.ft])
+                    )
 
             return swi_time_series
 
@@ -429,7 +542,7 @@ class CalculationService:
             logger.error(f"SWI calculation error for mesh {mesh.code}: {e}")
             return []
 
-    def calc_risk_timeline(self, meshes: List[Mesh]) -> List[Risk]:
+    def calc_risk_timeline(self, meshes: List[Mesh], risk_rule: str = "legacy") -> List[Risk]:
         """
         VBA Function calc_risk_timeline の完全再現
         リスクレベル計算
@@ -461,6 +574,7 @@ class CalculationService:
             logger.info(f"First mesh boundaries: advisory={getattr(first_mesh, 'advisary_bound', 'N/A')}, warning={getattr(first_mesh, 'warning_bound', 'N/A')}, dosyakei={getattr(first_mesh, 'dosyakei_bound', 'N/A')}")
             logger.info(f"First 3 SWI values: {[first_mesh.swi[i].value for i in range(min(3, timeline_length))]}")
 
+            normalized_risk_rule = self.normalize_risk_rule(risk_rule)
             risk_timeline = []
 
             for t in range(timeline_length):
@@ -468,6 +582,13 @@ class CalculationService:
                 max_risk = 0
 
                 for mesh in meshes:
+                    mesh_risk_3hour_max = getattr(mesh, 'risk_3hour_max', None)
+                    if mesh_risk_3hour_max:
+                        matching_point = next((point for point in mesh_risk_3hour_max if point.ft == ft), None)
+                        if matching_point is not None:
+                            max_risk = max(max_risk, matching_point.value)
+                            continue
+
                     if not hasattr(mesh, 'swi') or not mesh.swi:
                         continue
 
@@ -503,7 +624,13 @@ class CalculationService:
             logger.error(f"Risk calculation traceback: {traceback.format_exc()}")
             return []
 
-    def process_mesh_calculations(self, mesh: Mesh, swi_grib2: Dict[str, Any], guidance_grib2: Dict[str, Any]) -> Mesh:
+    def process_mesh_calculations(
+        self,
+        mesh: Mesh,
+        swi_grib2: Dict[str, Any],
+        guidance_grib2: Dict[str, Any],
+        risk_rule: str = "legacy"
+    ) -> Mesh:
         """
         VBA calc_data の一部処理
         単一メッシュの計算を実行（全雨量・SWI・危険度）
@@ -548,7 +675,10 @@ class CalculationService:
                     mesh.swi_hourly,
                     mesh.advisary_bound,
                     mesh.warning_bound,
-                    mesh.dosyakei_bound
+                    mesh.dosyakei_bound,
+                    rain_hourly=mesh.rain_1hour,
+                    level4_curve=getattr(mesh, 'level4_curve', None),
+                    risk_rule=risk_rule,
                 )
 
                 # 3時間ごとの最大危険度計算（1時間雨量ベース）
@@ -560,7 +690,7 @@ class CalculationService:
             logger.error(f"Mesh calculations error: {e}")
             return mesh
 
-    def recalculate_swi_and_risk(self, mesh: Mesh) -> Mesh:
+    def recalculate_swi_and_risk(self, mesh: Mesh, risk_rule: str = "legacy") -> Mesh:
         """
         雨量データは既に調整済みという前提で、SWIと危険度のみ再計算
 
@@ -596,36 +726,30 @@ class CalculationService:
                     mesh.swi_hourly,
                     mesh.advisary_bound,
                     mesh.warning_bound,
-                    mesh.dosyakei_bound
+                    mesh.dosyakei_bound,
+                    rain_hourly=mesh.rain_1hour,
+                    level4_curve=getattr(mesh, 'level4_curve', None),
+                    risk_rule=risk_rule,
                 )
 
                 # 3時間ごとの最大危険度再計算
                 mesh.risk_3hour_max = self.calc_3hour_max_risk_from_hourly(mesh.risk_hourly)
 
-                # 3時間ごとのSWI再計算（rain_3hourを使用）
-                # この場合はタンクモデルを3時間ステップで計算
-                swi_3hour = []
-                swi_3hour.append(SwiTimeSeries(ft=0, value=initial_swi))
-
-                current_first = initial_first_tunk
-                current_second = initial_second_tunk
-                current_third = initial_third_tunk
-
+                hourly_rain_uniform = self.calc_hourly_rain_uniform(mesh.rain_3hour)
+                swi_hourly_uniform = self.calc_swi_hourly(
+                    initial_swi,
+                    initial_first_tunk,
+                    initial_second_tunk,
+                    initial_third_tunk,
+                    hourly_rain_uniform
+                )
+                swi_by_ft = {point.ft: point.value for point in swi_hourly_uniform}
+                mesh.swi = [SwiTimeSeries(ft=0, value=initial_swi)]
                 for rain_point in mesh.rain_3hour:
-                    new_first, new_second, new_third = self.calc_tunk_model(
-                        current_first, current_second, current_third,
-                        3.0,  # 3時間
-                        rain_point.value
-                    )
-
-                    new_swi = new_first + new_second + new_third
-                    swi_3hour.append(SwiTimeSeries(ft=rain_point.ft, value=new_swi))
-
-                    current_first = new_first
-                    current_second = new_second
-                    current_third = new_third
-
-                mesh.swi = swi_3hour
+                    if rain_point.ft in swi_by_ft:
+                        mesh.swi.append(
+                            SwiTimeSeries(ft=rain_point.ft, value=swi_by_ft[rain_point.ft])
+                        )
 
             return mesh
 
@@ -633,7 +757,7 @@ class CalculationService:
             logger.error(f"SWI recalculation error: {e}")
             return mesh
 
-    def process_area_calculations(self, areas: List[Area]) -> None:
+    def process_area_calculations(self, areas: List[Area], risk_rule: str = "legacy") -> None:
         """
         VBA calc_data の一部処理
         各エリアのリスク計算を実行
@@ -641,7 +765,7 @@ class CalculationService:
         try:
             for area in areas:
                 # VBA: prefectures(i).areas(j).risk_timeline = calc_risk_timeline(prefectures(i).areas(j).meshes)
-                area.risk_timeline = self.calc_risk_timeline(area.meshes)
+                area.risk_timeline = self.calc_risk_timeline(area.meshes, risk_rule=risk_rule)
 
         except Exception as e:
             logger.error(f"Area calculations error: {e}")
@@ -671,13 +795,15 @@ class CalculationService:
                 return
 
             # 汎用集約メソッドを使用
-            subdivision.rain_1hour_max_timeline = self._aggregate_timeline(
+            subdivision.rain_1hour_max_timeline = self.aggregation_service.aggregate_timeline(
                 all_meshes, 'rain_1hour_max', GuidanceTimeSeries
             )
-            subdivision.rain_3hour_timeline = self._aggregate_timeline(
+            subdivision.rain_3hour_timeline = self.aggregation_service.aggregate_timeline(
                 all_meshes, 'rain_3hour', GuidanceTimeSeries
             )
-            subdivision.risk_timeline = self._aggregate_area_risk_timeline(subdivision.areas)
+            subdivision.risk_timeline = self.aggregation_service.aggregate_area_risk_timeline(
+                subdivision.areas
+            )
 
         except Exception as e:
             logger.error(f"二次細分集約エラー ({subdivision.name}): {e}")
@@ -699,72 +825,15 @@ class CalculationService:
                 return
 
             # 汎用集約メソッドを使用
-            prefecture.prefecture_rain_1hour_max_timeline = self._aggregate_timeline(
+            prefecture.prefecture_rain_1hour_max_timeline = self.aggregation_service.aggregate_timeline(
                 all_meshes, 'rain_1hour_max', GuidanceTimeSeries
             )
-            prefecture.prefecture_rain_3hour_timeline = self._aggregate_timeline(
+            prefecture.prefecture_rain_3hour_timeline = self.aggregation_service.aggregate_timeline(
                 all_meshes, 'rain_3hour', GuidanceTimeSeries
             )
-            prefecture.prefecture_risk_timeline = self._aggregate_area_risk_timeline(prefecture.areas)
+            prefecture.prefecture_risk_timeline = self.aggregation_service.aggregate_area_risk_timeline(
+                prefecture.areas
+            )
 
         except Exception as e:
             logger.error(f"府県集約エラー ({prefecture.name}): {e}")
-
-    def _aggregate_timeline(self, meshes: List[Mesh], attribute_name: str, model_class):
-        """
-        メッシュのタイムラインデータを集約（最大値）
-
-        Args:
-            meshes: メッシュリスト
-            attribute_name: 集約対象の属性名（例: 'rain_1hour_max', 'rain_3hour'）
-            model_class: データモデルクラス（GuidanceTimeSeries or Risk）
-
-        Returns:
-            集約されたタイムライン
-        """
-        # FT時刻のセットを取得
-        ft_set = set()
-        for mesh in meshes:
-            timeline = getattr(mesh, attribute_name, [])
-            for point in timeline:
-                ft_set.add(point.ft)
-
-        # 各FTで最大値を集約
-        aggregated_timeline = []
-        for ft in sorted(ft_set):
-            max_value = max(
-                (point.value for mesh in meshes
-                 for point in getattr(mesh, attribute_name, []) if point.ft == ft),
-                default=0.0
-            )
-            aggregated_timeline.append(model_class(ft=ft, value=max_value))
-
-        return aggregated_timeline
-
-    def _aggregate_area_risk_timeline(self, areas: List[Area]) -> List[Risk]:
-        """
-        エリアのリスクタイムラインを集約（最大値）
-
-        Args:
-            areas: エリアリスト
-
-        Returns:
-            集約されたリスクタイムライン
-        """
-        # FT時刻のセットを取得
-        ft_set = set()
-        for area in areas:
-            for point in area.risk_timeline:
-                ft_set.add(point.ft)
-
-        # 各FTで最大リスクを集約
-        aggregated_risk = []
-        for ft in sorted(ft_set):
-            max_risk = max(
-                (point.value for area in areas
-                 for point in area.risk_timeline if point.ft == ft),
-                default=0
-            )
-            aggregated_risk.append(Risk(ft=ft, value=max_risk))
-
-        return aggregated_risk

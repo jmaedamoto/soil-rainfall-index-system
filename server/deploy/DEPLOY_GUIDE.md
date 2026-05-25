@@ -1,4 +1,4 @@
-# 土壌雨量指数計算システム デプロイ手順書
+# 土壌雨量指数計算システム staging デプロイ手順書
 
 ## 対象環境
 - OS: Rocky Linux 9.7
@@ -29,11 +29,14 @@ sudo dnf groupinstall -y "Development Tools"
 
 ```bash
 # ディレクトリ作成
-sudo mkdir -p /var/www/soil-rainfall
-sudo chown $USER:$USER /var/www/soil-rainfall
+sudo mkdir -p /var/www/app/staging/soil-rainfall-index-system
+sudo mkdir -p /var/www/html/staging/dosya
+sudo chown -R $USER:$USER /var/www/app/staging/soil-rainfall-index-system
+sudo chown -R $USER:$USER /var/www/html/staging/dosya
 
 # アプリケーションをコピー（開発環境から転送）
-# scp -r server/ user@production:/var/www/soil-rainfall/
+# scp -r server/ user@staging:/var/www/app/staging/soil-rainfall-index-system/
+# scp -r client/dist/* user@staging:/var/www/html/staging/dosya/
 ```
 
 ---
@@ -41,7 +44,7 @@ sudo chown $USER:$USER /var/www/soil-rainfall
 ## 3. Python仮想環境の構築
 
 ```bash
-cd /var/www/soil-rainfall
+cd /var/www/app/staging/soil-rainfall-index-system
 
 # 仮想環境作成
 python3 -m venv venv
@@ -63,14 +66,14 @@ pip install mod_wsgi
 
 ```bash
 # mod_wsgi モジュールのパスとPythonホームを確認
-source /var/www/soil-rainfall/venv/bin/activate
+source /var/www/app/staging/soil-rainfall-index-system/venv/bin/activate
 mod_wsgi-express module-config
 ```
 
 出力例:
 ```
-LoadModule wsgi_module "/var/www/soil-rainfall/venv/lib64/python3.9/site-packages/mod_wsgi/server/mod_wsgi-py39.cpython-39-x86_64-linux-gnu.so"
-WSGIPythonHome "/var/www/soil-rainfall/venv"
+LoadModule wsgi_module "/var/www/app/staging/soil-rainfall-index-system/venv/lib64/python3.9/site-packages/mod_wsgi/server/mod_wsgi-py39.cpython-39-x86_64-linux-gnu.so"
+WSGIPythonHome "/var/www/app/staging/soil-rainfall-index-system/venv"
 ```
 
 この出力を `/etc/httpd/conf.d/soil-rainfall.conf` の先頭に追記します。
@@ -81,18 +84,19 @@ WSGIPythonHome "/var/www/soil-rainfall/venv"
 
 ```bash
 # 設定ファイルをコピー
-sudo cp /var/www/soil-rainfall/server/deploy/apache-soil-rainfall.conf \
-        /etc/httpd/conf.d/soil-rainfall.conf
+sudo cp /var/www/app/staging/soil-rainfall-index-system/server/deploy/apache-soil-rainfall.conf \
+        /etc/httpd/conf.d/soil-rainfall-staging.conf
 
 # 設定ファイルを編集
-sudo vi /etc/httpd/conf.d/soil-rainfall.conf
+sudo vi /etc/httpd/conf.d/soil-rainfall-staging.conf
 ```
 
 ### 編集が必要な箇所:
 
 1. **mod_wsgi モジュールパス** - 手順4の出力に合わせる
-2. **ServerName** - 実際のドメイン名またはIPアドレス
-3. **WSGIDaemonProcess python-home** - 仮想環境のパス確認
+2. **WSGIDaemonProcess 名** - 既存の main 用設定と重複しないことを確認
+3. **python-path / WSGIScriptAlias** - staging 配置先パスに合わせる
+4. **CACHE_DIR** - `/var/cache/myapp/staging/dosya` になっていることを確認
 
 ---
 
@@ -100,7 +104,7 @@ sudo vi /etc/httpd/conf.d/soil-rainfall.conf
 
 ```bash
 # CSVデータファイルが存在することを確認
-ls -la /var/www/soil-rainfall/server/data/
+ls -la /var/www/app/staging/soil-rainfall-index-system/server/data/
 
 # 必要なファイル:
 # - dosha_*.csv (6府県分)
@@ -113,11 +117,16 @@ ls -la /var/www/soil-rainfall/server/data/
 
 ```bash
 # Apacheユーザーがアクセスできるように権限設定
-sudo chown -R apache:apache /var/www/soil-rainfall
-sudo chmod -R 755 /var/www/soil-rainfall
+sudo chown -R apache:apache /var/www/app/staging/soil-rainfall-index-system
+sudo chown -R apache:apache /var/www/html/staging/dosya
+sudo chmod -R 755 /var/www/app/staging/soil-rainfall-index-system
+sudo chmod -R 755 /var/www/html/staging/dosya
 
 # キャッシュディレクトリに書き込み権限
-sudo chmod 775 /var/www/soil-rainfall/server/data/cache
+sudo mkdir -p /var/cache/myapp/staging/dosya
+sudo chown -R apache:apache /var/cache/myapp/staging
+sudo chmod 775 /var/cache/myapp/staging
+sudo chmod 775 /var/cache/myapp/staging/dosya
 ```
 
 ---
@@ -132,9 +141,12 @@ getenforce
 sudo setsebool -P httpd_can_network_connect 1
 
 # アプリケーションディレクトリのコンテキスト設定
-sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/soil-rainfall(/.*)?"
-sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/soil-rainfall/server/data/cache(/.*)?"
-sudo restorecon -Rv /var/www/soil-rainfall
+sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/app/staging/soil-rainfall-index-system(/.*)?"
+sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/html/staging/dosya(/.*)?"
+sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/cache/myapp/staging(/.*)?"
+sudo restorecon -Rv /var/www/app/staging/soil-rainfall-index-system
+sudo restorecon -Rv /var/www/html/staging/dosya
+sudo restorecon -Rv /var/cache/myapp/staging
 ```
 
 ---
@@ -172,10 +184,10 @@ sudo systemctl status httpd
 
 ```bash
 # ヘルスチェック
-curl http://localhost/api/health
+curl http://localhost/staging/dosya/api/health
 
 # データチェック
-curl http://localhost/api/data-check
+curl http://localhost/staging/dosya/api/data-check
 ```
 
 期待されるレスポンス:
@@ -217,37 +229,40 @@ sudo tail -f /var/log/httpd/soil-rainfall-access.log
 
 | 症状 | 原因 | 対処 |
 |-----|------|------|
-| 500 Internal Server Error | Pythonパスの問題 | wsgi.pyのsys.path確認 |
+| 500 Internal Server Error | PythonパスまたはScriptAlias不整合 | python-path と `/staging/dosya/api` の設定確認 |
 | 403 Forbidden | SELinux/権限 | SELinux設定・ファイル権限確認 |
 | モジュール読み込みエラー | mod_wsgiパス不正 | `mod_wsgi-express module-config`で再確認 |
 | GRIB2ダウンロード失敗 | プロキシ/ネットワーク | app_config.yamlのプロキシ設定確認 |
 
 ---
 
-## ディレクトリ構成（本番環境）
+## ディレクトリ構成（staging環境）
 
 ```
-/var/www/soil-rainfall/
-├── venv/                    # Python仮想環境
-│   ├── bin/
-│   ├── lib/
-│   └── lib64/
-└── server/                  # アプリケーション
-    ├── app.py
-    ├── wsgi.py              # WSGIエントリーポイント
-    ├── requirements.txt
-    ├── config/
-    │   └── app_config.yaml
-    ├── data/
-    │   ├── cache/           # キャッシュ（書き込み可能）
-    │   ├── dosha_*.csv
-    │   └── dosyakei_*.csv
-    ├── deploy/
-    │   ├── apache-soil-rainfall.conf
-    │   └── DEPLOY_GUIDE.md
-    ├── models/
-    ├── services/
-    └── src/
+/
+├── var/www/app/staging/soil-rainfall-index-system/
+│   ├── venv/                          # Python仮想環境
+│   │   ├── bin/
+│   │   ├── lib/
+│   │   └── lib64/
+│   └── server/                        # アプリケーション
+│       ├── app.py
+│       ├── wsgi.py                    # WSGIエントリーポイント
+│       ├── requirements.txt
+│       ├── config/
+│       │   └── app_config.yaml
+│       ├── data/
+│       │   ├── cache/
+│       │   ├── dosha_*.csv
+│       │   └── dosyakei_*.csv
+│       ├── deploy/
+│       │   ├── apache-soil-rainfall.conf
+│       │   └── DEPLOY_GUIDE.md
+│       ├── models/
+│       ├── services/
+│       └── src/
+├── var/www/html/staging/dosya/        # client/dist の配置先
+└── var/cache/myapp/staging/dosya/     # Apache から書き込み可能なキャッシュ
 ```
 
 ---

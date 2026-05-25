@@ -12,6 +12,38 @@ class ResponseBuilder:
     """APIレスポンスを構築するヘルパークラス"""
 
     @staticmethod
+    def _build_max_timeline_from_meshes(
+        meshes,
+        timeline_key: str
+    ) -> List[Dict[str, Any]]:
+        """メッシュ群からFTごとの最大値タイムラインを構築する"""
+        max_by_ft: Dict[int, float] = {}
+
+        for mesh in meshes:
+            for point in mesh.get(timeline_key, []):
+                ft = int(point["ft"])
+                value = float(point["value"])
+                if ft not in max_by_ft or value > max_by_ft[ft]:
+                    max_by_ft[ft] = value
+
+        return [
+            {"ft": ft, "value": value}
+            for ft, value in sorted(max_by_ft.items())
+        ]
+
+    @staticmethod
+    def _build_row_metrics_from_meshes(meshes) -> Dict[str, Any]:
+        """タイムライン表で使う集約値を構築する"""
+        return {
+            "swi_timeline": ResponseBuilder._build_max_timeline_from_meshes(
+                meshes, "swi_timeline"
+            ),
+            "rain_3hour_timeline": ResponseBuilder._build_max_timeline_from_meshes(
+                meshes, "rain_timeline"
+            ),
+        }
+
+    @staticmethod
     def build_prefecture_response(prefectures: List[Prefecture],
                                   initial_time: datetime) -> Dict[str, Any]:
         """
@@ -59,11 +91,16 @@ class ResponseBuilder:
             ),
             "prefecture_risk_timeline": ResponseBuilder._build_risk_timeline(
                 prefecture.prefecture_risk_timeline
-            )
+            ),
         }
 
         # 二次細分データ
         for subdivision in prefecture.secondary_subdivisions:
+            subdivision_meshes = [
+                ResponseBuilder._build_mesh_dict(mesh)
+                for area in subdivision.areas
+                for mesh in area.meshes
+            ]
             subdiv_data = {
                 "name": subdivision.name,
                 "area_names": [area.name for area in subdivision.areas],
@@ -75,24 +112,33 @@ class ResponseBuilder:
                 ),
                 "risk_timeline": ResponseBuilder._build_risk_timeline(
                     subdivision.risk_timeline
-                )
+                ),
+                **ResponseBuilder._build_row_metrics_from_meshes(subdivision_meshes),
             }
             pref_data["secondary_subdivisions"].append(subdiv_data)
 
         # エリア（市町村）データ
         for area in prefecture.areas:
+            area_meshes = [ResponseBuilder._build_mesh_dict(mesh) for mesh in area.meshes]
             area_data = {
                 "name": area.name,
                 "secondary_subdivision_name": area.secondary_subdivision_name,
-                "meshes": [],
-                "risk_timeline": ResponseBuilder._build_risk_timeline(area.risk_timeline)
+                "meshes": area_meshes,
+                "risk_timeline": ResponseBuilder._build_risk_timeline(area.risk_timeline),
+                **ResponseBuilder._build_row_metrics_from_meshes(area_meshes),
             }
 
-            for mesh in area.meshes:
-                mesh_data = ResponseBuilder._build_mesh_dict(mesh)
-                area_data["meshes"].append(mesh_data)
-
             pref_data["areas"].append(area_data)
+
+        pref_data.update(
+            ResponseBuilder._build_row_metrics_from_meshes(
+                [
+                    mesh
+                    for area in pref_data["areas"]
+                    for mesh in area["meshes"]
+                ]
+            )
+        )
 
         return pref_data
 
@@ -113,9 +159,6 @@ class ResponseBuilder:
             "lon": float(mesh.lon),
             "x": int(mesh.x),
             "y": int(mesh.y),
-            "advisary_bound": int(mesh.advisary_bound),
-            "warning_bound": int(mesh.warning_bound),
-            "dosyakei_bound": int(mesh.dosyakei_bound),
             "swi_timeline": ResponseBuilder._build_swi_timeline(mesh.swi),
             "swi_hourly_timeline": ResponseBuilder._build_swi_timeline(mesh.swi_hourly),
             "rain_1hour_timeline": ResponseBuilder._build_guidance_timeline(mesh.rain_1hour),

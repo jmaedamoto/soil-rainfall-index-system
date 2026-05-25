@@ -3,9 +3,8 @@
 
 機能:
 - gzip圧縮によるJSON保存（209MB → 約20MB）
-- キャッシュキー生成（SWI初期時刻 + ガイダンス初期時刻）
+- キャッシュキー生成（SWI初期時刻 + ガイダンス初期時刻 + ガイダンス種別 + 危険度ルール）
 - 自動TTL管理（デフォルト7日）
-- メタデータ管理
 - 計算中ロック機能（重複計算防止）
 """
 
@@ -13,9 +12,12 @@ import gzip
 import json
 import logging
 import time
+import tempfile
+import io
+from threading import Thread
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Callable
 import os
 
 logger = logging.getLogger(__name__)
@@ -44,7 +46,12 @@ class CacheService:
                     f"TTL={default_ttl_days}日")
 
     @staticmethod
-    def generate_cache_key(swi_initial: str, guidance_initial: str) -> str:
+    def generate_cache_key(
+        swi_initial: str,
+        guidance_initial: str,
+        guidance_type: str = "msm",
+        risk_rule: str = "legacy"
+    ) -> str:
         """
         キャッシュキー生成
 
@@ -53,7 +60,7 @@ class CacheService:
             guidance_initial: ガイダンス初期時刻（ISO8601形式）
 
         Returns:
-            キャッシュキー（例: "swi_20251014120000_guid_20251014060000"）
+            キャッシュキー（例: "swi_20251014120000_guid_msm_20251014060000"）
         """
         swi_dt = datetime.fromisoformat(
             swi_initial.replace('Z', '+00:00'))
@@ -63,15 +70,110 @@ class CacheService:
         swi_key = swi_dt.strftime("%Y%m%d%H%M%S")
         guid_key = guid_dt.strftime("%Y%m%d%H%M%S")
 
-        return f"swi_{swi_key}_guid_{guid_key}"
+        return f"swi_{swi_key}_guid_{guidance_type.lower()}_{guid_key}_risk_{risk_rule.lower()}"
 
     def _get_cache_path(self, cache_key: str) -> Path:
         """キャッシュファイルパス取得（.json.gz）"""
         return self.cache_dir / f"{cache_key}.json.gz"
 
-    def _get_meta_path(self, cache_key: str) -> Path:
-        """メタデータファイルパス取得（.meta.json）"""
+    def _get_cache_temp_glob(self, cache_key: str) -> str:
+        """キャッシュ保存中の一時ファイルglob"""
+        return f"{cache_key}.json.gz.*.tmp"
+
+    def _get_legacy_meta_path(self, cache_key: str) -> Path:
+        """旧メタデータファイルパス取得（後方互換の削除用）"""
         return self.cache_dir / f"{cache_key}.meta.json"
+
+    @staticmethod
+    def _extract_cache_sample(result: dict) -> dict:
+        """キャッシュ内容比較用に先頭府県・先頭エリア・先頭メッシュの要約を返す"""
+        prefectures = result.get("prefectures") or {}
+        if not prefectures:
+            return {"prefecture_count": 0}
+
+        pref_code, prefecture = next(iter(prefectures.items()))
+        areas = prefecture.get("areas") or []
+        if not areas:
+            return {
+                "prefecture_count": len(prefectures),
+                "pref_code": pref_code,
+                "area_count": 0,
+            }
+
+        area = areas[0]
+        meshes = area.get("meshes") or []
+        if not meshes:
+            return {
+                "prefecture_count": len(prefectures),
+                "pref_code": pref_code,
+                "area_name": area.get("name"),
+                "mesh_count": 0,
+                "area_risk_timeline": area.get("risk_timeline", [])[:3],
+            }
+
+        mesh = meshes[0]
+        return {
+            "prefecture_count": len(prefectures),
+            "pref_code": pref_code,
+            "area_name": area.get("name"),
+            "mesh_count": len(meshes),
+            "mesh_code": mesh.get("code"),
+            "mesh_swi_timeline": mesh.get("swi_timeline", [])[:3],
+            "mesh_risk_3hour_max_timeline": mesh.get("risk_3hour_max_timeline", [])[:3],
+            "mesh_risk_hourly_timeline": mesh.get("risk_hourly_timeline", [])[:6],
+            "area_risk_timeline": area.get("risk_timeline", [])[:3],
+            "prefecture_risk_timeline": prefecture.get("prefecture_risk_timeline", [])[:3],
+        }
+
+    def _write_json_atomic(self, path: Path, data: dict) -> None:
+        """JSONを一時ファイル経由で原子的に保存する"""
+        fd, temp_path = tempfile.mkstemp(
+            prefix=f"{path.name}.",
+            suffix=".tmp",
+            dir=str(path.parent),
+            text=True,
+        )
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, path)
+        except Exception:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
+
+    def _write_gzip_json_atomic(self, path: Path, data: dict) -> None:
+        """gzip JSONを一時ファイル経由で原子的に保存する"""
+        fd, temp_path = tempfile.mkstemp(
+            prefix=f"{path.name}.",
+            suffix=".tmp",
+            dir=str(path.parent),
+        )
+        try:
+            with os.fdopen(fd, 'wb') as raw_file:
+                with gzip.GzipFile(
+                    filename='',
+                    mode='wb',
+                    fileobj=raw_file,
+                    compresslevel=6,
+                ) as gzip_file:
+                    with io.TextIOWrapper(gzip_file, encoding='utf-8') as text_file:
+                        json.dump(data, text_file, ensure_ascii=False)
+                        text_file.flush()
+                raw_file.flush()
+                os.fsync(raw_file.fileno())
+            os.replace(temp_path, path)
+            dir_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except Exception:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise
 
     def exists(self, cache_key: str) -> bool:
         """
@@ -84,6 +186,37 @@ class CacheService:
             存在する場合True
         """
         return self._get_cache_path(cache_key).exists()
+
+    def is_cache_write_in_progress(self, cache_key: str) -> bool:
+        """キャッシュ保存用tmpファイルが存在するか確認"""
+        return any(self.cache_dir.glob(self._get_cache_temp_glob(cache_key)))
+
+    def is_cache_materializing(self, cache_key: str) -> bool:
+        """キャッシュ本体はあるが保存用tmpがまだ残っている中間状態か確認"""
+        cache_exists = self._get_cache_path(cache_key).exists()
+        return cache_exists and self.is_cache_write_in_progress(cache_key)
+
+    def wait_for_cache_materialization(
+        self,
+        cache_key: str,
+        timeout_seconds: float = 10.0,
+        poll_interval: float = 0.2,
+    ) -> bool:
+        """
+        保存中tmpの完了と本体gzの出現を短時間待機する
+        """
+        cache_path = self._get_cache_path(cache_key)
+        start_time = time.time()
+
+        while time.time() - start_time < timeout_seconds:
+            if (
+                cache_path.exists()
+                and not self.is_cache_write_in_progress(cache_key)
+            ):
+                return True
+            time.sleep(poll_interval)
+
+        return cache_path.exists() and not self.is_cache_write_in_progress(cache_key)
 
     def get_cached_result(self, cache_key: str) -> Optional[dict]:
         """
@@ -116,9 +249,11 @@ class CacheService:
 
             elapsed = (datetime.now() - start_time).total_seconds()
             file_size_mb = cache_path.stat().st_size / (1024 * 1024)
+            sample = self._extract_cache_sample(result)
 
             logger.info(f"キャッシュ読み込み完了: {cache_key} "
                        f"({file_size_mb:.1f}MB, {elapsed:.2f}秒)")
+            logger.info("キャッシュ読み込み内容サンプル: cache_key=%s sample=%s", cache_key, sample)
 
             return result
 
@@ -131,8 +266,10 @@ class CacheService:
         cache_key: str,
         result: dict,
         swi_initial: str,
-        guidance_initial: str
-    ):
+        guidance_initial: str,
+        guidance_type: str = "msm",
+        risk_rule: str = "legacy"
+    ) -> bool:
         """
         計算結果をキャッシュに保存
 
@@ -147,83 +284,93 @@ class CacheService:
         try:
             logger.info(f"キャッシュ保存開始: {cache_key}")
             start_time = datetime.now()
+            legacy_meta_path = self._get_legacy_meta_path(cache_key)
 
-            # データ保存（gzip圧縮、レベル6=バランス良い）
-            with gzip.open(cache_path, 'wt', encoding='utf-8',
-                          compresslevel=6) as f:
-                json.dump(result, f, ensure_ascii=False)
+            # データ保存（temp file + atomic rename）
+            self._write_gzip_json_atomic(cache_path, result)
+            if legacy_meta_path.exists():
+                legacy_meta_path.unlink()
 
             elapsed = (datetime.now() - start_time).total_seconds()
             file_size_mb = cache_path.stat().st_size / (1024 * 1024)
 
-            # メタデータ保存
-            self._save_metadata(cache_key, result, swi_initial,
-                               guidance_initial, file_size_mb)
-
             logger.info(f"キャッシュ保存完了: {cache_key} "
                        f"({file_size_mb:.1f}MB, {elapsed:.2f}秒)")
+            return True
 
         except Exception as e:
             logger.error(f"キャッシュ保存エラー: {cache_key} - {e}")
             # エラー時は中途半端なファイルを削除
             if cache_path.exists():
                 cache_path.unlink()
+            legacy_meta_path = self._get_legacy_meta_path(cache_key)
+            if legacy_meta_path.exists():
+                legacy_meta_path.unlink()
+            return False
 
-    def _save_metadata(
+    def set_cached_result_async(
         self,
         cache_key: str,
         result: dict,
         swi_initial: str,
         guidance_initial: str,
-        file_size_mb: float
-    ):
-        """メタデータ保存"""
-        meta_path = self._get_meta_path(cache_key)
-
-        # メッシュ数をカウント
-        mesh_count = 0
-        if 'prefectures' in result:
-            for pref_data in result['prefectures'].values():
-                if 'areas' in pref_data:
-                    for area in pref_data['areas']:
-                        if 'meshes' in area:
-                            mesh_count += len(area['meshes'])
-
-        metadata = {
-            "cache_key": cache_key,
-            "created_at": datetime.now().isoformat(),
-            "swi_initial": swi_initial,
-            "guidance_initial": guidance_initial,
-            "mesh_count": mesh_count,
-            "file_size_mb": round(file_size_mb, 2),
-            "compressed": True,
-            "compression_format": "gzip"
-        }
-
-        with open(meta_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, ensure_ascii=False, indent=2)
-
-    def get_metadata(self, cache_key: str) -> Optional[Dict]:
+        guidance_type: str = "msm",
+        risk_rule: str = "legacy",
+        on_complete: Optional[Callable[[bool], None]] = None,
+    ) -> None:
         """
-        メタデータ取得
+        計算結果をバックグラウンドでキャッシュ保存する。
 
-        Args:
-            cache_key: キャッシュキー
-
-        Returns:
-            メタデータ、存在しない場合None
+        レスポンス返却をブロックしないため、保存処理は daemon thread で実行する。
         """
-        meta_path = self._get_meta_path(cache_key)
+        logger.info(f"キャッシュ非同期保存を開始: {cache_key}")
 
-        if not meta_path.exists():
+        def run_save() -> None:
+            success = self.set_cached_result(
+                cache_key,
+                result,
+                swi_initial,
+                guidance_initial,
+                guidance_type,
+                risk_rule,
+            )
+            if on_complete:
+                try:
+                    on_complete(success)
+                except Exception as callback_error:
+                    logger.error(
+                        f"キャッシュ保存完了コールバックエラー: {cache_key} - {callback_error}"
+                    )
+
+        worker = Thread(
+            target=run_save,
+            daemon=True,
+            name=f"cache-save-{cache_key}",
+        )
+        worker.start()
+
+    def _build_metadata_from_gzip(self, cache_key: str) -> Optional[Dict]:
+        """gzip ファイルから管理用メタデータを組み立てる"""
+        cache_path = self._get_cache_path(cache_key)
+        if not cache_path.exists():
             return None
 
         try:
-            with open(meta_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+            cache_stat = cache_path.stat()
+            return {
+                "cache_key": cache_key,
+                "created_at": datetime.fromtimestamp(cache_stat.st_mtime).isoformat(),
+                "file_size_mb": round(cache_stat.st_size / (1024 * 1024), 2),
+                "compressed": True,
+                "compression_format": "gzip",
+            }
         except Exception as e:
-            logger.error(f"メタデータ読み込みエラー: {cache_key} - {e}")
+            logger.error(f"gzipメタデータ生成エラー: {cache_key} - {e}")
             return None
+
+    def get_metadata(self, cache_key: str) -> Optional[Dict]:
+        """gzipファイル由来のメタデータを取得"""
+        return self._build_metadata_from_gzip(cache_key)
 
     def _is_cache_valid(self, cache_key: str) -> bool:
         """
@@ -235,12 +382,11 @@ class CacheService:
         Returns:
             有効期限内の場合True
         """
-        metadata = self.get_metadata(cache_key)
-
-        if not metadata or 'created_at' not in metadata:
+        cache_path = self._get_cache_path(cache_key)
+        if not cache_path.exists():
             return False
 
-        created_at = datetime.fromisoformat(metadata['created_at'])
+        created_at = datetime.fromtimestamp(cache_path.stat().st_mtime)
         expiry_date = created_at + timedelta(days=self.default_ttl_days)
 
         return datetime.now() < expiry_date
@@ -253,14 +399,14 @@ class CacheService:
             cache_key: キャッシュキー
         """
         cache_path = self._get_cache_path(cache_key)
-        meta_path = self._get_meta_path(cache_key)
+        legacy_meta_path = self._get_legacy_meta_path(cache_key)
 
         if cache_path.exists():
             cache_path.unlink()
             logger.info(f"キャッシュ削除: {cache_key}")
 
-        if meta_path.exists():
-            meta_path.unlink()
+        if legacy_meta_path.exists():
+            legacy_meta_path.unlink()
 
     def list_caches(self) -> List[Dict]:
         """
@@ -271,13 +417,11 @@ class CacheService:
         """
         caches = []
 
-        for meta_path in self.cache_dir.glob("*.meta.json"):
-            try:
-                with open(meta_path, 'r', encoding='utf-8') as f:
-                    metadata = json.load(f)
-                    caches.append(metadata)
-            except Exception as e:
-                logger.error(f"メタデータ読み込みエラー: {meta_path} - {e}")
+        for cache_path in self.cache_dir.glob("*.json.gz"):
+            cache_key = cache_path.name[:-8]
+            metadata = self._build_metadata_from_gzip(cache_key)
+            if metadata:
+                caches.append(metadata)
 
         # 作成日時でソート（新しい順）
         caches.sort(key=lambda x: x.get('created_at', ''), reverse=True)
@@ -293,18 +437,14 @@ class CacheService:
         """
         deleted_count = 0
 
-        for meta_path in self.cache_dir.glob("*.meta.json"):
+        for cache_path in self.cache_dir.glob("*.json.gz"):
+            cache_key = cache_path.name[:-8]
             try:
-                with open(meta_path, 'r', encoding='utf-8') as f:
-                    metadata = json.load(f)
-
-                cache_key = metadata.get('cache_key')
-                if cache_key and not self._is_cache_valid(cache_key):
+                if not self._is_cache_valid(cache_key):
                     self.invalidate_cache(cache_key)
                     deleted_count += 1
-
             except Exception as e:
-                logger.error(f"期限切れチェックエラー: {meta_path} - {e}")
+                logger.error(f"期限切れチェックエラー: {cache_path} - {e}")
 
         if deleted_count > 0:
             logger.info(f"期限切れキャッシュ削除完了: {deleted_count}件")
@@ -359,6 +499,7 @@ class CacheService:
         try:
             with open(lock_path, 'r', encoding='utf-8') as f:
                 lock_data = json.load(f)
+
             started_at = datetime.fromisoformat(lock_data['started_at'])
             if datetime.now() - started_at > timedelta(minutes=10):
                 # タイムアウト: 古いロックを削除
@@ -382,23 +523,36 @@ class CacheService:
         """
         lock_path = self._get_lock_path(cache_key)
 
-        # 既にロック中かチェック
-        if self.is_calculation_in_progress(cache_key):
-            logger.info(f"計算ロック取得失敗（既にロック中）: {cache_key}")
-            return False
-
         try:
             lock_data = {
                 "cache_key": cache_key,
                 "started_at": datetime.now().isoformat(),
-                "base_session_id": None  # 計算完了後に設定
             }
-            with open(lock_path, 'w', encoding='utf-8') as f:
+            fd = os.open(
+                lock_path,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                0o644,
+            )
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 json.dump(lock_data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
 
             logger.info(f"計算ロック取得成功: {cache_key}")
             return True
 
+        except FileExistsError:
+            if self.is_calculation_in_progress(cache_key):
+                logger.info(f"計算ロック取得失敗（既にロック中）: {cache_key}")
+                return False
+            logger.warning(f"古い計算ロックを検出: {cache_key} - 再取得を試行")
+            try:
+                if lock_path.exists():
+                    lock_path.unlink()
+            except Exception as cleanup_error:
+                logger.error(f"古いロック削除エラー: {cache_key} - {cleanup_error}")
+                return False
+            return self.acquire_calculation_lock(cache_key)
         except Exception as e:
             logger.error(f"計算ロック取得エラー: {cache_key} - {e}")
             return False
@@ -409,90 +563,16 @@ class CacheService:
 
         Args:
             cache_key: キャッシュキー
-            base_session_id: 計算完了後のベースセッションID（オプション）
+            base_session_id: 互換性維持のための未使用引数
         """
         lock_path = self._get_lock_path(cache_key)
-
-        if base_session_id:
-            # ベースセッションIDを保存してからロック解放
-            try:
-                if lock_path.exists():
-                    with open(lock_path, 'r', encoding='utf-8') as f:
-                        lock_data = json.load(f)
-                    lock_data['base_session_id'] = base_session_id
-                    lock_data['completed_at'] = datetime.now().isoformat()
-                    with open(lock_path, 'w', encoding='utf-8') as f:
-                        json.dump(lock_data, f, ensure_ascii=False, indent=2)
-                    logger.info(f"ベースセッションID保存: {cache_key} -> {base_session_id}")
-            except Exception as e:
-                logger.error(f"ベースセッションID保存エラー: {cache_key} - {e}")
-
-        # ロックファイルは削除せず、completed_atがあれば完了とみなす
-        # これにより、待機中のリクエストがベースセッションIDを取得可能
-        logger.info(f"計算ロック解放: {cache_key}")
-
-    def get_base_session_id(self, cache_key: str) -> Optional[str]:
-        """
-        計算完了後のベースセッションIDを取得
-
-        Args:
-            cache_key: キャッシュキー
-
-        Returns:
-            ベースセッションID、未完了または存在しない場合None
-        """
-        lock_path = self._get_lock_path(cache_key)
-
-        if not lock_path.exists():
-            return None
 
         try:
-            with open(lock_path, 'r', encoding='utf-8') as f:
-                lock_data = json.load(f)
-            return lock_data.get('base_session_id')
+            if lock_path.exists():
+                lock_path.unlink()
+            logger.info(f"計算ロック削除: {cache_key}")
         except Exception as e:
-            logger.error(f"ベースセッションID取得エラー: {cache_key} - {e}")
-            return None
-
-    def wait_for_calculation(
-        self,
-        cache_key: str,
-        timeout_seconds: int = 300,
-        poll_interval: float = 1.0
-    ) -> Tuple[bool, Optional[str]]:
-        """
-        計算完了を待機
-
-        Args:
-            cache_key: キャッシュキー
-            timeout_seconds: タイムアウト秒数（デフォルト5分）
-            poll_interval: ポーリング間隔秒数
-
-        Returns:
-            (成功フラグ, ベースセッションID)
-            - 計算完了: (True, session_id)
-            - タイムアウト: (False, None)
-        """
-        logger.info(f"計算完了待機開始: {cache_key} (timeout={timeout_seconds}s)")
-        start_time = time.time()
-
-        while time.time() - start_time < timeout_seconds:
-            # ベースセッションIDが設定されているか確認
-            base_session_id = self.get_base_session_id(cache_key)
-            if base_session_id:
-                elapsed = time.time() - start_time
-                logger.info(f"計算完了検出: {cache_key} ({elapsed:.1f}秒待機)")
-                return True, base_session_id
-
-            # 計算中でなければ（異常終了など）待機終了
-            if not self.is_calculation_in_progress(cache_key):
-                logger.warning(f"計算中ステータス消失: {cache_key}")
-                return False, None
-
-            time.sleep(poll_interval)
-
-        logger.warning(f"計算完了待機タイムアウト: {cache_key}")
-        return False, None
+            logger.error(f"計算ロック削除エラー: {cache_key} - {e}")
 
     def cleanup_calculation_locks(self, max_age_minutes: int = 30) -> int:
         """

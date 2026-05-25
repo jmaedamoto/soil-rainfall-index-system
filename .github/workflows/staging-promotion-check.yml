@@ -1,0 +1,27 @@
+name: Staging Promotion Check
+
+on:
+  pull_request:
+    branches:
+      - staging
+      - main
+
+jobs:
+  production-promotion-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install server dependencies
+        run: pip install -r server/requirements.txt
+
+      - name: Verify production promotion rules
+        env:
+          SOIL_RAINFALL_ROUTE_PROFILE: production
+        run: python scripts/check_production_promotion.py

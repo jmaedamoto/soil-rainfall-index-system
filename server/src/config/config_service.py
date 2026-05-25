@@ -9,6 +9,9 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_GUIDANCE_TYPE = "msm"
+SUPPORTED_GUIDANCE_TYPES = {"msm", "gsm"}
+
 
 class ConfigService:
     """設定ファイル管理サービス"""
@@ -46,6 +49,9 @@ class ConfigService:
                 "http": None,
                 "https": None
             },
+            "api": {
+                "route_profile": "all"
+            },
             "grib2": {
                 "base_url": "http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn",
                 "swi_path": "/swi10",
@@ -55,7 +61,12 @@ class ConfigService:
                 "retry_delay": 5
             },
             "data": {
-                "directory": "data"
+                "directory": "data",
+                "local_grib2_fallback": {
+                    "enabled": False,
+                    "swi_path": None,
+                    "guidance_path": None
+                }
             },
             "logging": {
                 "level": "INFO",
@@ -81,6 +92,13 @@ class ConfigService:
             "http": self.get("proxy.http"),
             "https": self.get("proxy.https")
         }
+
+    def get_api_route_profile(self) -> str:
+        """公開するAPIプロファイルを取得"""
+        return os.environ.get(
+            "SOIL_RAINFALL_ROUTE_PROFILE",
+            self.get("api.route_profile", "all")
+        )
     
     def get_grib2_config(self) -> Dict[str, Any]:
         """GRIB2設定を取得"""
@@ -97,22 +115,54 @@ class ConfigService:
         """データディレクトリを取得"""
         return self.get("data.directory", "data")
 
+    def get_local_grib2_fallback_config(self) -> Dict[str, Any]:
+        """ローカルGRIB2フォールバック設定を取得"""
+        return {
+            "enabled": self.get("data.local_grib2_fallback.enabled", False),
+            "swi_path": self.get("data.local_grib2_fallback.swi_path"),
+            "guidance_path": self.get("data.local_grib2_fallback.guidance_path"),
+        }
+
     def build_swi_url(self, initial_time) -> str:
         """SWI GRIB2 URL構築"""
         base_url = self.get("grib2.base_url", "http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn")
         swi_path = self.get("grib2.swi_path", "/swi10")
         return f"{base_url}{swi_path}/{initial_time.strftime('%Y/%m/%d')}/Z__C_RJTD_{initial_time.strftime('%Y%m%d%H%M%S')}_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin"
 
-    def build_guidance_url(self, initial_time) -> str:
+    def normalize_guidance_type(self, guidance_type: Optional[str]) -> str:
+        """ガイダンス種別を正規化"""
+        normalized = (guidance_type or DEFAULT_GUIDANCE_TYPE).lower()
+        if normalized not in SUPPORTED_GUIDANCE_TYPES:
+            raise ValueError(f"Unsupported guidance_type: {guidance_type}")
+        return normalized
+
+    def validate_guidance_initial_time(self, initial_time, guidance_type: Optional[str] = None) -> None:
+        """ガイダンス種別ごとの初期時刻制約を検証"""
+        normalized_guidance_type = self.normalize_guidance_type(guidance_type)
+
+        if normalized_guidance_type == "gsm" and initial_time.hour % 6 != 0:
+            raise ValueError(
+                "Invalid guidance_initial for gsm: "
+                "GSM guidance is only available at 00, 06, 12, 18 UTC"
+            )
+
+    def build_guidance_url(self, initial_time, guidance_type: Optional[str] = None) -> str:
         """ガイダンス GRIB2 URL構築"""
         base_url = self.get("grib2.base_url", "http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn")
         guidance_path = self.get("grib2.guidance_path", "/gdc")
+        normalized_guidance_type = self.normalize_guidance_type(guidance_type)
+        self.validate_guidance_initial_time(initial_time, normalized_guidance_type)
 
-        # ガイダンスファイル名の時刻変換（0,6,12,18時 → "00"、3,9,15,21時 → "03"）
-        hour = initial_time.hour
-        if hour % 6 == 0:
-            rmax_hour = "00"
+        if normalized_guidance_type == "gsm":
+            filename = (
+                f"guid_gsm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax.bin"
+            )
         else:
-            rmax_hour = "03"
+            # MSM: 0,6,12,18時 → "00"、3,9,15,21時 → "03"
+            hour = initial_time.hour
+            rmax_hour = "00" if hour % 6 == 0 else "03"
+            filename = (
+                f"guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax{rmax_hour}.bin"
+            )
 
-        return f"{base_url}{guidance_path}/{initial_time.strftime('%Y/%m/%d')}/guid_msm_grib2_{initial_time.strftime('%Y%m%d%H%M%S')}_rmax{rmax_hour}.bin"
+        return f"{base_url}{guidance_path}/{initial_time.strftime('%Y/%m/%d')}/{filename}"

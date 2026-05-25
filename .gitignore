@@ -31,10 +31,16 @@ data/cache/*
 logs/
 *.log
 .pytest_cache/
+server/src/.pytest_cache/
 .coverage
 htmlcov/
 .DS_Store
 Thumbs.db
+.codex
+.codex/
+cache/
+server/cache/*.calculating.json
+server/src/**/__pycache__/
 # Node.js
 node_modules/
 package-lock.json

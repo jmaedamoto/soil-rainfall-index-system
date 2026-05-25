@@ -7,12 +7,16 @@ from datetime import datetime
 import logging
 import os
 import sys
+from typing import Any, Dict, List
 
 # プロジェクトルートをパスに追加
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(project_root)
 
 from services.session_service import SessionService
+from services.rainfall_adjustment_service import RainfallAdjustmentService
+from services.calculation_service_numpy import CalculationServiceNumpy
+from services.data_service import DataService
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +26,59 @@ class SessionController:
 
     def __init__(self, session_service: SessionService):
         self.session_service = session_service
+        self.rainfall_adjustment_service = RainfallAdjustmentService()
+        data_dir = os.path.join(os.path.dirname(project_root), "data")
+        self.data_service = DataService(data_dir=data_dir)
+
+    @staticmethod
+    def _trace_prefix(session_id: str) -> str:
+        forwarded_for = request.headers.get('X-Forwarded-For')
+        remote_addr = forwarded_for.split(',')[0].strip() if forwarded_for else request.remote_addr
+        return f"[session_id={session_id} pid={os.getpid()} remote={remote_addr or 'unknown'}]"
+
+    @staticmethod
+    def _build_max_timeline_from_meshes(
+        meshes: List[Dict[str, Any]],
+        timeline_key: str
+    ) -> List[Dict[str, float]]:
+        max_by_ft: Dict[int, float] = {}
+
+        for mesh in meshes:
+            for point in mesh.get(timeline_key, []):
+                ft = int(point["ft"])
+                value = float(point["value"])
+                if ft not in max_by_ft or value > max_by_ft[ft]:
+                    max_by_ft[ft] = value
+
+        return [
+            {"ft": ft, "value": value}
+            for ft, value in sorted(max_by_ft.items())
+        ]
+
+    @staticmethod
+    def _build_row_metrics_from_meshes(meshes: List[Dict[str, Any]]) -> Dict[str, Any]:
+        return {
+            "swi_timeline": SessionController._build_max_timeline_from_meshes(
+                meshes, "swi_timeline"
+            ),
+            "rain_3hour_timeline": SessionController._build_max_timeline_from_meshes(
+                meshes, "rain_timeline"
+            ),
+        }
+
+    @staticmethod
+    def _collect_subdivision_meshes(
+        prefecture: Dict[str, Any],
+        area_names: List[str]
+    ) -> List[Dict[str, Any]]:
+        area_name_set = set(area_names)
+        meshes: List[Dict[str, Any]] = []
+
+        for area in prefecture.get("areas", []):
+            if area.get("name") in area_name_set:
+                meshes.extend(area.get("meshes", []))
+
+        return meshes
 
     def get_session_info(self, session_id: str):
         """
@@ -30,15 +87,23 @@ class SessionController:
         GET /session/<session_id>
         """
         try:
+            trace_prefix = self._trace_prefix(session_id)
+            logger.info(f"{trace_prefix} セッション情報取得開始")
             info = self.session_service.get_session_info(session_id)
 
             if info is None:
+                logger.warning(f"{trace_prefix} セッション情報取得失敗: session not found")
                 return jsonify({
                     "status": "error",
                     "error": "Session not found or expired",
                     "session_id": session_id
                 }), 404
 
+            logger.info(
+                f"{trace_prefix} セッション情報取得成功: "
+                f"prefecture_count={info.get('prefecture_count')} "
+                f"guidance_type={info.get('guidance_type')} risk_rule={info.get('risk_rule')}"
+            )
             return jsonify({
                 "status": "success",
                 "session": info
@@ -65,12 +130,17 @@ class SessionController:
             - 府県全体危険度時系列
         """
         try:
+            trace_prefix = self._trace_prefix(session_id)
+            logger.info(f"{trace_prefix} 府県データ取得開始: prefecture_code={prefecture_code}")
             prefecture = self.session_service.get_prefecture(
                 session_id,
                 prefecture_code
             )
 
             if prefecture is None:
+                logger.warning(
+                    f"{trace_prefix} 府県データ取得失敗: prefecture_code={prefecture_code}"
+                )
                 return jsonify({
                     "status": "error",
                     "error": "Session or prefecture not found",
@@ -82,11 +152,13 @@ class SessionController:
             response_data = {
                 "name": prefecture["name"],
                 "code": prefecture["code"],
+                "risk_rule": self.session_service.get_session(session_id).get("risk_rule", "legacy"),
                 "areas": [
                     {
                         "name": area["name"],
                         "secondary_subdivision_name": area["secondary_subdivision_name"],
-                        "risk_timeline": area["risk_timeline"]
+                        "risk_timeline": area["risk_timeline"],
+                        **self._build_row_metrics_from_meshes(area.get("meshes", [])),
                     }
                     for area in prefecture["areas"]
                 ],
@@ -94,20 +166,41 @@ class SessionController:
                     {
                         "name": subdiv["name"],
                         "area_names": subdiv.get("area_names", []),
-                        "risk_timeline": subdiv.get("risk_timeline", [])
+                        "risk_timeline": subdiv.get("risk_timeline", []),
+                        **self._build_row_metrics_from_meshes(
+                            self._collect_subdivision_meshes(
+                                prefecture,
+                                subdiv.get("area_names", []),
+                            )
+                        ),
                     }
                     for subdiv in prefecture.get("secondary_subdivisions", [])
                 ],
-                "prefecture_risk_timeline": prefecture.get("prefecture_risk_timeline", [])
+                "prefecture_risk_timeline": prefecture.get("prefecture_risk_timeline", []),
+                **self._build_row_metrics_from_meshes(
+                    [
+                        mesh
+                        for area in prefecture.get("areas", [])
+                        for mesh in area.get("meshes", [])
+                    ]
+                ),
             }
 
             # デバッグ: レスポンスデータの確認
-            logger.info(f"Prefecture {prefecture_code}: {len(response_data['areas'])} areas")
+            logger.info(
+                f"{trace_prefix} 府県データ取得成功: prefecture_code={prefecture_code} "
+                f"areas={len(response_data['areas'])} "
+                f"secondary_subdivisions={len(response_data['secondary_subdivisions'])} "
+                f"prefecture_risk_timeline_length={len(response_data['prefecture_risk_timeline'])}"
+            )
             if response_data['areas']:
                 first_area = response_data['areas'][0]
-                logger.info(f"First area: {first_area['name']}, risk_timeline length: {len(first_area.get('risk_timeline', []))}")
+                logger.info(
+                    f"{trace_prefix} First area: {first_area['name']}, "
+                    f"risk_timeline length: {len(first_area.get('risk_timeline', []))}"
+                )
                 if first_area.get('risk_timeline'):
-                    logger.info(f"First risk point: {first_area['risk_timeline'][0]}")
+                    logger.info(f"{trace_prefix} First risk point: {first_area['risk_timeline'][0]}")
 
             return jsonify({
                 "status": "success",
@@ -130,22 +223,31 @@ class SessionController:
 
         Parameters:
             ft: 予報時刻（必須）
-            include_coords: 座標を含めるか（省略時true、初回のみtrueで2回目以降はfalse推奨）
+            include_coords: 互換用パラメータ（現在は常に座標を返す）
         """
         try:
+            trace_prefix = self._trace_prefix(session_id)
             ft = request.args.get('ft', type=int)
             if ft is None:
+                logger.warning(f"{trace_prefix} 時刻別リスク取得失敗: ft パラメータ不足")
                 return jsonify({
                     "status": "error",
                     "error": "Parameter 'ft' is required"
                 }), 400
 
-            # include_coords パラメータ（デフォルトtrue、後方互換性のため）
+            # include_coords は後方互換性のため受け取るが、
+            # 本システムでは常に座標付きレスポンスを返す。
             include_coords_str = request.args.get('include_coords', 'true').lower()
-            include_coords = include_coords_str == 'true'
+            requested_include_coords = include_coords_str == 'true'
+            include_coords = True
+            logger.info(
+                f"{trace_prefix} 時刻別リスク取得開始: ft={ft} "
+                f"requested_include_coords={requested_include_coords} include_coords={include_coords}"
+            )
 
             session = self.session_service.get_session(session_id)
             if session is None:
+                logger.warning(f"{trace_prefix} 時刻別リスク取得失敗: session not found")
                 return jsonify({
                     "status": "error",
                     "error": "Session not found or expired",
@@ -156,21 +258,34 @@ class SessionController:
             mesh_risks = {}
             mesh_coords = {} if include_coords else None
             prefectures = session['prefectures']
+            missing_ft_mesh_codes = []
+            total_mesh_count = 0
 
             sample_count = 0
             for pref_code, prefecture in prefectures.items():
                 for area in prefecture["areas"]:
                     for mesh in area["meshes"]:
-                        # 指定されたFTのリスク値を取得
-                        risk_value = 0
-                        for risk_point in mesh["risk_3hour_max_timeline"]:
-                            if risk_point["ft"] == ft:
-                                risk_value = risk_point["value"]
+                        total_mesh_count += 1
+
+                        # 指定されたFTのリスク値を取得。
+                        # FTが見つからない場合に0へフォールバックすると
+                        # 未完成セッションを正常系として返してしまう。
+                        risk_value = None
+                        for risk_point in mesh.get("risk_3hour_max_timeline", []):
+                            if risk_point.get("ft") == ft:
+                                risk_value = risk_point.get("value")
                                 break
+
+                        if risk_value is None:
+                            missing_ft_mesh_codes.append(str(mesh.get("code", "unknown")))
+                            continue
 
                         # 最初の3メッシュのデータをログ出力
                         if sample_count < 3:
-                            logger.info(f"[get_risk_at_time] FT={ft}, Mesh={mesh['code']}, Risk={risk_value}, Timeline={mesh['risk_3hour_max_timeline'][:3]}")
+                            logger.info(
+                                f"{trace_prefix} [get_risk_at_time] FT={ft}, Mesh={mesh['code']}, "
+                                f"Risk={risk_value}, Timeline={mesh.get('risk_3hour_max_timeline', [])[:3]}"
+                            )
                             sample_count += 1
 
                         mesh_risks[mesh["code"]] = risk_value
@@ -182,6 +297,22 @@ class SessionController:
                                 "lon": mesh["lon"]
                             }
 
+            if missing_ft_mesh_codes:
+                missing_preview = missing_ft_mesh_codes[:10]
+                logger.warning(
+                    f"{trace_prefix} 時刻別リスク取得失敗: FT={ft} のタイムライン欠落 "
+                    f"(missing_meshes={len(missing_ft_mesh_codes)}/{total_mesh_count}, "
+                    f"sample_meshes={missing_preview})"
+                )
+                return jsonify({
+                    "status": "error",
+                    "error": "Session data is incomplete for the requested forecast time",
+                    "session_id": session_id,
+                    "ft": ft,
+                    "missing_mesh_count": len(missing_ft_mesh_codes),
+                    "mesh_count": total_mesh_count,
+                }), 503
+
             response_data = {
                 "status": "success",
                 "ft": ft,
@@ -191,6 +322,11 @@ class SessionController:
             # 座標は要求された場合のみ含める
             if include_coords:
                 response_data["mesh_coords"] = mesh_coords
+
+            logger.info(
+                f"{trace_prefix} 時刻別リスク取得成功: ft={ft} "
+                f"mesh_count={len(mesh_risks)} coords_included={include_coords}"
+            )
 
             return jsonify(response_data)
 
@@ -376,13 +512,20 @@ class SessionController:
             prefectures = session['prefectures']
             area_rainfall = {}
             subdivision_rainfall = {}
+            area_orders = {}
+            subdivision_orders = {}
+            area_rainfall_24hour, subdivision_rainfall_24hour = \
+                self.rainfall_adjustment_service.aggregate_rainfall_24hour_from_session(prefectures)
 
             for pref_code, prefecture in prefectures.items():
                 pref_name = prefecture["name"]
+                area_orders[pref_name] = []
+                subdivision_orders[pref_name] = []
 
                 # 市町村別雨量
                 for area in prefecture["areas"]:
                     area_key = f"{pref_name}_{area['name']}"
+                    area_orders[pref_name].append(area_key)
 
                     # 市町村内の全メッシュから雨量タイムラインを集約
                     if area["meshes"]:
@@ -408,6 +551,7 @@ class SessionController:
                 # 二次細分別雨量
                 for subdiv in prefecture.get("secondary_subdivisions", []):
                     subdiv_key = f"{pref_name}_{subdiv['name']}"
+                    subdivision_orders[pref_name].append(subdiv_key)
 
                     # 二次細分内の全メッシュから雨量タイムラインを集約
                     all_meshes = []
@@ -439,7 +583,15 @@ class SessionController:
             return jsonify({
                 "status": "success",
                 "area_rainfall": area_rainfall,
-                "subdivision_rainfall": subdivision_rainfall
+                "subdivision_rainfall": subdivision_rainfall,
+                "area_orders": area_orders,
+                "subdivision_orders": subdivision_orders,
+                "area_rainfall_24hour": area_rainfall_24hour,
+                "subdivision_rainfall_24hour": subdivision_rainfall_24hour,
+                "guidance_type": session.get('guidance_type', 'msm'),
+                "risk_rule": session.get('risk_rule', 'legacy'),
+                "input_mode": session.get('input_mode', '3hour'),
+                "adjustment_mode": session.get('adjustment_mode', 'ratio_3hour')
             })
 
         except Exception as e:
@@ -459,6 +611,7 @@ class SessionController:
         Request Body:
             {
                 "adjustments": {"府県名_市町村名": [{"ft": 0, "value": 10.5}, ...]},
+                "adjustment_mode": "ratio_3hour",  # 省略時は ratio_3hour
                 "swi_initial": "2025-01-01T00:00:00Z",  # 使用されない（互換性のため残す）
                 "guidance_initial": "2025-01-01T00:00:00Z",  # 使用されない
                 "data_source": "test"  # 使用されない
@@ -512,10 +665,97 @@ class SessionController:
                     point['ft']: point['value'] for point in timeline
                 }
 
-            logger.info(f"調整対象市町村数: {len(adjustments)}件")
+            aggregate_adjustments_raw = data.get('aggregate_adjustments', {})
+            aggregate_adjustments = {}
+            for area_key, timeline in aggregate_adjustments_raw.items():
+                aggregate_adjustments[area_key] = {
+                    point['ft']: point['value'] for point in timeline
+                }
+
+            input_mode = data.get('input_mode', '3hour')
+            adjustment_mode = data.get('adjustment_mode', 'ratio_3hour')
+            session_guidance_type = (session.get('guidance_type', 'msm') or 'msm').lower()
+            session_risk_rule = CalculationServiceNumpy.normalize_risk_rule(
+                session.get('risk_rule', 'legacy')
+            )
+            requested_guidance_type = data.get('guidance_type')
+            requested_risk_rule = data.get('risk_rule')
+            guidance_type = session_guidance_type
+            risk_rule = session_risk_rule
+
+            if requested_guidance_type is not None:
+                normalized_requested_guidance_type = requested_guidance_type.lower()
+                if normalized_requested_guidance_type not in {'msm', 'gsm'}:
+                    return jsonify({
+                        "status": "error",
+                        "error": f"Unsupported guidance_type: {requested_guidance_type}",
+                        "session_id": session_id
+                    }), 400
+                if normalized_requested_guidance_type != session_guidance_type:
+                    return jsonify({
+                        "status": "error",
+                        "error": (
+                            "guidance_type does not match the session. "
+                            f"session={session_guidance_type}, request={normalized_requested_guidance_type}"
+                        ),
+                        "session_id": session_id
+                    }), 400
+
+            if requested_risk_rule is not None:
+                try:
+                    normalized_requested_risk_rule = CalculationServiceNumpy.normalize_risk_rule(
+                        requested_risk_rule
+                    )
+                except ValueError:
+                    return jsonify({
+                        "status": "error",
+                        "error": f"Unsupported risk_rule: {requested_risk_rule}",
+                        "session_id": session_id
+                    }), 400
+                if normalized_requested_risk_rule != session_risk_rule:
+                    return jsonify({
+                        "status": "error",
+                        "error": (
+                            "risk_rule does not match the session. "
+                            f"session={session_risk_rule}, request={normalized_requested_risk_rule}"
+                        ),
+                        "session_id": session_id
+                    }), 400
+
+            if input_mode not in {'3hour', '24hour'}:
+                return jsonify({
+                    "status": "error",
+                    "error": f"Unsupported input_mode: {input_mode}",
+                    "session_id": session_id
+                }), 400
+
+            allowed_adjustment_modes = {
+                '3hour': {'ratio_3hour', 'fill_3hour'},
+                '24hour': {
+                    'fill_24hour_uniform',
+                    'ratio_24hour_uniform',
+                    'fill_24hour_peak_mesh',
+                    'ratio_24hour_peak_mesh',
+                },
+            }
+            if adjustment_mode not in allowed_adjustment_modes[input_mode]:
+                return jsonify({
+                    "status": "error",
+                    "error": f"Unsupported adjustment_mode: {adjustment_mode}",
+                    "session_id": session_id
+                }), 400
+
+            logger.info(
+                "調整対象領域数: 3hour=%s件, 24hour=%s件, input_mode=%s, adjustment_mode=%s, guidance_type=%s, risk_rule=%s",
+                len(adjustments),
+                len(aggregate_adjustments),
+                input_mode,
+                adjustment_mode,
+                guidance_type,
+                risk_rule,
+            )
 
             # NumPyベクトル化版サービス（高速）
-            from services.calculation_service_numpy import CalculationServiceNumpy
             calculation_service_numpy = CalculationServiceNumpy()
 
             # 再計算済みメッシュを保存する辞書
@@ -548,45 +788,99 @@ class SessionController:
                             expanded_adjustments[area_key] = subdiv_rain
                             logger.info(f"二次細分 {subdiv_key} → 市町村 {area_key} に展開")
 
+            expanded_aggregate_adjustments = dict(aggregate_adjustments)
+            for subdiv_key, subdiv_rain in list(aggregate_adjustments.items()):
+                if subdiv_key in subdiv_to_areas:
+                    info = subdiv_to_areas[subdiv_key]
+                    for area_name in info['area_names']:
+                        area_key = f"{info['pref_name']}_{area_name}"
+                        if area_key not in expanded_aggregate_adjustments:
+                            expanded_aggregate_adjustments[area_key] = subdiv_rain
+                            logger.info(f"二次細分 {subdiv_key} → 市町村 {area_key} に24時間調整を展開")
+
+            if input_mode == '24hour':
+                if adjustment_mode == 'fill_24hour_uniform':
+                    adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_fill_24hour_uniform_from_session(
+                        existing_prefectures_dict,
+                        expanded_aggregate_adjustments
+                    )
+                elif adjustment_mode == 'ratio_24hour_uniform':
+                    adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_ratio_24hour_uniform_from_session(
+                        existing_prefectures_dict,
+                        expanded_aggregate_adjustments
+                    )
+                elif adjustment_mode == 'fill_24hour_peak_mesh':
+                    adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_fill_24hour_peak_mesh_from_session(
+                        existing_prefectures_dict,
+                        expanded_aggregate_adjustments
+                    )
+                else:
+                    adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_ratio_24hour_peak_mesh_from_session(
+                        existing_prefectures_dict,
+                        expanded_aggregate_adjustments
+                    )
+            elif adjustment_mode == 'fill_3hour':
+                adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_filled_mesh_rainfall_from_session(
+                    existing_prefectures_dict,
+                    expanded_adjustments
+                )
+            else:
+                mesh_ratios = self.rainfall_adjustment_service.calculate_mesh_ratios_from_session(
+                    existing_prefectures_dict,
+                    expanded_adjustments
+                )
+                adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_adjusted_mesh_rainfall_from_session(
+                    existing_prefectures_dict,
+                    mesh_ratios
+                )
+
             # Step 1: 調整対象メッシュのデータを収集
             import time
             collect_start = time.time()
 
             for pref_code, pref_dict in existing_prefectures_dict.items():
                 for area_dict in pref_dict['areas']:
-                    area_key = f"{pref_dict['name']}_{area_dict['name']}"
+                    for mesh_dict in area_dict['meshes']:
+                        mesh_code = mesh_dict['code']
+                        new_rain_timeline = adjusted_mesh_rainfall.get(mesh_code)
+                        if not new_rain_timeline:
+                            continue
+                        static_info = self.data_service.get_mesh_static_info_by_mesh_code(mesh_code)
+                        if static_info is None:
+                            logger.warning("Static mesh info not found for mesh_code=%s", mesh_code)
+                            continue
 
-                    if area_key in expanded_adjustments:
-                        adjusted_rain = expanded_adjustments[area_key]
+                        # 初期SWI値を取得
+                        swi_timeline = mesh_dict.get('swi_timeline', [])
+                        initial_swi = swi_timeline[0]['value'] if swi_timeline else 100.0
 
-                        # 雨量timelineを調整
-                        new_rain_timeline = [
-                            (ft, adjusted_rain[ft])
-                            for ft in sorted(adjusted_rain.keys())
+                        # NumPy一括計算用のデータを収集
+                        mesh_data_list.append({
+                            'mesh_code': mesh_code,
+                            'initial_swi': initial_swi,
+                            'advisory_bound': static_info['advisary_bound'],
+                            'warning_bound': static_info['warning_bound'],
+                            'dosyakei_bound': static_info['dosyakei_bound'],
+                            'level4_curve': (
+                                static_info['level4_curve'].tolist()
+                                if static_info['level4_curve'] is not None
+                                else None
+                            ),
+                            'rain_3hour': new_rain_timeline,
+                            'original_rain_3hour': [
+                                (int(point['ft']), float(point['value']))
+                                for point in mesh_dict.get('rain_timeline', [])
+                            ],
+                            'rain_1hour_max': [
+                                (int(point['ft']), float(point['value']))
+                                for point in mesh_dict.get('rain_1hour_max_timeline', [])
+                            ],
+                        })
+                        mesh_code_to_rain[mesh_code] = [
+                            {"ft": ft, "value": value}
+                            for ft, value in new_rain_timeline
                         ]
-
-                        # この市町村の全メッシュを処理
-                        for mesh_dict in area_dict['meshes']:
-                            mesh_code = mesh_dict['code']
-
-                            # 初期SWI値を取得
-                            swi_timeline = mesh_dict.get('swi_timeline', [])
-                            initial_swi = swi_timeline[0]['value'] if swi_timeline else 100.0
-
-                            # NumPy一括計算用のデータを収集
-                            mesh_data_list.append({
-                                'mesh_code': mesh_code,
-                                'initial_swi': initial_swi,
-                                'advisory_bound': mesh_dict['advisary_bound'],
-                                'warning_bound': mesh_dict['warning_bound'],
-                                'dosyakei_bound': mesh_dict['dosyakei_bound'],
-                                'rain_3hour': new_rain_timeline
-                            })
-                            mesh_code_to_rain[mesh_code] = [
-                                {"ft": ft, "value": value}
-                                for ft, value in new_rain_timeline
-                            ]
-                            adjusted_mesh_count += 1
+                        adjusted_mesh_count += 1
 
             collect_time = time.time() - collect_start
             logger.info(f"データ収集: {adjusted_mesh_count}メッシュ, {collect_time:.3f}秒")
@@ -594,7 +888,10 @@ class SessionController:
             # Step 2: NumPy一括計算
             calc_start = time.time()
             if mesh_data_list:
-                numpy_results = calculation_service_numpy.recalculate_meshes_vectorized(mesh_data_list)
+                numpy_results = calculation_service_numpy.recalculate_meshes_vectorized(
+                    mesh_data_list,
+                    risk_rule=risk_rule,
+                )
 
                 # 結果をrecalculated_meshesに格納
                 for mesh_code, result in numpy_results.items():
@@ -611,8 +908,10 @@ class SessionController:
             # フォークセッションを作成
             fork_session_id = self.session_service.create_fork_session(
                 base_session_id=base_session_id,
-                adjustments=adjustments_raw,  # 元の形式で保存
-                recalculated_meshes=recalculated_meshes
+                adjustments=aggregate_adjustments_raw if input_mode == '24hour' else adjustments_raw,
+                recalculated_meshes=recalculated_meshes,
+                input_mode=input_mode,
+                adjustment_mode=adjustment_mode
             )
 
             if fork_session_id is None:
@@ -652,6 +951,8 @@ class SessionController:
                 "session_id": fork_session_id,  # 新しいフォークセッションID
                 "base_session_id": base_session_id,
                 "is_fork": True,
+                "guidance_type": guidance_type,
+                "risk_rule": risk_rule,
                 "adjusted": True,
                 "ft": 0,
                 "mesh_risks": mesh_risks,
