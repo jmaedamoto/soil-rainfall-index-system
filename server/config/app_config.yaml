@@ -28,7 +28,7 @@ grib2:
   guidance_path: "/gdc"
 
   # タイムアウト設定（秒）
-  download_timeout: 300
+  download_timeout: 600
 
   # 接続リトライ設定
   retry_count: 3

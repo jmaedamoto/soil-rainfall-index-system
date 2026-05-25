@@ -173,7 +173,7 @@ class SessionAPIClient {
         guidance_type: guidanceType,
         risk_rule: riskRule
       },
-      { timeout: 300000 }
+      { timeout: 600000 }
     );
     return {
       session_id: response.data.session_id,

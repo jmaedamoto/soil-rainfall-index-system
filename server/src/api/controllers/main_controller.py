@@ -548,7 +548,7 @@ class MainController:
                     cache_materializing,
                 )
 
-                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=300.0):
+                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=600.0):
                     cached_result = self.cache_service.get_cached_result(cache_key)
                     if cached_result:
                         wait_elapsed = time.perf_counter() - wait_started_at
@@ -585,7 +585,7 @@ class MainController:
                 logger.info(
                     f"{trace_prefix} 別リクエストが計算を開始したため待機に切り替え: {cache_key}"
                 )
-                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=300.0):
+                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=600.0):
                     cached_result = self.cache_service.get_cached_result(cache_key)
                     if cached_result:
                         wait_elapsed = time.perf_counter() - wait_started_at
