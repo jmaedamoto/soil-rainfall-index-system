@@ -51,6 +51,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
     sessionInfo,
     setIsAdjustedData,
     setPrefectureRiskData,
+    setSessionInfo,
     setSessionId,
   } = useProductionSession({
     swiInitialTime,
@@ -443,10 +444,16 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
           riskRule={sessionInfo.risk_rule ?? riskRule}
           prefectureDetails={sessionInfo.available_prefecture_details}
           dataSource="production"
-          onSessionRecalculated={async (newSessionId, _meshRisks, _newMeshCoords) => {
+          onSessionRecalculated={async (newSessionId, _meshRisks, _newMeshCoords, metadata) => {
             // フォークセッションIDに切り替え（以降の時刻変更で編集済みデータを取得するため）
             setSessionId(newSessionId);
             setIsAdjustedData(true);
+            setSessionInfo((prev) => prev ? ({
+              ...prev,
+              session_id: newSessionId,
+              guidance_type: metadata?.guidanceType ?? prev.guidance_type,
+              risk_rule: metadata?.riskRule ?? prev.risk_rule,
+            }) : prev);
             // 府県リスクデータキャッシュをクリア（ベースセッションのデータが古いため）
             setPrefectureRiskData({});
 
