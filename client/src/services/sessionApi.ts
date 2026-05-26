@@ -17,84 +17,24 @@ class SessionAPIClient {
     this.apiBaseUrl = API_BASE_URL;
   }
 
-  private logRequestStart(endpoint: string, detail?: Record<string, unknown>): number {
-    const startedAt = performance.now();
-    console.info('[sessionApi] request start', {
-      endpoint,
-      started_at: new Date().toISOString(),
-      ...detail,
-    });
-    return startedAt;
-  }
-
-  private logRequestSuccess(endpoint: string, startedAt: number, detail?: Record<string, unknown>) {
-    console.info('[sessionApi] request success', {
-      endpoint,
-      elapsed_ms: Math.round(performance.now() - startedAt),
-      completed_at: new Date().toISOString(),
-      ...detail,
-    });
-  }
-
-  private logRequestError(endpoint: string, startedAt: number, error: unknown, detail?: Record<string, unknown>) {
-    const axiosError = axios.isAxiosError(error) ? error : null;
-    console.error('[sessionApi] request error', {
-      endpoint,
-      elapsed_ms: Math.round(performance.now() - startedAt),
-      completed_at: new Date().toISOString(),
-      status: axiosError?.response?.status,
-      status_text: axiosError?.response?.statusText,
-      response_data: axiosError?.response?.data,
-      message: axiosError?.message ?? String(error),
-      code: axiosError?.code,
-      ...detail,
-    });
-  }
-
   /**
    * セッション情報取得
    */
   async getSessionInfo(sessionId: string): Promise<SessionInfo> {
-    const endpoint = 'getSessionInfo';
-    const startedAt = this.logRequestStart(endpoint, { session_id: sessionId });
-    try {
-      const response = await axios.get<{ status: string; session: SessionInfo }>(
-        `${this.apiBaseUrl}/session/${sessionId}`
-      );
-      this.logRequestSuccess(endpoint, startedAt, { session_id: sessionId });
-      return response.data.session;
-    } catch (error) {
-      this.logRequestError(endpoint, startedAt, error, { session_id: sessionId });
-      throw error;
-    }
+    const response = await axios.get<{ status: string; session: SessionInfo }>(
+      `${this.apiBaseUrl}/session/${sessionId}`
+    );
+    return response.data.session;
   }
 
   /**
    * 府県データ取得
    */
   async getPrefectureData(sessionId: string, prefectureCode: string): Promise<PrefectureDataResponse> {
-    const endpoint = 'getPrefectureData';
-    const startedAt = this.logRequestStart(endpoint, {
-      session_id: sessionId,
-      prefecture_code: prefectureCode,
-    });
-    try {
-      const response = await axios.get<PrefectureDataResponse>(
-        `${this.apiBaseUrl}/session/${sessionId}/prefecture/${prefectureCode}`
-      );
-      this.logRequestSuccess(endpoint, startedAt, {
-        session_id: sessionId,
-        prefecture_code: prefectureCode,
-        status: response.data.status,
-      });
-      return response.data;
-    } catch (error) {
-      this.logRequestError(endpoint, startedAt, error, {
-        session_id: sessionId,
-        prefecture_code: prefectureCode,
-      });
-      throw error;
-    }
+    const response = await axios.get<PrefectureDataResponse>(
+      `${this.apiBaseUrl}/session/${sessionId}/prefecture/${prefectureCode}`
+    );
+    return response.data;
   }
 
   /**
@@ -109,31 +49,11 @@ class SessionAPIClient {
     options?: { includeCoords?: boolean }
   ): Promise<RiskAtTimeResponse> {
     const includeCoords = options?.includeCoords ?? true;
-    const endpoint = 'getRiskAtTime';
-    const startedAt = this.logRequestStart(endpoint, {
-      session_id: sessionId,
-      ft,
-      include_coords: includeCoords,
-    });
-    try {
-      const response = await axios.get<RiskAtTimeResponse>(
-        `${this.apiBaseUrl}/session/${sessionId}/risk-at-time`,
-        { params: { ft, include_coords: includeCoords } }
-      );
-      this.logRequestSuccess(endpoint, startedAt, {
-        session_id: sessionId,
-        ft,
-        status: response.data.status,
-      });
-      return response.data;
-    } catch (error) {
-      this.logRequestError(endpoint, startedAt, error, {
-        session_id: sessionId,
-        ft,
-        include_coords: includeCoords,
-      });
-      throw error;
-    }
+    const response = await axios.get<RiskAtTimeResponse>(
+      `${this.apiBaseUrl}/session/${sessionId}/risk-at-time`,
+      { params: { ft, include_coords: includeCoords } }
+    );
+    return response.data;
   }
 
   /**
@@ -187,41 +107,33 @@ class SessionAPIClient {
    * 雨量調整用の雨量データ取得
    */
   async getRainfallData(sessionId: string): Promise<RainfallDataResponse> {
-    const endpoint = 'getRainfallData';
-    const startedAt = this.logRequestStart(endpoint, { session_id: sessionId });
-    try {
-      const response = await axios.get<{
-        status: string;
-        area_rainfall: RainfallDataResponse['area_rainfall'];
-        subdivision_rainfall: RainfallDataResponse['subdivision_rainfall'];
-        area_orders?: RainfallDataResponse['area_orders'];
-        subdivision_orders?: RainfallDataResponse['subdivision_orders'];
-        area_rainfall_24hour?: RainfallDataResponse['area_rainfall_24hour'];
-        subdivision_rainfall_24hour?: RainfallDataResponse['subdivision_rainfall_24hour'];
-        guidance_type?: RainfallDataResponse['guidance_type'];
-        risk_rule?: RainfallDataResponse['risk_rule'];
-        input_mode?: RainfallDataResponse['input_mode'];
-        adjustment_mode?: RainfallDataResponse['adjustment_mode'];
-      }>(
-        `${this.apiBaseUrl}/session/${sessionId}/rainfall-data`
-      );
-      this.logRequestSuccess(endpoint, startedAt, { session_id: sessionId });
-      return {
-        area_rainfall: response.data.area_rainfall,
-        subdivision_rainfall: response.data.subdivision_rainfall,
-        area_orders: response.data.area_orders,
-        subdivision_orders: response.data.subdivision_orders,
-        area_rainfall_24hour: response.data.area_rainfall_24hour,
-        subdivision_rainfall_24hour: response.data.subdivision_rainfall_24hour,
-        guidance_type: response.data.guidance_type,
-        risk_rule: response.data.risk_rule,
-        input_mode: response.data.input_mode,
-        adjustment_mode: response.data.adjustment_mode
-      };
-    } catch (error) {
-      this.logRequestError(endpoint, startedAt, error, { session_id: sessionId });
-      throw error;
-    }
+    const response = await axios.get<{
+      status: string;
+      area_rainfall: RainfallDataResponse['area_rainfall'];
+      subdivision_rainfall: RainfallDataResponse['subdivision_rainfall'];
+      area_orders?: RainfallDataResponse['area_orders'];
+      subdivision_orders?: RainfallDataResponse['subdivision_orders'];
+      area_rainfall_24hour?: RainfallDataResponse['area_rainfall_24hour'];
+      subdivision_rainfall_24hour?: RainfallDataResponse['subdivision_rainfall_24hour'];
+      guidance_type?: RainfallDataResponse['guidance_type'];
+      risk_rule?: RainfallDataResponse['risk_rule'];
+      input_mode?: RainfallDataResponse['input_mode'];
+      adjustment_mode?: RainfallDataResponse['adjustment_mode'];
+    }>(
+      `${this.apiBaseUrl}/session/${sessionId}/rainfall-data`
+    );
+    return {
+      area_rainfall: response.data.area_rainfall,
+      subdivision_rainfall: response.data.subdivision_rainfall,
+      area_orders: response.data.area_orders,
+      subdivision_orders: response.data.subdivision_orders,
+      area_rainfall_24hour: response.data.area_rainfall_24hour,
+      subdivision_rainfall_24hour: response.data.subdivision_rainfall_24hour,
+      guidance_type: response.data.guidance_type,
+      risk_rule: response.data.risk_rule,
+      input_mode: response.data.input_mode,
+      adjustment_mode: response.data.adjustment_mode
+    };
   }
 
   /**

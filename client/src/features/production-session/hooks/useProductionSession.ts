@@ -33,23 +33,6 @@ export const useProductionSession = ({
   const [isAdjustedData, setIsAdjustedData] = useState(false);
   const activeLoadRequestIdRef = useRef(0);
 
-  const logFrontendError = (context: string, err: unknown, detail?: Record<string, unknown>) => {
-    const errorLike = err as {
-      message?: string;
-      code?: string;
-      response?: { status?: number; statusText?: string; data?: unknown };
-    };
-    console.error(`[useProductionSession] ${context}`, {
-      at: new Date().toISOString(),
-      message: errorLike?.message ?? String(err),
-      code: errorLike?.code,
-      status: errorLike?.response?.status,
-      status_text: errorLike?.response?.statusText,
-      response_data: errorLike?.response?.data,
-      ...detail,
-    });
-  };
-
   useEffect(() => {
     if (Object.keys(meshRisksAtTime).length > 0) {
       console.log('[meshRisksAtTime変更検知] サンプル値:', Object.entries(meshRisksAtTime).slice(0, 5));
@@ -62,41 +45,18 @@ export const useProductionSession = ({
 
   const loadRiskAtTime = async (targetSessionId: string, ft: number, requestId?: number) => {
     try {
-      console.info('[useProductionSession] risk load start', {
-        at: new Date().toISOString(),
-        session_id: targetSessionId,
-        ft,
-        request_id: requestId,
-      });
       const response = await sessionApiClient.getRiskAtTime(targetSessionId, ft);
 
       if (!isLatestLoadRequest(requestId)) {
-        console.info('[useProductionSession] risk load ignored by stale request id', {
-          at: new Date().toISOString(),
-          session_id: targetSessionId,
-          ft,
-          request_id: requestId,
-          active_request_id: activeLoadRequestIdRef.current,
-        });
         return;
       }
 
       if (response.status === 'success') {
-        console.info('[useProductionSession] risk load success', {
-          at: new Date().toISOString(),
-          session_id: targetSessionId,
-          ft,
-          mesh_count: Object.keys(response.mesh_risks).length,
-        });
         setMeshRisksAtTime(response.mesh_risks);
         setMeshCoords(response.mesh_coords);
       }
     } catch (err) {
-      logFrontendError('メッシュリスク値読み込みエラー', err, {
-        session_id: targetSessionId,
-        ft,
-        request_id: requestId,
-      });
+      console.error(`メッシュリスク値読み込みエラー (FT=${ft}):`, err);
     }
   };
 
@@ -111,41 +71,18 @@ export const useProductionSession = ({
 
     try {
       setLoadingPrefecture(prefectureCode);
-      console.info('[useProductionSession] prefecture load start', {
-        at: new Date().toISOString(),
-        session_id: targetSessionId,
-        prefecture_code: prefectureCode,
-        request_id: requestId,
-      });
       const response = await sessionApiClient.getPrefectureData(targetSessionId, prefectureCode);
       if (!isLatestLoadRequest(requestId)) {
-        console.info('[useProductionSession] prefecture load ignored by stale request id', {
-          at: new Date().toISOString(),
-          session_id: targetSessionId,
-          prefecture_code: prefectureCode,
-          request_id: requestId,
-          active_request_id: activeLoadRequestIdRef.current,
-        });
         return;
       }
       if (response.status === 'success') {
-        console.info('[useProductionSession] prefecture load success', {
-          at: new Date().toISOString(),
-          session_id: targetSessionId,
-          prefecture_code: prefectureCode,
-          area_count: response.prefecture.areas.length,
-        });
         setPrefectureRiskData((prev) => ({
           ...prev,
           [prefectureCode]: response.prefecture,
         }));
       }
     } catch (err) {
-      logFrontendError('府県データ読み込みエラー', err, {
-        session_id: targetSessionId,
-        prefecture_code: prefectureCode,
-        request_id: requestId,
-      });
+      console.error(`府県データ読み込みエラー (${prefectureCode}):`, err);
     } finally {
       if (isLatestLoadRequest(requestId)) {
         setLoadingPrefecture(null);
@@ -196,15 +133,6 @@ export const useProductionSession = ({
       setIsAdjustedData(false);
       setMeshRisksAtTime({});
       setMeshCoords({});
-      const startedAt = performance.now();
-      console.info('[useProductionSession] production load start', {
-        at: new Date().toISOString(),
-        request_id: requestId,
-        swi_initial: swiInitialTime,
-        guidance_initial: guidanceInitialTime,
-        guidance_type: guidanceType,
-        risk_rule: riskRule,
-      });
 
       const result = await apiClient_.calculateProductionSoilRainfallIndexWithUrls({
         swi_initial: swiInitialTime,
@@ -213,22 +141,7 @@ export const useProductionSession = ({
         risk_rule: riskRule,
       });
 
-      console.info('[useProductionSession] production load response received', {
-        at: new Date().toISOString(),
-        request_id: requestId,
-        elapsed_ms: Math.round(performance.now() - startedAt),
-        session_id: result.session_id,
-        prefecture_count: result.available_prefectures.length,
-        available_times: result.available_times.length,
-      });
-
       if (!isLatestLoadRequest(requestId)) {
-        console.info('[useProductionSession] production load ignored by stale request id', {
-          at: new Date().toISOString(),
-          request_id: requestId,
-          active_request_id: activeLoadRequestIdRef.current,
-          session_id: result.session_id,
-        });
         return;
       }
 
@@ -239,43 +152,20 @@ export const useProductionSession = ({
       if (result.available_prefectures.length > 0) {
         const firstPrefCode = result.available_prefectures[0];
         setSelectedPrefecture(firstPrefCode);
-        console.info('[useProductionSession] first prefecture load scheduled', {
-          at: new Date().toISOString(),
-          session_id: result.session_id,
-          prefecture_code: firstPrefCode,
-          request_id: requestId,
-        });
         await loadPrefectureData(result.session_id, firstPrefCode, requestId);
       }
 
       if (result.available_times.length > 0) {
         const initialTime = result.available_times[0];
         setSelectedTime(initialTime);
-        console.info('[useProductionSession] initial risk load scheduled', {
-          at: new Date().toISOString(),
-          session_id: result.session_id,
-          ft: initialTime,
-          request_id: requestId,
-        });
         await loadRiskAtTime(result.session_id, initialTime, requestId);
       }
     } catch (err) {
       if (isLatestLoadRequest(requestId)) {
-        logFrontendError('production load error', err, {
-          request_id: requestId,
-          swi_initial: swiInitialTime,
-          guidance_initial: guidanceInitialTime,
-          guidance_type: guidanceType,
-          risk_rule: riskRule,
-        });
         setError(err instanceof Error ? err.message : '予期しないエラーが発生しました');
       }
     } finally {
       if (isLatestLoadRequest(requestId)) {
-        console.info('[useProductionSession] production load finished', {
-          at: new Date().toISOString(),
-          request_id: requestId,
-        });
         setLoading(false);
       }
     }
