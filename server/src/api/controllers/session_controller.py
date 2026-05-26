@@ -7,7 +7,6 @@ from datetime import datetime
 import logging
 import os
 import sys
-import time
 from typing import Any, Dict, List
 
 # プロジェクトルートをパスに追加
@@ -88,13 +87,11 @@ class SessionController:
         GET /session/<session_id>
         """
         try:
-            request_started_at = time.perf_counter()
             trace_prefix = self._trace_prefix(session_id)
             logger.info(f"{trace_prefix} セッション情報取得開始")
             info = self.session_service.get_session_info(session_id)
 
             if info is None:
-                elapsed = time.perf_counter() - request_started_at
                 logger.warning(f"{trace_prefix} セッション情報取得失敗: session not found")
                 return jsonify({
                     "status": "error",
@@ -102,12 +99,10 @@ class SessionController:
                     "session_id": session_id
                 }), 404
 
-            elapsed = time.perf_counter() - request_started_at
             logger.info(
                 f"{trace_prefix} セッション情報取得成功: "
                 f"prefecture_count={info.get('prefecture_count')} "
-                f"guidance_type={info.get('guidance_type')} risk_rule={info.get('risk_rule')} "
-                f"elapsed={elapsed:.2f}s"
+                f"guidance_type={info.get('guidance_type')} risk_rule={info.get('risk_rule')}"
             )
             return jsonify({
                 "status": "success",
@@ -115,8 +110,7 @@ class SessionController:
             })
 
         except Exception as e:
-            elapsed = time.perf_counter() - request_started_at if 'request_started_at' in locals() else 0.0
-            logger.error(f"Session info error: {e} (elapsed={elapsed:.2f}s)")
+            logger.error(f"Session info error: {e}")
             return jsonify({
                 "status": "error",
                 "error": str(e),
@@ -136,7 +130,6 @@ class SessionController:
             - 府県全体危険度時系列
         """
         try:
-            request_started_at = time.perf_counter()
             trace_prefix = self._trace_prefix(session_id)
             logger.info(f"{trace_prefix} 府県データ取得開始: prefecture_code={prefecture_code}")
             prefecture = self.session_service.get_prefecture(
@@ -194,13 +187,11 @@ class SessionController:
             }
 
             # デバッグ: レスポンスデータの確認
-            elapsed = time.perf_counter() - request_started_at
             logger.info(
                 f"{trace_prefix} 府県データ取得成功: prefecture_code={prefecture_code} "
                 f"areas={len(response_data['areas'])} "
                 f"secondary_subdivisions={len(response_data['secondary_subdivisions'])} "
-                f"prefecture_risk_timeline_length={len(response_data['prefecture_risk_timeline'])} "
-                f"elapsed={elapsed:.2f}s"
+                f"prefecture_risk_timeline_length={len(response_data['prefecture_risk_timeline'])}"
             )
             if response_data['areas']:
                 first_area = response_data['areas'][0]
@@ -217,8 +208,7 @@ class SessionController:
             })
 
         except Exception as e:
-            elapsed = time.perf_counter() - request_started_at if 'request_started_at' in locals() else 0.0
-            logger.error(f"Prefecture data error: {e} (elapsed={elapsed:.2f}s)")
+            logger.error(f"Prefecture data error: {e}")
             return jsonify({
                 "status": "error",
                 "error": str(e),
@@ -236,7 +226,6 @@ class SessionController:
             include_coords: 互換用パラメータ（現在は常に座標を返す）
         """
         try:
-            request_started_at = time.perf_counter()
             trace_prefix = self._trace_prefix(session_id)
             ft = request.args.get('ft', type=int)
             if ft is None:
@@ -334,18 +323,15 @@ class SessionController:
             if include_coords:
                 response_data["mesh_coords"] = mesh_coords
 
-            elapsed = time.perf_counter() - request_started_at
             logger.info(
                 f"{trace_prefix} 時刻別リスク取得成功: ft={ft} "
-                f"mesh_count={len(mesh_risks)} coords_included={include_coords} "
-                f"elapsed={elapsed:.2f}s"
+                f"mesh_count={len(mesh_risks)} coords_included={include_coords}"
             )
 
             return jsonify(response_data)
 
         except Exception as e:
-            elapsed = time.perf_counter() - request_started_at if 'request_started_at' in locals() else 0.0
-            logger.error(f"Risk at time error: {e} (elapsed={elapsed:.2f}s)")
+            logger.error(f"Risk at time error: {e}")
             return jsonify({
                 "status": "error",
                 "error": str(e),
