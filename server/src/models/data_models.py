@@ -134,4 +134,12 @@ PREFECTURES_MASTER = {
     'hyogo': '兵庫県',
     'nara': '奈良県',
     'wakayama': '和歌山県',
+    'tottori': '鳥取県',
+    'shimane': '島根県',
+    'okayama': '岡山県',
+    'hiroshima': '広島県',
+    'tokushima': '徳島県',
+    'kagawa': '香川県',
+    'ehime': '愛媛県',
+    'kochi': '高知県',
 }
