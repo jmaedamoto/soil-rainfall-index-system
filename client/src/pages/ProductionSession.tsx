@@ -111,7 +111,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
       <h1 style={{ marginBottom: '20px' }}>
-        土壌雨量指数監視システム（{region.name}・本番環境）
+        土壌雨量指数監視システム（{region.name}・動作検証環境）
       </h1>
 
       {/* ローディング表示 */}

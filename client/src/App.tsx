@@ -8,9 +8,9 @@ function App() {
     <div className="App">
       <Routes>
         <Route path="/" element={<Navigate to="/kinki" replace />} />
-        <Route path="/kinki" element={<ProductionSession regionCode="kinki" />} />
-        <Route path="/chugoku" element={<ProductionSession regionCode="chugoku" />} />
-        <Route path="/shikoku" element={<ProductionSession regionCode="shikoku" />} />
+        <Route path="/kinki" element={<ProductionSession key="kinki" regionCode="kinki" />} />
+        <Route path="/chugoku" element={<ProductionSession key="chugoku" regionCode="chugoku" />} />
+        <Route path="/shikoku" element={<ProductionSession key="shikoku" regionCode="shikoku" />} />
       </Routes>
     </div>
   )
