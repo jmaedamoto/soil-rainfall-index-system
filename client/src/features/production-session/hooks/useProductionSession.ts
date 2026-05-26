@@ -5,12 +5,14 @@ import type {
   LightweightCalculationResult,
   LightweightPrefectureData,
 } from '../../../types/session';
+import type { RegionCode } from '../regions';
 
 interface UseProductionSessionParams {
   swiInitialTime: string;
   guidanceInitialTime: string;
   guidanceType?: 'msm' | 'gsm';
   riskRule?: 'legacy' | 'lead_time_to_level4';
+  regionCode: RegionCode;
 }
 
 export const useProductionSession = ({
@@ -18,6 +20,7 @@ export const useProductionSession = ({
   guidanceInitialTime,
   guidanceType = 'msm',
   riskRule = 'legacy',
+  regionCode,
 }: UseProductionSessionParams) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = useState<LightweightCalculationResult | null>(null);
@@ -139,6 +142,7 @@ export const useProductionSession = ({
         guidance_initial: guidanceInitialTime,
         guidance_type: guidanceType,
         risk_rule: riskRule,
+        region: regionCode,
       });
 
       if (!isLatestLoadRequest(requestId)) {

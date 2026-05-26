@@ -50,7 +50,8 @@ class CacheService:
         swi_initial: str,
         guidance_initial: str,
         guidance_type: str = "msm",
-        risk_rule: str = "legacy"
+        risk_rule: str = "legacy",
+        region: Optional[str] = None,
     ) -> str:
         """
         キャッシュキー生成
@@ -70,7 +71,12 @@ class CacheService:
         swi_key = swi_dt.strftime("%Y%m%d%H%M%S")
         guid_key = guid_dt.strftime("%Y%m%d%H%M%S")
 
-        return f"swi_{swi_key}_guid_{guidance_type.lower()}_{guid_key}_risk_{risk_rule.lower()}"
+        cache_key = (
+            f"swi_{swi_key}_guid_{guidance_type.lower()}_{guid_key}_risk_{risk_rule.lower()}"
+        )
+        if region:
+            cache_key = f"{cache_key}_region_{region.lower()}"
+        return cache_key
 
     def _get_cache_path(self, cache_key: str) -> Path:
         """キャッシュファイルパス取得（.json.gz）"""

@@ -130,8 +130,22 @@ class Prefecture:
 PREFECTURES_MASTER = {
     'shiga': '滋賀県',
     'kyoto': '京都府',
-    'osaka': '大阪府',
     'hyogo': '兵庫県',
+    'osaka': '大阪府',
     'nara': '奈良県',
-    'wakayama': '和歌山県'
+    'wakayama': '和歌山県',
+    'tottori': '鳥取県',
+    'okayama': '岡山県',
+    'hiroshima': '広島県',
+    'shimane': '島根県',
+    'ehime': '愛媛県',
+    'tokushima': '徳島県',
+    'kagawa': '香川県',
+    'kochi': '高知県',
+}
+
+REGION_PREFECTURES = {
+    'kinki': ['shiga', 'kyoto', 'hyogo', 'osaka', 'nara', 'wakayama'],
+    'chugoku': ['tottori', 'okayama', 'hiroshima', 'shimane'],
+    'shikoku': ['ehime', 'tokushima', 'kagawa', 'kochi'],
 }
