@@ -5,7 +5,8 @@
 
 from .data_models import (
     BaseInfo, SwiTimeSeries, GuidanceTimeSeries, Risk,
-    Mesh, Area, SecondarySubdivision, Prefecture, PREFECTURES_MASTER
+    Mesh, Area, SecondarySubdivision, Prefecture, PREFECTURES_MASTER,
+    REGION_PREFECTURES
 )
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     'Area',
     'SecondarySubdivision',
     'Prefecture',
-    'PREFECTURES_MASTER'
+    'PREFECTURES_MASTER',
+    'REGION_PREFECTURES'
 ]

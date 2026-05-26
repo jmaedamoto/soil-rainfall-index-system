@@ -2,6 +2,7 @@ import axios from 'axios';
 import { HealthStatus } from '../types/api';
 import type { LightweightCalculationResult } from '../types/session';
 import { API_BASE_URL } from '../config/apiConfig';
+import type { RegionCode } from '../features/production-session/regions';
 
 // Axiosインスタンスの作成
 const apiClient = axios.create({
@@ -61,6 +62,7 @@ export class SoilRainfallAPIClient {
     guidance_initial: string;
     guidance_type?: 'msm' | 'gsm';
     risk_rule?: 'legacy' | 'lead_time_to_level4';
+    region?: RegionCode;
   }): Promise<LightweightCalculationResult> {
     const response = await apiClient.post<LightweightCalculationResult>(
       '/production-soil-rainfall-index-with-urls',

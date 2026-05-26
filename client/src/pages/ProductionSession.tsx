@@ -14,8 +14,14 @@ import {
   useProductionSession,
 } from '../features/production-session/hooks/useProductionSession';
 import type { RiskRule } from '../types/api';
+import { REGION_CONFIGS, type RegionCode } from '../features/production-session/regions';
 
-const ProductionSession: React.FC = () => {
+interface ProductionSessionProps {
+  regionCode: RegionCode;
+}
+
+const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => {
+  const region = REGION_CONFIGS[regionCode];
   const [isRainfallModalOpen, setIsRainfallModalOpen] = useState(false);
   const [swiDate, setSwiDate] = useState<string>('');
   const [swiHour, setSwiHour] = useState<number>(0);
@@ -52,6 +58,7 @@ const ProductionSession: React.FC = () => {
     guidanceInitialTime,
     guidanceType,
     riskRule,
+    regionCode,
   });
 
   // 日付・時刻変更時にISO文字列を更新
@@ -103,7 +110,9 @@ const ProductionSession: React.FC = () => {
 
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
-      <h1 style={{ marginBottom: '20px' }}>土壌雨量指数監視システム（本番環境 - セッションベース）</h1>
+      <h1 style={{ marginBottom: '20px' }}>
+        土壌雨量指数監視システム（{region.name}・本番環境）
+      </h1>
 
       {/* ローディング表示 */}
       {loading && (
@@ -139,6 +148,18 @@ const ProductionSession: React.FC = () => {
       {/* データ取得コントロール */}
       <div style={{ marginBottom: '30px', backgroundColor: '#f5f5f5', padding: '20px', borderRadius: '8px' }}>
         <h2 style={{ marginTop: 0 }}>データ取得設定</h2>
+        <div style={{
+          backgroundColor: '#e8f4fd',
+          padding: '10px 15px',
+          borderRadius: '4px',
+          marginBottom: '15px',
+          fontSize: '14px',
+          border: '1px solid #90caf9'
+        }}>
+          <strong>対象地方:</strong> {region.name}
+          <br />
+          <strong>対象府県:</strong> {region.prefectureNames.join('、')}
+        </div>
 
         <div style={{
           backgroundColor: '#fff3cd',

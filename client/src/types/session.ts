@@ -1,6 +1,7 @@
 import type { Mesh, RiskRule } from './api';
 import type { TimeSeriesPoint, RiskTimePoint } from './api';
 import type { AdjustmentMode, InputMode } from '../features/rainfall-adjustment/types';
+import type { RegionCode } from '../features/production-session/regions';
 
 export interface SessionInfo {
   session_id: string;
@@ -28,6 +29,7 @@ export interface LightweightCalculationResult {
   guidance_initial_time: string;
   guidance_type?: 'msm' | 'gsm';
   risk_rule?: RiskRule;
+  region?: RegionCode;
   available_prefectures: string[];
   available_prefecture_details?: Array<{
     code: string;
@@ -41,6 +43,7 @@ export interface LightweightCalculationResult {
     guidance_initial_time: string;
     guidance_type?: 'msm' | 'gsm';
     risk_rule?: RiskRule;
+    region?: RegionCode;
   };
 }
 
