@@ -8,6 +8,7 @@ VBA Module.basの完全再現によるCalculationService
 from typing import List, Dict, Any, Tuple, Optional
 import logging
 from datetime import datetime, timedelta
+import math
 
 from models import (
     BaseInfo, SwiTimeSeries, GuidanceTimeSeries, Risk,
@@ -648,19 +649,89 @@ class CalculationService:
         if swi_after is None or existing_rain is None:
             return None
 
-        for additional_rainfall in range(max_additional_rainfall + 1):
-            total_rain = existing_rain + additional_rainfall
+        return self._rainfall_to_level4_1h_from_values(
+            swi_after,
+            existing_rain,
+            getattr(mesh, "level4_curve", None),
+            mesh.dosyakei_bound,
+            max_additional_rainfall,
+        )
+
+    def _rainfall_to_level4_1h_from_values(
+        self,
+        swi_after: float,
+        existing_rain: float,
+        level4_curve,
+        dosyakei_bound: int,
+        max_additional_rainfall: int,
+    ) -> Optional[int]:
+        """SWI・既存雨量から必要追加雨量を求める。雨量候補ではなく閾値曲線を走査する。"""
+        if max_additional_rainfall < 0:
+            return None
+
+        best: Optional[int] = None
+        max_rain_index = min(150, self._normalize_rainfall_index(existing_rain + max_additional_rainfall))
+        min_rain_index = self._normalize_rainfall_index(existing_rain)
+
+        for rain_index in range(min_rain_index, max_rain_index + 1):
             level4_threshold = self.get_level4_threshold(
-                getattr(mesh, "level4_curve", None),
-                total_rain,
-                mesh.dosyakei_bound,
+                level4_curve,
+                rain_index,
+                dosyakei_bound,
             )
             if level4_threshold is None:
                 continue
 
-            if swi_after + additional_rainfall >= level4_threshold:
-                return additional_rainfall
+            additional_by_swi = max(0, math.ceil(level4_threshold - swi_after))
+            additional_by_rain_index = max(
+                0,
+                math.ceil((rain_index - 0.5) - existing_rain),
+            )
+            additional_rainfall = max(additional_by_swi, additional_by_rain_index)
 
+            if additional_rainfall > max_additional_rainfall:
+                continue
+
+            actual_index = self._normalize_rainfall_index(existing_rain + additional_rainfall)
+            if actual_index != rain_index and actual_index < 150:
+                continue
+
+            actual_threshold = self.get_level4_threshold(
+                level4_curve,
+                existing_rain + additional_rainfall,
+                dosyakei_bound,
+            )
+            if actual_threshold is None:
+                continue
+            if swi_after + additional_rainfall < actual_threshold:
+                continue
+
+            if best is None or additional_rainfall < best:
+                best = additional_rainfall
+                if best == 0:
+                    return best
+
+        if best is not None:
+            return best
+
+        if max_additional_rainfall <= 150:
+            return None
+
+        level4_threshold = self.get_level4_threshold(
+            level4_curve,
+            150,
+            dosyakei_bound,
+        )
+        if level4_threshold is None:
+            return None
+
+        additional_rainfall = max(
+            0,
+            math.ceil(level4_threshold - swi_after),
+            math.ceil(149.5 - existing_rain),
+        )
+        if additional_rainfall <= max_additional_rainfall:
+            return additional_rainfall
         return None
 
     def _current_level4_deficit(self, mesh: Mesh, ft: int) -> float:
