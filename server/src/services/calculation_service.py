@@ -613,10 +613,6 @@ class CalculationService:
                     Risk(
                         ft=ft,
                         value=max_risk,
-                        rainfall_to_level4_1h_mm=self.calc_area_rainfall_to_level4_1h(
-                            meshes,
-                            ft,
-                        ),
                     )
                 )
 
