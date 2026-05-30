@@ -30,6 +30,12 @@
 3. `test_*.py`、`server/tests/`、`.pytest_cache/`、`__pycache__/`、`*.pyc` を残さない
 4. PR に「production profile で確認済み」と明記する
 
+## 画面表記ルール
+
+- `staging` のクライアント表記は `動作検証環境` とする
+- `main` のクライアント表記は `本番環境` とする
+- 環境名の文言変更を含む改修では、昇格先ブランチの表記に合わせて確認する
+
 ## 明示方法
 
 - ブランチ昇格用 PR テンプレートに `route profile: production` を必須項目として入れる
