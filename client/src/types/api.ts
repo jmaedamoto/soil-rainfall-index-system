@@ -8,6 +8,7 @@ export interface TimeSeriesPoint {
 export interface RiskTimePoint {
   ft: number;  // 予測時間（時間）
   value: number;  // リスクレベル（0-3）
+  rainfall_to_level4_1h_mm?: number | null; // 直後1時間でレベル4到達に必要な追加雨量
 }
 
 export type RiskRule = 'legacy' | 'lead_time_to_level4';
