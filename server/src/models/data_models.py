@@ -43,6 +43,7 @@ class Risk:
     """リスクレベル情報"""
     ft: int  # 予測時間（時間）
     value: int  # リスクレベル（0-3）
+    rainfall_to_level4_1h_mm: Optional[int] = None  # 直後1時間でレベル4到達に必要な追加雨量
 
 
 @dataclass

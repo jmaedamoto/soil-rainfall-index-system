@@ -124,7 +124,10 @@ class ResponseBuilder:
                 "name": area.name,
                 "secondary_subdivision_name": area.secondary_subdivision_name,
                 "meshes": area_meshes,
-                "risk_timeline": ResponseBuilder._build_risk_timeline(area.risk_timeline),
+                "risk_timeline": ResponseBuilder._build_risk_timeline(
+                    area.risk_timeline,
+                    include_rainfall_to_level4=True,
+                ),
                 **ResponseBuilder._build_row_metrics_from_meshes(area_meshes),
             }
 
@@ -185,9 +188,19 @@ class ResponseBuilder:
         ]
 
     @staticmethod
-    def _build_risk_timeline(risk_data) -> List[Dict[str, Any]]:
+    def _build_risk_timeline(
+        risk_data,
+        include_rainfall_to_level4: bool = False,
+    ) -> List[Dict[str, Any]]:
         """リスクタイムラインを辞書リストに変換"""
-        return [
-            {"ft": r.ft, "value": r.value}
-            for r in risk_data
-        ]
+        timeline = []
+        for r in risk_data:
+            point = {"ft": r.ft, "value": r.value}
+            if include_rainfall_to_level4:
+                point["rainfall_to_level4_1h_mm"] = getattr(
+                    r,
+                    "rainfall_to_level4_1h_mm",
+                    None,
+                )
+            timeline.append(point)
+        return timeline

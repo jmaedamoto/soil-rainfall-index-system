@@ -40,7 +40,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
   // viewModeに応じた表示データの準備
   type DisplayRow = {
     name: string;
-    risk_timeline: Array<{ ft: number; value: number }>;
+    risk_timeline: Array<{ ft: number; value: number; rainfall_to_level4_1h_mm?: number | null }>;
     swi_timeline?: Array<{ ft: number; value: number }>;
     rain_3hour_timeline?: Array<{ ft: number; value: number }>;
   };
@@ -325,6 +325,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                   dateGroup.hours.map((hourInfo, hourIndex) => {
                     const riskPoint = row.risk_timeline.find(r => r.ft === hourInfo.ft);
                     const riskLevel = riskPoint ? riskPoint.value : 0;
+                    const rainfallToLevel4 = riskPoint?.rainfall_to_level4_1h_mm;
                     const swiPoint = row.swi_timeline?.find(point => point.ft === hourInfo.ft);
                     const rainPoint = row.rain_3hour_timeline?.find(point => point.ft === hourInfo.ft);
                     const color = RISK_COLORS[riskLevel as RiskLevel];
@@ -369,6 +370,11 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                         <div>
                           3h {rainPoint ? Math.round(rainPoint.value) : '-'}
                         </div>
+                        {viewMode === 'municipality' && (
+                          <div>
+                            あとR1 {rainfallToLevel4 == null ? '-' : `${rainfallToLevel4}mm`}
+                          </div>
+                        )}
                       </td>
                     );
                   })

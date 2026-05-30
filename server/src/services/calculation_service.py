@@ -600,7 +600,16 @@ class CalculationService:
 
                         max_risk = max(max_risk, risk)
 
-                risk_timeline.append(Risk(ft=ft, value=max_risk))
+                risk_timeline.append(
+                    Risk(
+                        ft=ft,
+                        value=max_risk,
+                        rainfall_to_level4_1h_mm=self.calc_area_rainfall_to_level4_1h(
+                            meshes,
+                            ft,
+                        ),
+                    )
+                )
 
             logger.info(f"Risk timeline calculated: {len(risk_timeline)} entries")
             if risk_timeline:
@@ -616,6 +625,94 @@ class CalculationService:
             import traceback
             logger.error(f"Risk calculation traceback: {traceback.format_exc()}")
             return []
+
+    @staticmethod
+    def _find_timeline_value(timeline, ft: int) -> Optional[float]:
+        """指定FTの時系列値を取得する。"""
+        for point in timeline or []:
+            if int(point.ft) == int(ft):
+                return float(point.value)
+        return None
+
+    def _rainfall_to_level4_1h_for_mesh(
+        self,
+        mesh: Mesh,
+        ft: int,
+        max_additional_rainfall: int,
+    ) -> Optional[int]:
+        """単一メッシュで直後1時間に必要な追加雨量を求める。"""
+        next_ft = int(ft) + 1
+        swi_after = self._find_timeline_value(getattr(mesh, "swi_hourly", []), next_ft)
+        existing_rain = self._find_timeline_value(getattr(mesh, "rain_1hour", []), next_ft)
+
+        if swi_after is None or existing_rain is None:
+            return None
+
+        for additional_rainfall in range(max_additional_rainfall + 1):
+            total_rain = existing_rain + additional_rainfall
+            level4_threshold = self.get_level4_threshold(
+                getattr(mesh, "level4_curve", None),
+                total_rain,
+                mesh.dosyakei_bound,
+            )
+            if level4_threshold is None:
+                continue
+
+            if swi_after + additional_rainfall >= level4_threshold:
+                return additional_rainfall
+
+        return None
+
+    def _current_level4_deficit(self, mesh: Mesh, ft: int) -> float:
+        """追加0mm時点のレベル4不足量を計算し、候補メッシュの処理順に使う。"""
+        next_ft = int(ft) + 1
+        swi_after = self._find_timeline_value(getattr(mesh, "swi_hourly", []), next_ft)
+        existing_rain = self._find_timeline_value(getattr(mesh, "rain_1hour", []), next_ft)
+
+        if swi_after is None or existing_rain is None:
+            return float("inf")
+
+        level4_threshold = self.get_level4_threshold(
+            getattr(mesh, "level4_curve", None),
+            existing_rain,
+            mesh.dosyakei_bound,
+        )
+        if level4_threshold is None:
+            return float("inf")
+
+        return level4_threshold - swi_after
+
+    def calc_area_rainfall_to_level4_1h(
+        self,
+        meshes: List[Mesh],
+        ft: int,
+        max_additional_rainfall: int = 999,
+    ) -> Optional[int]:
+        """領域内でレベル4到達に必要な直後1時間追加雨量の最小値を求める。"""
+        candidates = sorted(
+            meshes,
+            key=lambda mesh: self._current_level4_deficit(mesh, ft),
+        )
+
+        best: Optional[int] = None
+        for mesh in candidates:
+            search_limit = max_additional_rainfall if best is None else best - 1
+            if search_limit < 0:
+                break
+
+            rainfall = self._rainfall_to_level4_1h_for_mesh(
+                mesh,
+                ft,
+                search_limit,
+            )
+            if rainfall is None:
+                continue
+
+            best = rainfall if best is None else min(best, rainfall)
+            if best == 0:
+                break
+
+        return best
 
     def process_mesh_calculations(
         self,
