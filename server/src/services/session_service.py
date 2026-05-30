@@ -442,8 +442,14 @@ class SessionService:
                             'risk_3hour_max_timeline', mesh.get('risk_3hour_max_timeline', []))
                         mesh['swi_timeline'] = recalc_data.get(
                             'swi_timeline', mesh.get('swi_timeline', []))
+                        mesh['swi_hourly_timeline'] = recalc_data.get(
+                            'swi_hourly_timeline', mesh.get('swi_hourly_timeline', []))
                         mesh['rain_timeline'] = recalc_data.get(
                             'rain_timeline', mesh.get('rain_timeline', []))
+                        mesh['rain_1hour_timeline'] = recalc_data.get(
+                            'rain_1hour_timeline', mesh.get('rain_1hour_timeline', []))
+                        mesh['rain_1hour_max_timeline'] = recalc_data.get(
+                            'rain_1hour_max_timeline', mesh.get('rain_1hour_max_timeline', []))
                         if 'risk_hourly_timeline' in recalc_data:
                             mesh['risk_hourly_timeline'] = recalc_data['risk_hourly_timeline']
 

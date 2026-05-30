@@ -498,8 +498,24 @@ class CalculationServiceNumpy:
             for j in range(risk_hourly.shape[0]):
                 risk_hourly_timeline.append({'ft': j, 'value': int(risk_hourly[j, i])})
 
+            rain_1hour_timeline = [
+                {'ft': j + 1, 'value': float(rain_1hour[j, i])}
+                for j in range(rain_1hour.shape[0])
+            ]
+            swi_hourly_timeline = [
+                {'ft': j, 'value': float(swi_hourly[j, i])}
+                for j in range(swi_hourly.shape[0])
+            ]
+            rain_1hour_max_timeline = [
+                {'ft': ft, 'value': float(rain_1h_max[j, i])}
+                for j, ft in enumerate(ft_list)
+            ]
+
             results[mesh_code] = {
+                'rain_1hour_timeline': rain_1hour_timeline,
+                'rain_1hour_max_timeline': rain_1hour_max_timeline,
                 'swi_timeline': swi_timeline,
+                'swi_hourly_timeline': swi_hourly_timeline,
                 'risk_3hour_max_timeline': risk_3h_timeline,
                 'risk_hourly_timeline': risk_hourly_timeline
             }
