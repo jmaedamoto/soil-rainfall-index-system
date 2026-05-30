@@ -8,6 +8,7 @@ import logging
 import os
 import sys
 from typing import Any, Dict, List
+import numpy as np
 
 # プロジェクトルートをパスに追加
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -80,6 +81,94 @@ class SessionController:
 
         return meshes
 
+    @staticmethod
+    def _find_timeline_value(timeline: List[Dict[str, Any]], ft: int) -> Any:
+        for point in timeline or []:
+            if int(point.get("ft")) == int(ft):
+                return point.get("value")
+        return None
+
+    @staticmethod
+    def _rainfall_to_level4_1h_for_meshes(
+        meshes: List[Dict[str, Any]],
+        ft: int,
+        max_additional_rainfall: int = 999,
+    ) -> Any:
+        next_ft = int(ft) + 1
+        swi_values = []
+        rain_values = []
+        level4_curves = []
+
+        for mesh in meshes:
+            swi_after = SessionController._find_timeline_value(
+                mesh.get("swi_hourly_timeline", []),
+                next_ft,
+            )
+            existing_rain = SessionController._find_timeline_value(
+                mesh.get("rain_1hour_timeline", []),
+                next_ft,
+            )
+            if swi_after is None or existing_rain is None:
+                continue
+
+            curve = mesh.get("_level4_curve")
+            if curve is None or len(curve) != 151:
+                curve_array = np.full(
+                    151,
+                    int(mesh.get("_dosyakei_bound", 999)),
+                    dtype=np.int32,
+                )
+            else:
+                curve_array = np.asarray(curve, dtype=np.int32)
+
+            swi_values.append(float(swi_after))
+            rain_values.append(float(existing_rain))
+            level4_curves.append(curve_array)
+
+        if not swi_values:
+            return None
+
+        swi_array = np.asarray(swi_values, dtype=np.float64)
+        rain_array = np.asarray(rain_values, dtype=np.float64)
+        curve_matrix = np.vstack(level4_curves)
+        additional_candidates = np.arange(
+            max_additional_rainfall + 1,
+            dtype=np.int32,
+        ).reshape(-1, 1)
+
+        rain_indices = np.clip(
+            np.rint(rain_array.reshape(1, -1) + additional_candidates).astype(np.int32),
+            0,
+            150,
+        )
+        mesh_indices = np.arange(curve_matrix.shape[0]).reshape(1, -1)
+        thresholds = curve_matrix[mesh_indices, rain_indices]
+        reachable = (
+            (thresholds < 999)
+            & (swi_array.reshape(1, -1) + additional_candidates >= thresholds)
+        )
+        candidate_matches = np.any(reachable, axis=1)
+        if not np.any(candidate_matches):
+            return None
+
+        return int(np.argmax(candidate_matches))
+
+    @staticmethod
+    def _build_area_risk_timeline_with_rainfall_to_level4(
+        risk_timeline: List[Dict[str, Any]],
+        meshes: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        return [
+            {
+                **point,
+                "rainfall_to_level4_1h_mm": SessionController._rainfall_to_level4_1h_for_meshes(
+                    meshes,
+                    int(point["ft"]),
+                ),
+            }
+            for point in risk_timeline
+        ]
+
     def get_session_info(self, session_id: str):
         """
         セッション情報取得
@@ -148,20 +237,25 @@ class SessionController:
                     "prefecture_code": prefecture_code
                 }), 404
 
+            areas = [
+                {
+                    "name": area["name"],
+                    "secondary_subdivision_name": area["secondary_subdivision_name"],
+                    "risk_timeline": self._build_area_risk_timeline_with_rainfall_to_level4(
+                        area.get("risk_timeline", []),
+                        area.get("meshes", []),
+                    ),
+                    **self._build_row_metrics_from_meshes(area.get("meshes", [])),
+                }
+                for area in prefecture["areas"]
+            ]
+
             # 危険度時系列のみを抽出（prefectureは辞書形式）
             response_data = {
                 "name": prefecture["name"],
                 "code": prefecture["code"],
                 "risk_rule": self.session_service.get_session(session_id).get("risk_rule", "legacy"),
-                "areas": [
-                    {
-                        "name": area["name"],
-                        "secondary_subdivision_name": area["secondary_subdivision_name"],
-                        "risk_timeline": area["risk_timeline"],
-                        **self._build_row_metrics_from_meshes(area.get("meshes", [])),
-                    }
-                    for area in prefecture["areas"]
-                ],
+                "areas": areas,
                 "secondary_subdivisions": [
                     {
                         "name": subdiv["name"],
