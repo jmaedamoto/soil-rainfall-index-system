@@ -991,7 +991,10 @@ class SessionController:
                 for mesh_code, result in numpy_results.items():
                     recalculated_meshes[mesh_code] = {
                         'rain_timeline': mesh_code_to_rain[mesh_code],
+                        'rain_1hour_timeline': result['rain_1hour_timeline'],
+                        'rain_1hour_max_timeline': result['rain_1hour_max_timeline'],
                         'swi_timeline': result['swi_timeline'],
+                        'swi_hourly_timeline': result['swi_hourly_timeline'],
                         'risk_3hour_max_timeline': result['risk_3hour_max_timeline'],
                         'risk_hourly_timeline': result['risk_hourly_timeline']
                     }
