@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Tuple, Optional
 import logging
 from datetime import datetime, timedelta
 import math
+import numpy as np
 
 from models import (
     BaseInfo, SwiTimeSeries, GuidanceTimeSeries, Risk,
@@ -767,30 +768,58 @@ class CalculationService:
         max_additional_rainfall: int = 999,
     ) -> Optional[int]:
         """領域内でレベル4到達に必要な直後1時間追加雨量の最小値を求める。"""
-        candidates = sorted(
-            meshes,
-            key=lambda mesh: self._current_level4_deficit(mesh, ft),
-        )
+        if max_additional_rainfall < 0:
+            return None
 
-        best: Optional[int] = None
-        for mesh in candidates:
-            search_limit = max_additional_rainfall if best is None else best - 1
-            if search_limit < 0:
-                break
+        next_ft = int(ft) + 1
+        swi_values = []
+        rain_values = []
+        level4_curves = []
 
-            rainfall = self._rainfall_to_level4_1h_for_mesh(
-                mesh,
-                ft,
-                search_limit,
-            )
-            if rainfall is None:
+        for mesh in meshes:
+            swi_after = self._find_timeline_value(getattr(mesh, "swi_hourly", []), next_ft)
+            existing_rain = self._find_timeline_value(getattr(mesh, "rain_1hour", []), next_ft)
+            if swi_after is None or existing_rain is None:
                 continue
 
-            best = rainfall if best is None else min(best, rainfall)
-            if best == 0:
-                break
+            curve = getattr(mesh, "level4_curve", None)
+            if curve is None or len(curve) != 151:
+                curve_array = np.full(151, int(mesh.dosyakei_bound), dtype=np.int32)
+            else:
+                curve_array = np.asarray(curve, dtype=np.int32)
 
-        return best
+            swi_values.append(float(swi_after))
+            rain_values.append(float(existing_rain))
+            level4_curves.append(curve_array)
+
+        if not swi_values:
+            return None
+
+        swi_array = np.asarray(swi_values, dtype=np.float64)
+        rain_array = np.asarray(rain_values, dtype=np.float64)
+        curve_matrix = np.vstack(level4_curves)
+        additional_candidates = np.arange(
+            max_additional_rainfall + 1,
+            dtype=np.int32,
+        ).reshape(-1, 1)
+
+        rain_indices = np.clip(
+            np.rint(rain_array.reshape(1, -1) + additional_candidates).astype(np.int32),
+            0,
+            150,
+        )
+        mesh_indices = np.arange(curve_matrix.shape[0]).reshape(1, -1)
+        thresholds = curve_matrix[mesh_indices, rain_indices]
+        reachable = (
+            (thresholds < 999)
+            & (swi_array.reshape(1, -1) + additional_candidates >= thresholds)
+        )
+
+        candidate_matches = np.any(reachable, axis=1)
+        if not np.any(candidate_matches):
+            return None
+
+        return int(np.argmax(candidate_matches))
 
     def process_mesh_calculations(
         self,
