@@ -635,19 +635,8 @@ class MainController:
                 }), 503
 
             try:
-                on_cache_saved = None
                 if lock_acquired:
                     logger.info(f"{trace_prefix} 計算ロック取得後に計算開始: {cache_key}")
-                    def on_cache_saved(success: bool) -> None:
-                        if success:
-                            logger.info(
-                                f"{trace_prefix} 非同期キャッシュ保存完了によりロック解放: {cache_key}"
-                            )
-                        else:
-                            logger.warning(
-                                f"{trace_prefix} 非同期キャッシュ保存失敗によりロック解放: {cache_key}"
-                            )
-                        self.cache_service.release_calculation_lock(cache_key)
 
                 original_prepare_areas = self.main_service.data_service.prepare_areas
                 self.main_service.data_service.prepare_areas = (
@@ -662,8 +651,7 @@ class MainController:
                         guidance_type=guidance_type,
                         risk_rule=risk_rule,
                         use_cache=False,
-                        async_cache_save=True,
-                        on_cache_saved=on_cache_saved,
+                        async_cache_save=False,
                     )
                 finally:
                     self.main_service.data_service.prepare_areas = original_prepare_areas
@@ -671,6 +659,35 @@ class MainController:
                 logger.info(
                     f"{trace_prefix} 計算処理完了: {cache_key} "
                     f"(calculation_elapsed={calculation_elapsed:.2f}s)"
+                )
+
+                cache_save_started_at = time.perf_counter()
+                cache_saved = self.cache_service.set_cached_result(
+                    cache_key,
+                    result,
+                    swi_initial.isoformat(),
+                    guidance_initial.isoformat(),
+                    guidance_type,
+                    risk_rule,
+                )
+                cache_save_elapsed = time.perf_counter() - cache_save_started_at
+                if not cache_saved:
+                    self.cache_service.release_calculation_lock(cache_key)
+                    lock_acquired = False
+                    logger.error(
+                        f"{trace_prefix} キャッシュ保存失敗: {cache_key} "
+                        f"(cache_save_elapsed={cache_save_elapsed:.2f}s)"
+                    )
+                    return jsonify({
+                        "status": "error",
+                        "message": "計算結果のキャッシュ保存に失敗しました。しばらくして再試行してください。"
+                    }), 500
+
+                self.cache_service.release_calculation_lock(cache_key)
+                lock_acquired = False
+                logger.info(
+                    f"{trace_prefix} キャッシュ保存完了後に計算ロック解放: {cache_key} "
+                    f"(cache_save_elapsed={cache_save_elapsed:.2f}s)"
                 )
 
                 # セッションサービスが有効な場合、セッション作成して軽量レスポンスを返す
@@ -707,6 +724,7 @@ class MainController:
                 if lock_acquired:
                     # セッションを使わない経路ではレスポンス前にロックを解放してよい
                     self.cache_service.release_calculation_lock(cache_key)
+                    lock_acquired = False
                     logger.info(f"{trace_prefix} セッション未使用経路のため計算ロック解放: {cache_key}")
 
                 result["status"] = "success"
