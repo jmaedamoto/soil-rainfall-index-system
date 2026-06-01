@@ -4,6 +4,14 @@ import type { LightweightCalculationResult } from '../types/session';
 import { API_BASE_URL } from '../config/apiConfig';
 import type { RegionCode } from '../features/production-session/regions';
 
+type ProductionCalculationParams = {
+  swi_initial: string;
+  guidance_initial: string;
+  guidance_type?: 'msm' | 'gsm';
+  risk_rule?: 'legacy' | 'lead_time_to_level4';
+  region?: RegionCode;
+};
+
 // Axiosインスタンスの作成
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -29,6 +37,14 @@ apiClient.interceptors.response.use(
     }
     return Promise.reject(error);
   }
+);
+
+const isGatewayTimeout = (error: unknown): boolean => (
+  axios.isAxiosError(error) && error.response?.status === 504
+);
+
+const wait = (milliseconds: number): Promise<void> => (
+  new Promise((resolve) => setTimeout(resolve, milliseconds))
 );
 
 export class SoilRainfallAPIClient {
@@ -57,18 +73,29 @@ export class SoilRainfallAPIClient {
    * セッションベースAPIを使用し、軽量レスポンスを返す
    * ローカルbin使用の有無はサーバー設定で制御される
    */
-  async calculateProductionSoilRainfallIndexWithUrls(params: {
-    swi_initial: string;
-    guidance_initial: string;
-    guidance_type?: 'msm' | 'gsm';
-    risk_rule?: 'legacy' | 'lead_time_to_level4';
-    region?: RegionCode;
-  }): Promise<LightweightCalculationResult> {
-    const response = await apiClient.post<LightweightCalculationResult>(
+  async calculateProductionSoilRainfallIndexWithUrls(
+    params: ProductionCalculationParams
+  ): Promise<LightweightCalculationResult> {
+    try {
+      const response = await this.postProductionCalculation(params);
+      return response.data;
+    } catch (error) {
+      if (!isGatewayTimeout(error)) {
+        throw error;
+      }
+
+      console.warn('Gateway timeout while waiting for calculation response. Retrying once from cache.');
+      await wait(1000);
+      const retryResponse = await this.postProductionCalculation(params);
+      return retryResponse.data;
+    }
+  }
+
+  private postProductionCalculation(params: ProductionCalculationParams) {
+    return apiClient.post<LightweightCalculationResult>(
       '/production-soil-rainfall-index-with-urls',
       params
     );
-    return response.data;
   }
 }
 
