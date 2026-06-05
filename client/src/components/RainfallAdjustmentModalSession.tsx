@@ -438,6 +438,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
   const totalModifiedCount = useMemo(() => {
     return countModifiedCells(currentOriginalMap, currentAdjustedMap);
   }, [currentOriginalMap, currentAdjustedMap]);
+  const canRecalculate = usesAreaMaxFill || totalModifiedCount > 0;
 
   const currentPrefectureData = currentGroupedMap[selectedPrefecture] || {};
 
@@ -937,19 +938,21 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
               </button>
               <button
                 onClick={handleRecalculate}
-                disabled={totalModifiedCount === 0}
+                disabled={!canRecalculate}
                 style={{
                   padding: '10px 24px',
-                  backgroundColor: totalModifiedCount > 0 ? '#1976D2' : '#ccc',
+                  backgroundColor: canRecalculate ? '#1976D2' : '#ccc',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: totalModifiedCount > 0 ? 'pointer' : 'not-allowed',
+                  cursor: canRecalculate ? 'pointer' : 'not-allowed',
                   fontSize: '14px',
                   fontWeight: 'bold'
                 }}
               >
-                再計算実行 ({totalModifiedCount}セル修正)
+                {usesAreaMaxFill
+                  ? '再計算実行（ガイダンス最大格子で塗りつぶし）'
+                  : `再計算実行 (${totalModifiedCount}セル修正)`}
               </button>
             </div>
           </>
