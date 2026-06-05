@@ -762,7 +762,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                 </span>
                 {usesAreaMaxFill && (
                   <span style={{ marginRight: '20px', color: '#1976D2', fontWeight: 'bold' }}>
-                    手入力値は使わず、市町村ごとの最大格子時系列で全格子を更新します
+                    ガイダンスの時系列は変えず、市町村ごとの最大格子値で全格子を更新します
                   </span>
                 )}
                 <span style={{ marginRight: '20px' }}>

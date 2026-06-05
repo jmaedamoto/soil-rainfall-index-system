@@ -87,7 +87,7 @@ export const getAdjustmentModeLabel = (mode: AdjustmentMode): string => {
     case 'fill_3hour':
       return '塗りつぶし';
     case 'fill_3hour_area_max':
-      return '市町村最大格子で塗りつぶし';
+      return '雨量を変えずに塗りつぶす';
     case 'fill_24hour_uniform':
       return '均等按分して塗りつぶし';
     case 'ratio_24hour_uniform':
