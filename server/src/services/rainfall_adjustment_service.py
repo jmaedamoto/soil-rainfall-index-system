@@ -181,6 +181,59 @@ class RainfallAdjustmentService:
         logger.info("塗りつぶし後のメッシュ雨量生成完了: %sメッシュ", len(filled_mesh_rainfall))
         return filled_mesh_rainfall
 
+    def build_area_max_filled_mesh_rainfall_from_session(
+        self,
+        prefectures_dict: Dict[str, Any],
+        area_adjustments: Dict[str, Dict[int, float]]
+    ) -> Dict[str, List[Tuple[int, float]]]:
+        """
+        対象市町村内の各FT最大3時間雨量で、市町村内の全メッシュを塗りつぶす。
+
+        手入力値は使わず、元のガイダンスから市町村代表時系列を作る。
+        同じ mesh_code に複数領域の指示がかかった場合は、FT ごとに最大値を採用する。
+        """
+        logger.info("市町村最大格子値によるメッシュ雨量生成開始")
+
+        adjusted_mesh_rainfall: Dict[str, Dict[int, float]] = {}
+
+        for pref_dict in prefectures_dict.values():
+            pref_name = pref_dict["name"]
+            for area_dict in pref_dict.get("areas", []):
+                area_key = f"{pref_name}_{area_dict['name']}"
+                if area_key not in area_adjustments:
+                    continue
+
+                meshes = area_dict.get("meshes", [])
+                area_max_by_ft = self._build_original_max_by_ft(meshes)
+                if not area_max_by_ft:
+                    continue
+
+                for mesh_dict in meshes:
+                    mesh_code = mesh_dict.get("code")
+                    if not mesh_code:
+                        continue
+
+                    current_values = self._mesh_timeline_to_dict(mesh_dict)
+                    target_values = {
+                        ft: value
+                        for ft, value in area_max_by_ft.items()
+                        if ft in current_values
+                    }
+                    self._merge_mesh_values(
+                        mesh_code,
+                        current_values,
+                        target_values,
+                        adjusted_mesh_rainfall
+                    )
+
+        filled_mesh_rainfall = {
+            mesh_code: [(ft, value) for ft, value in sorted(ft_values.items())]
+            for mesh_code, ft_values in adjusted_mesh_rainfall.items()
+        }
+
+        logger.info("市町村最大格子値によるメッシュ雨量生成完了: %sメッシュ", len(filled_mesh_rainfall))
+        return filled_mesh_rainfall
+
     def aggregate_rainfall_24hour_from_session(
         self,
         prefectures_dict: Dict[str, Any]

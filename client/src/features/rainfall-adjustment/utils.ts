@@ -78,7 +78,7 @@ export const getDefaultAdjustmentMode = (inputMode: InputMode): AdjustmentMode =
 export const getAllowedAdjustmentModes = (inputMode: InputMode): AdjustmentMode[] =>
   inputMode === '24hour'
     ? ['fill_24hour_uniform', 'ratio_24hour_uniform', 'fill_24hour_peak_mesh', 'ratio_24hour_peak_mesh']
-    : ['ratio_3hour', 'fill_3hour'];
+    : ['ratio_3hour', 'fill_3hour', 'fill_3hour_area_max'];
 
 export const getAdjustmentModeLabel = (mode: AdjustmentMode): string => {
   switch (mode) {
@@ -86,6 +86,8 @@ export const getAdjustmentModeLabel = (mode: AdjustmentMode): string => {
       return '比率補正';
     case 'fill_3hour':
       return '塗りつぶし';
+    case 'fill_3hour_area_max':
+      return '市町村最大格子で塗りつぶし';
     case 'fill_24hour_uniform':
       return '均等按分して塗りつぶし';
     case 'ratio_24hour_uniform':
@@ -103,6 +105,8 @@ export const getAdjustmentModeDescription = (mode: AdjustmentMode): string => {
       return '市町村または二次細分の代表3時間雨量に対する入力値の比率を求め、対象メッシュの同じ時刻の雨量にその比率を掛けます。元の時間分布とメッシュ間の大小関係を保ちたい場合に使います。';
     case 'fill_3hour':
       return '選択した時刻の対象メッシュ雨量を入力値で塗りつぶします。複数の領域にまたがるメッシュは、同じ時刻で大きい入力値を採用します。';
+    case 'fill_3hour_area_max':
+      return '手入力値は使わず、各市町村内で時刻ごとに最大雨量の格子値を求め、その値で同じ市町村内の全格子を塗りつぶします。';
     case 'fill_24hour_uniform':
       return '入力した24時間合計雨量を8つの3時間区間に均等に分け、対象メッシュをその値で塗りつぶします。時間分布を指定しない単純な一括入力向けです。';
     case 'ratio_24hour_uniform':

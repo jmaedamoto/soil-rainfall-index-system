@@ -824,7 +824,7 @@ class SessionController:
                 }), 400
 
             allowed_adjustment_modes = {
-                '3hour': {'ratio_3hour', 'fill_3hour'},
+                '3hour': {'ratio_3hour', 'fill_3hour', 'fill_3hour_area_max'},
                 '24hour': {
                     'fill_24hour_uniform',
                     'ratio_24hour_uniform',
@@ -915,6 +915,11 @@ class SessionController:
                     )
             elif adjustment_mode == 'fill_3hour':
                 adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_filled_mesh_rainfall_from_session(
+                    existing_prefectures_dict,
+                    expanded_adjustments
+                )
+            elif adjustment_mode == 'fill_3hour_area_max':
+                adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_area_max_filled_mesh_rainfall_from_session(
                     existing_prefectures_dict,
                     expanded_adjustments
                 )
