@@ -96,3 +96,20 @@ export const getAdjustmentModeLabel = (mode: AdjustmentMode): string => {
       return '最大24時間格子基準で比率補正';
   }
 };
+
+export const getAdjustmentModeDescription = (mode: AdjustmentMode): string => {
+  switch (mode) {
+    case 'ratio_3hour':
+      return '市町村または二次細分の代表3時間雨量に対する入力値の比率を求め、対象メッシュの同じ時刻の雨量にその比率を掛けます。元の時間分布とメッシュ間の大小関係を保ちたい場合に使います。';
+    case 'fill_3hour':
+      return '選択した時刻の対象メッシュ雨量を入力値で塗りつぶします。複数の領域にまたがるメッシュは、同じ時刻で大きい入力値を採用します。';
+    case 'fill_24hour_uniform':
+      return '入力した24時間合計雨量を8つの3時間区間に均等に分け、対象メッシュをその値で塗りつぶします。時間分布を指定しない単純な一括入力向けです。';
+    case 'ratio_24hour_uniform':
+      return '入力した24時間合計雨量を8つの3時間区間に均等に分け、各時刻で比率補正します。元のメッシュ差を残しながら24時間総量を反映します。';
+    case 'fill_24hour_peak_mesh':
+      return '対象領域で24時間合計が最大のメッシュの時間分布を使い、入力した24時間合計になるよう各時刻へ配分して塗りつぶします。ピークの出方を反映したい場合に使います。';
+    case 'ratio_24hour_peak_mesh':
+      return '対象領域で24時間合計が最大のメッシュを基準に、入力した24時間合計へ合わせる比率を求めて補正します。代表的な時間分布とメッシュ差の両方を残したい場合に使います。';
+  }
+};

@@ -247,6 +247,77 @@
   font-style: italic;
 }
 
+.rainfall-adjustment-mode-button {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  line-height: 1.2;
+  position: relative;
+}
+
+.rainfall-tooltip {
+  display: inline-flex;
+  position: relative;
+}
+
+.rainfall-tooltip-icon {
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.08);
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  color: currentColor;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 700;
+  height: 16px;
+  justify-content: center;
+  line-height: 1;
+  width: 16px;
+}
+
+.rainfall-tooltip-content {
+  background-color: #263238;
+  border-radius: 4px;
+  bottom: calc(100% + 8px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 400;
+  left: 50%;
+  line-height: 1.5;
+  max-width: min(320px, 80vw);
+  opacity: 0;
+  padding: 8px 10px;
+  pointer-events: none;
+  position: absolute;
+  text-align: left;
+  transform: translateX(-50%) translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  visibility: hidden;
+  white-space: normal;
+  width: max-content;
+  z-index: 30000;
+}
+
+.rainfall-tooltip-content::after {
+  border: 6px solid transparent;
+  border-top-color: #263238;
+  content: "";
+  left: 50%;
+  position: absolute;
+  top: 100%;
+  transform: translateX(-50%);
+}
+
+.rainfall-tooltip:hover .rainfall-tooltip-content,
+.rainfall-tooltip:focus .rainfall-tooltip-content,
+.rainfall-tooltip:focus-within .rainfall-tooltip-content,
+.rainfall-adjustment-mode-button:focus .rainfall-tooltip-content {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  visibility: visible;
+}
+
 /* レスポンシブ対応 */
 @media (max-width: 768px) {
   .time-input-section {

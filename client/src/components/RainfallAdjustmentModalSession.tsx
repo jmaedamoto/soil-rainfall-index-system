@@ -6,12 +6,14 @@ import {
   buildRainfallAdjustments,
   cloneRainfallMap,
   countModifiedCells,
+  getAdjustmentModeDescription,
   getAdjustmentModeLabel,
   getAllowedAdjustmentModes,
   getDefaultAdjustmentMode,
   getCellKey,
   groupRainfallByPrefecture,
 } from '../features/rainfall-adjustment/utils';
+import '../styles/RainfallAdjustment.css';
 
 interface RainfallAdjustmentModalSessionProps {
   isOpen: boolean;
@@ -33,6 +35,13 @@ interface RainfallAdjustmentModalSessionProps {
     }
   ) => void;
 }
+
+const TooltipHelp: React.FC<{ text: string }> = ({ text }) => (
+  <span className="rainfall-tooltip" aria-label={text}>
+    <span className="rainfall-tooltip-icon" aria-hidden="true">?</span>
+    <span className="rainfall-tooltip-content" role="tooltip">{text}</span>
+  </span>
+);
 
 const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionProps> = ({
   isOpen,
@@ -572,6 +581,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                   <button
                     key={mode}
                     onClick={() => setAdjustmentMode(mode)}
+                    className="rainfall-adjustment-mode-button"
                     style={{
                       padding: '8px 16px',
                       backgroundColor: adjustmentMode === mode ? '#1976D2' : '#f5f5f5',
@@ -581,7 +591,8 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                       cursor: 'pointer'
                     }}
                   >
-                    {getAdjustmentModeLabel(mode)}
+                    <span>{getAdjustmentModeLabel(mode)}</span>
+                    <TooltipHelp text={getAdjustmentModeDescription(mode)} />
                   </button>
                 ))}
               </div>
