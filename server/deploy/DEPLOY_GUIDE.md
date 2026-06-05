@@ -1,146 +1,99 @@
-# 土壌雨量指数計算システム staging デプロイ手順書
+# 土壌雨量指数計算システム デプロイ手順
 
-## 対象環境
-- OS: Rocky Linux 9.7
+## 対象構成
+
+- OS: Rocky Linux 9系
 - Web Server: Apache httpd + mod_wsgi
 - Python: 3.9+
+- クライアント配信先例: `/var/www/html/staging/dosya`
+- API配置先例: `/var/www/app/staging/soil-rainfall-index-system`
 
----
-
-## 1. システムパッケージのインストール
+## 1. パッケージ
 
 ```bash
-# root権限で実行
 sudo dnf update -y
-
-# Python3 と開発ツール
-sudo dnf install -y python3 python3-pip python3-devel
-
-# Apache と開発ヘッダー
-sudo dnf install -y httpd httpd-devel
-
-# ビルドツール（mod_wsgiコンパイル用）
+sudo dnf install -y python3 python3-pip python3-devel httpd httpd-devel
 sudo dnf groupinstall -y "Development Tools"
 ```
 
----
-
-## 2. アプリケーションディレクトリの準備
+## 2. 配置先
 
 ```bash
-# ディレクトリ作成
 sudo mkdir -p /var/www/app/staging/soil-rainfall-index-system
 sudo mkdir -p /var/www/html/staging/dosya
 sudo chown -R $USER:$USER /var/www/app/staging/soil-rainfall-index-system
 sudo chown -R $USER:$USER /var/www/html/staging/dosya
-
-# アプリケーションをコピー（開発環境から転送）
-# scp -r server/ user@staging:/var/www/app/staging/soil-rainfall-index-system/
-# scp -r client/dist/* user@staging:/var/www/html/staging/dosya/
 ```
 
----
-
-## 3. Python仮想環境の構築
+## 3. Python環境
 
 ```bash
 cd /var/www/app/staging/soil-rainfall-index-system
-
-# 仮想環境作成
 python3 -m venv venv
-
-# 仮想環境を有効化
 source venv/bin/activate
-
-# 依存パッケージインストール
 pip install --upgrade pip
 pip install -r server/requirements.txt
-
-# mod_wsgi インストール
 pip install mod_wsgi
-```
-
----
-
-## 4. mod_wsgi の設定確認
-
-```bash
-# mod_wsgi モジュールのパスとPythonホームを確認
-source /var/www/app/staging/soil-rainfall-index-system/venv/bin/activate
 mod_wsgi-express module-config
 ```
 
-出力例:
+`mod_wsgi-express module-config` の出力をApache設定に反映します。
+
+## 4. 設定
+
+`server/config/app_config.yaml` を配置先環境に合わせて確認します。
+
+```yaml
+api:
+  route_profile: "production"
 ```
-LoadModule wsgi_module "/var/www/app/staging/soil-rainfall-index-system/venv/lib64/python3.9/site-packages/mod_wsgi/server/mod_wsgi-py39.cpython-39-x86_64-linux-gnu.so"
-WSGIPythonHome "/var/www/app/staging/soil-rainfall-index-system/venv"
+
+Apache / systemd / WSGI の環境変数でも以下を固定してください。
+
+```text
+SOIL_RAINFALL_ROUTE_PROFILE=production
 ```
 
-この出力を `/etc/httpd/conf.d/soil-rainfall.conf` の先頭に追記します。
+プロキシ、GRIB2取得元、タイムアウトは `server/config/URL_CONFIG_GUIDE.md` を参照してください。
 
----
+## 5. データファイル
 
-## 5. Apache設定ファイルの配置
+`server/data` に対象地方のCSVを配置します。
+
+- 近畿: `shiga`, `kyoto`, `hyogo`, `osaka`, `nara`, `wakayama`
+- 中国: `tottori`, `okayama`, `hiroshima`, `shimane`
+- 四国: `ehime`, `tokushima`, `kagawa`, `kochi`
+
+必要なファイル:
+
+```text
+dosha_*.csv
+2_2_*.csv
+prefectures.csv
+```
+
+検証用にローカルGRIB2を使う場合は `*.bin` も配置します。
+
+## 6. 権限
 
 ```bash
-# 設定ファイルをコピー
-sudo cp /var/www/app/staging/soil-rainfall-index-system/server/deploy/apache-soil-rainfall.conf \
-        /etc/httpd/conf.d/soil-rainfall-staging.conf
-
-# 設定ファイルを編集
-sudo vi /etc/httpd/conf.d/soil-rainfall-staging.conf
-```
-
-### 編集が必要な箇所:
-
-1. **mod_wsgi モジュールパス** - 手順4の出力に合わせる
-2. **WSGIDaemonProcess 名** - 既存の main 用設定と重複しないことを確認
-3. **python-path / WSGIScriptAlias** - staging 配置先パスに合わせる
-4. **CACHE_DIR** - `/var/cache/myapp/staging/dosya` になっていることを確認
-
----
-
-## 6. データファイルの配置
-
-```bash
-# CSVデータファイルが存在することを確認
-ls -la /var/www/app/staging/soil-rainfall-index-system/server/data/
-
-# 必要なファイル:
-# - dosha_*.csv (6府県分)
-# - dosyakei_*.csv (6府県分)
-```
-
----
-
-## 7. 権限設定
-
-```bash
-# Apacheユーザーがアクセスできるように権限設定
 sudo chown -R apache:apache /var/www/app/staging/soil-rainfall-index-system
 sudo chown -R apache:apache /var/www/html/staging/dosya
 sudo chmod -R 755 /var/www/app/staging/soil-rainfall-index-system
 sudo chmod -R 755 /var/www/html/staging/dosya
 
-# キャッシュディレクトリに書き込み権限
 sudo mkdir -p /var/cache/myapp/staging/dosya
 sudo chown -R apache:apache /var/cache/myapp/staging
 sudo chmod 775 /var/cache/myapp/staging
 sudo chmod 775 /var/cache/myapp/staging/dosya
 ```
 
----
+## 7. SELinux
 
-## 8. SELinux設定（有効な場合）
+SELinuxが有効な環境では以下を設定します。
 
 ```bash
-# SELinuxの状態確認
-getenforce
-
-# httpd がネットワークアクセスできるように設定
 sudo setsebool -P httpd_can_network_connect 1
-
-# アプリケーションディレクトリのコンテキスト設定
 sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/app/staging/soil-rainfall-index-system(/.*)?"
 sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/html/staging/dosya(/.*)?"
 sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/cache/myapp/staging(/.*)?"
@@ -149,123 +102,59 @@ sudo restorecon -Rv /var/www/html/staging/dosya
 sudo restorecon -Rv /var/cache/myapp/staging
 ```
 
----
-
-## 9. ファイアウォール設定
+## 8. Apache起動
 
 ```bash
-# HTTP/HTTPSポートを開放
-sudo firewall-cmd --permanent --add-service=http
-sudo firewall-cmd --permanent --add-service=https
-sudo firewall-cmd --reload
-```
-
----
-
-## 10. 設定テストと起動
-
-```bash
-# Apache設定テスト
 sudo apachectl configtest
-
-# Apache起動
-sudo systemctl start httpd
-
-# 自動起動設定
+sudo systemctl restart httpd
 sudo systemctl enable httpd
-
-# 状態確認
 sudo systemctl status httpd
 ```
 
----
+## 9. 動作確認
 
-## 11. 動作確認
+本番プロファイルでは開発用 `/health` や `/data-check` は公開しません。クライアントの地方別ページと本番APIで確認します。
 
 ```bash
-# ヘルスチェック
-curl http://localhost/staging/dosya/api/health
-
-# データチェック
-curl http://localhost/staging/dosya/api/data-check
+curl -X POST http://localhost/staging/dosya/api/production-soil-rainfall-index-with-urls \
+  -H "Content-Type: application/json" \
+  -d '{
+    "swi_initial": "2026-06-05T00:00:00.000Z",
+    "guidance_initial": "2026-06-05T00:00:00.000Z",
+    "guidance_type": "msm",
+    "risk_rule": "legacy",
+    "region": "kinki"
+  }'
 ```
 
-期待されるレスポンス:
-```json
-{"status": "healthy", "timestamp": "..."}
-```
+昇格前のローカル確認:
 
----
-
-## 12. 本番用設定ファイル（オプション）
-
-プロキシが必要な場合は `config/app_config.yaml` を編集:
-
-```yaml
-proxy:
-  http: "http://proxy.example.com:8080"
-  https: "http://proxy.example.com:8080"
-
-grib2:
-  base_url: "http://lunar1.fcd.naps.kishou.go.jp/srf/Grib2/Rtn"
-  download_timeout: 300
-  retry_count: 3
-```
-
----
-
-## トラブルシューティング
-
-### ログ確認
 ```bash
-# Apacheエラーログ
+python scripts/check_production_promotion.py
+```
+
+## 10. 昇格時の不要ファイル
+
+リリースpayloadには以下を含めません。
+
+- `server/tests/`
+- `test_*.py`
+- `.pytest_cache/`
+- `__pycache__/`
+- `*.pyc`
+
+## ログ
+
+```bash
 sudo tail -f /var/log/httpd/soil-rainfall-error.log
-
-# Apacheアクセスログ
 sudo tail -f /var/log/httpd/soil-rainfall-access.log
 ```
 
-### よくある問題
+## よくある問題
 
-| 症状 | 原因 | 対処 |
-|-----|------|------|
-| 500 Internal Server Error | PythonパスまたはScriptAlias不整合 | python-path と `/staging/dosya/api` の設定確認 |
-| 403 Forbidden | SELinux/権限 | SELinux設定・ファイル権限確認 |
-| モジュール読み込みエラー | mod_wsgiパス不正 | `mod_wsgi-express module-config`で再確認 |
-| GRIB2ダウンロード失敗 | プロキシ/ネットワーク | app_config.yamlのプロキシ設定確認 |
-
----
-
-## ディレクトリ構成（staging環境）
-
-```
-/
-├── var/www/app/staging/soil-rainfall-index-system/
-│   ├── venv/                          # Python仮想環境
-│   │   ├── bin/
-│   │   ├── lib/
-│   │   └── lib64/
-│   └── server/                        # アプリケーション
-│       ├── app.py
-│       ├── wsgi.py                    # WSGIエントリーポイント
-│       ├── requirements.txt
-│       ├── config/
-│       │   └── app_config.yaml
-│       ├── data/
-│       │   ├── cache/
-│       │   ├── dosha_*.csv
-│       │   └── dosyakei_*.csv
-│       ├── deploy/
-│       │   ├── apache-soil-rainfall.conf
-│       │   └── DEPLOY_GUIDE.md
-│       ├── models/
-│       ├── services/
-│       └── src/
-├── var/www/html/staging/dosya/        # client/dist の配置先
-└── var/cache/myapp/staging/dosya/     # Apache から書き込み可能なキャッシュ
-```
-
----
-
-**作成日**: 2026年1月
-**対象バージョン**: 8.5.0
+| 症状 | 確認点 |
+| --- | --- |
+| 500 | WSGIのPythonパス、仮想環境、Apache設定 |
+| 403 | ファイル権限、SELinux |
+| GRIB2取得失敗 | プロキシ、取得元URL、対象時刻 |
+| 開発APIが404 | production profile では正常。開発時は `SOIL_RAINFALL_ROUTE_PROFILE=all` を使う |
