@@ -78,7 +78,7 @@ export const getDefaultAdjustmentMode = (inputMode: InputMode): AdjustmentMode =
 export const getAllowedAdjustmentModes = (inputMode: InputMode): AdjustmentMode[] =>
   inputMode === '24hour'
     ? ['fill_24hour_uniform', 'ratio_24hour_uniform', 'fill_24hour_peak_mesh', 'ratio_24hour_peak_mesh']
-    : ['ratio_3hour', 'fill_3hour'];
+    : ['ratio_3hour', 'fill_3hour', 'fill_3hour_area_max'];
 
 export const getAdjustmentModeLabel = (mode: AdjustmentMode): string => {
   switch (mode) {
@@ -86,6 +86,8 @@ export const getAdjustmentModeLabel = (mode: AdjustmentMode): string => {
       return '比率補正';
     case 'fill_3hour':
       return '塗りつぶし';
+    case 'fill_3hour_area_max':
+      return '市町村最大格子で塗りつぶし';
     case 'fill_24hour_uniform':
       return '均等按分して塗りつぶし';
     case 'ratio_24hour_uniform':
