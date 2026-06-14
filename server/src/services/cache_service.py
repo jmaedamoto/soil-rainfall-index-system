@@ -14,11 +14,13 @@ import logging
 import time
 import tempfile
 import io
-from threading import Thread
+from threading import Lock, Thread
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, List, Callable
 import os
+import socket
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,8 @@ class CacheService:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
         self.default_ttl_days = default_ttl_days
+        self._lock_tokens: Dict[str, str] = {}
+        self._lock_tokens_guard = Lock()
 
         logger.info(f"CacheService初期化: dir={self.cache_dir}, "
                     f"TTL={default_ttl_days}日")
@@ -487,6 +491,131 @@ class CacheService:
         """計算中ロックファイルパス取得（.calculating.json）"""
         return self.cache_dir / f"{cache_key}.calculating.json"
 
+    def _get_calculation_slot_path(self) -> Path:
+        """サーバー全体の重い計算を直列化するロックパス"""
+        return self.cache_dir / ".calculation-slot.json"
+
+    @staticmethod
+    def _process_is_alive(pid: object) -> bool:
+        if not isinstance(pid, int) or pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        except OSError:
+            return False
+
+    def _lock_owner_is_alive(self, lock_data: Dict) -> bool:
+        owner_host = lock_data.get("hostname")
+        owner_pid = lock_data.get("pid")
+        if not owner_host or not owner_pid:
+            return False
+        if owner_host != socket.gethostname():
+            return True
+        return self._process_is_alive(owner_pid)
+
+    def _read_lock_data(self, lock_path: Path) -> Optional[Dict]:
+        try:
+            with open(lock_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"ロックファイル読み込みエラー: {lock_path.name} - {e}")
+            return None
+
+    def _remove_stale_lock(self, lock_path: Path, lock_name: str) -> bool:
+        lock_data = self._read_lock_data(lock_path)
+        if lock_data is None:
+            try:
+                if time.time() - lock_path.stat().st_mtime <= 5:
+                    return False
+            except OSError:
+                return True
+            try:
+                lock_path.unlink(missing_ok=True)
+                logger.warning(f"破損ロックを削除: {lock_name}")
+                return True
+            except OSError as e:
+                logger.error(f"破損ロック削除エラー: {lock_name} - {e}")
+                return False
+
+        try:
+            started_at = datetime.fromisoformat(lock_data["started_at"])
+        except (KeyError, TypeError, ValueError):
+            started_at = datetime.min
+
+        owner_alive = self._lock_owner_is_alive(lock_data)
+        expired = datetime.now() - started_at > timedelta(minutes=30)
+        if owner_alive and not expired:
+            return False
+
+        try:
+            lock_path.unlink(missing_ok=True)
+            logger.warning(
+                "停止または期限切れのロックを削除: %s pid=%s host=%s expired=%s",
+                lock_name,
+                lock_data.get("pid"),
+                lock_data.get("hostname"),
+                expired,
+            )
+            return True
+        except OSError as e:
+            logger.error(f"古いロック削除エラー: {lock_name} - {e}")
+            return False
+
+    def _acquire_file_lock(self, lock_path: Path, lock_name: str, cache_key: str) -> bool:
+        token = uuid.uuid4().hex
+        lock_data = {
+            "cache_key": cache_key,
+            "started_at": datetime.now().isoformat(),
+            "pid": os.getpid(),
+            "hostname": socket.gethostname(),
+            "token": token,
+        }
+        try:
+            fd = os.open(
+                lock_path,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                0o644,
+            )
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(lock_data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            with self._lock_tokens_guard:
+                self._lock_tokens[str(lock_path)] = token
+            logger.info(f"ロック取得成功: {lock_name}")
+            return True
+        except FileExistsError:
+            if self._remove_stale_lock(lock_path, lock_name):
+                return self._acquire_file_lock(lock_path, lock_name, cache_key)
+            logger.info(f"ロック取得失敗（既に処理中）: {lock_name}")
+            return False
+        except Exception as e:
+            logger.error(f"ロック取得エラー: {lock_name} - {e}")
+            return False
+
+    def _release_file_lock(self, lock_path: Path, lock_name: str) -> None:
+        with self._lock_tokens_guard:
+            owned_token = self._lock_tokens.pop(str(lock_path), None)
+        if not owned_token:
+            logger.warning(f"所有していないロックの削除をスキップ: {lock_name}")
+            return
+
+        lock_data = self._read_lock_data(lock_path)
+        if lock_data and lock_data.get("token") != owned_token:
+            logger.warning(f"所有者が変わったロックの削除をスキップ: {lock_name}")
+            return
+
+        try:
+            lock_path.unlink(missing_ok=True)
+            logger.info(f"ロック削除: {lock_name}")
+        except OSError as e:
+            logger.error(f"ロック削除エラー: {lock_name} - {e}")
+
     def is_calculation_in_progress(self, cache_key: str) -> bool:
         """
         計算中かどうか確認
@@ -501,21 +630,7 @@ class CacheService:
         if not lock_path.exists():
             return False
 
-        # ロックファイルのタイムアウトチェック（10分）
-        try:
-            with open(lock_path, 'r', encoding='utf-8') as f:
-                lock_data = json.load(f)
-
-            started_at = datetime.fromisoformat(lock_data['started_at'])
-            if datetime.now() - started_at > timedelta(minutes=10):
-                # タイムアウト: 古いロックを削除
-                logger.warning(f"計算ロックタイムアウト: {cache_key}")
-                self.release_calculation_lock(cache_key)
-                return False
-            return True
-        except Exception as e:
-            logger.error(f"ロックファイル読み込みエラー: {cache_key} - {e}")
-            return False
+        return not self._remove_stale_lock(lock_path, cache_key)
 
     def acquire_calculation_lock(self, cache_key: str) -> bool:
         """
@@ -527,41 +642,25 @@ class CacheService:
         Returns:
             ロック取得成功: True、既にロック中: False
         """
-        lock_path = self._get_lock_path(cache_key)
+        return self._acquire_file_lock(
+            self._get_lock_path(cache_key),
+            cache_key,
+            cache_key,
+        )
 
-        try:
-            lock_data = {
-                "cache_key": cache_key,
-                "started_at": datetime.now().isoformat(),
-            }
-            fd = os.open(
-                lock_path,
-                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-                0o644,
-            )
-            with os.fdopen(fd, 'w', encoding='utf-8') as f:
-                json.dump(lock_data, f, ensure_ascii=False, indent=2)
-                f.flush()
-                os.fsync(f.fileno())
+    def acquire_calculation_slot(self, cache_key: str) -> bool:
+        """異なる条件を含め、重い初期計算を同時に1件だけ実行する"""
+        return self._acquire_file_lock(
+            self._get_calculation_slot_path(),
+            "calculation-slot",
+            cache_key,
+        )
 
-            logger.info(f"計算ロック取得成功: {cache_key}")
-            return True
-
-        except FileExistsError:
-            if self.is_calculation_in_progress(cache_key):
-                logger.info(f"計算ロック取得失敗（既にロック中）: {cache_key}")
-                return False
-            logger.warning(f"古い計算ロックを検出: {cache_key} - 再取得を試行")
-            try:
-                if lock_path.exists():
-                    lock_path.unlink()
-            except Exception as cleanup_error:
-                logger.error(f"古いロック削除エラー: {cache_key} - {cleanup_error}")
-                return False
-            return self.acquire_calculation_lock(cache_key)
-        except Exception as e:
-            logger.error(f"計算ロック取得エラー: {cache_key} - {e}")
-            return False
+    def release_calculation_slot(self) -> None:
+        self._release_file_lock(
+            self._get_calculation_slot_path(),
+            "calculation-slot",
+        )
 
     def release_calculation_lock(self, cache_key: str, base_session_id: str = None):
         """
@@ -571,14 +670,7 @@ class CacheService:
             cache_key: キャッシュキー
             base_session_id: 互換性維持のための未使用引数
         """
-        lock_path = self._get_lock_path(cache_key)
-
-        try:
-            if lock_path.exists():
-                lock_path.unlink()
-            logger.info(f"計算ロック削除: {cache_key}")
-        except Exception as e:
-            logger.error(f"計算ロック削除エラー: {cache_key} - {e}")
+        self._release_file_lock(self._get_lock_path(cache_key), cache_key)
 
     def cleanup_calculation_locks(self, max_age_minutes: int = 30) -> int:
         """

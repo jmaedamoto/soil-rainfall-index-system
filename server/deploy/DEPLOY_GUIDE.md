@@ -185,6 +185,12 @@ curl http://localhost/api/data-check
 
 ---
 
+### 集中アクセス時の確認
+
+集中アクセス時は、計算中の後続リクエストへ `202 Accepted` と `Retry-After: 2` が返ることを確認します。クライアントは計算結果のgzipキャッシュが完成するまで自動的に再確認します。
+
+Apache設定は `request-timeout`、`socket-timeout`、`inactivity-timeout`、`TimeOut` を900秒にそろえます。設定変更後は `apachectl configtest` を通してからhttpdを再起動してください。
+
 ## 12. 本番用設定ファイル（オプション）
 
 プロキシが必要な場合は `config/app_config.yaml` を編集:

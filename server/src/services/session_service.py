@@ -149,7 +149,7 @@ class SessionService:
                 )
                 if self.cache_service.wait_for_cache_materialization(
                     cache_key,
-                    timeout_seconds=300.0,
+                    timeout_seconds=5.0,
                 ):
                     cached_result = self.cache_service.get_cached_result(cache_key)
 

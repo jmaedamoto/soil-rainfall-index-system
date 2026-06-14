@@ -284,6 +284,17 @@ class MainController:
             f"[request_id={trace_context['request_id']} "
             f"pid={trace_context['pid']} remote={trace_context['remote_addr']}]"
         )
+
+    @staticmethod
+    def _calculation_pending_response(message: str, retry_after: int = 2):
+        response = jsonify({
+            "status": "calculating",
+            "message": message,
+            "retry_after": retry_after,
+        })
+        response.status_code = 202
+        response.headers["Retry-After"] = str(retry_after)
+        return response
     
     def data_check(self):
         """データファイル確認エンドポイント"""
@@ -565,7 +576,7 @@ class MainController:
                     cache_materializing,
                 )
 
-                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=600.0):
+                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=2.0):
                     cached_result = self.cache_service.get_cached_result(cache_key)
                     if cached_result:
                         wait_elapsed = time.perf_counter() - wait_started_at
@@ -587,9 +598,12 @@ class MainController:
                         )
 
                 wait_elapsed = time.perf_counter() - wait_started_at
-                logger.warning(
-                    f"{trace_prefix} キャッシュ作成待機タイムアウト: {cache_key} "
+                logger.info(
+                    f"{trace_prefix} キャッシュ作成中のため再試行応答: {cache_key} "
                     f"(wait_elapsed={wait_elapsed:.2f}s)"
+                )
+                return self._calculation_pending_response(
+                    "同一条件の計算が進行中です。自動的に再確認します。"
                 )
 
             # ========================================
@@ -603,7 +617,7 @@ class MainController:
                 logger.info(
                     f"{trace_prefix} 別リクエストが計算を開始したため待機に切り替え: {cache_key}"
                 )
-                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=600.0):
+                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=2.0):
                     cached_result = self.cache_service.get_cached_result(cache_key)
                     if cached_result:
                         wait_elapsed = time.perf_counter() - wait_started_at
@@ -625,36 +639,40 @@ class MainController:
                         )
 
                 wait_elapsed = time.perf_counter() - wait_started_at
-                logger.error(
-                    f"{trace_prefix} 計算ロック取得失敗後もキャッシュ未確定: {cache_key} "
+                logger.info(
+                    f"{trace_prefix} 計算ロック取得失敗後に再試行応答: {cache_key} "
                     f"(wait_elapsed={wait_elapsed:.2f}s)"
                 )
-                return jsonify({
-                    "status": "error",
-                    "message": "同一条件の計算が進行中ですが、結果の取得に失敗しました。しばらくして再試行してください。"
-                }), 503
+                return self._calculation_pending_response(
+                    "同一条件の計算が進行中です。自動的に再確認します。"
+                )
+
+            calculation_slot_acquired = self.cache_service.acquire_calculation_slot(cache_key)
+            if not calculation_slot_acquired:
+                self.cache_service.release_calculation_lock(cache_key)
+                lock_acquired = False
+                logger.info(
+                    f"{trace_prefix} 別条件の計算が実行中のため再試行応答: {cache_key}"
+                )
+                return self._calculation_pending_response(
+                    "別条件の計算を処理中です。順番に計算します。"
+                )
 
             try:
                 if lock_acquired:
                     logger.info(f"{trace_prefix} 計算ロック取得後に計算開始: {cache_key}")
 
-                original_prepare_areas = self.main_service.data_service.prepare_areas
-                self.main_service.data_service.prepare_areas = (
-                    lambda: original_prepare_areas(REGION_PREFECTURES[region])
-                )
                 # メイン処理実行（地方別キャッシュは controller 側で制御するため内部キャッシュは使わない）
                 calculation_started_at = time.perf_counter()
-                try:
-                    result = self.main_service.main_process_from_separate_urls(
-                        swi_url,
-                        guidance_url,
-                        guidance_type=guidance_type,
-                        risk_rule=risk_rule,
-                        use_cache=False,
-                        async_cache_save=False,
-                    )
-                finally:
-                    self.main_service.data_service.prepare_areas = original_prepare_areas
+                result = self.main_service.main_process_from_separate_urls(
+                    swi_url,
+                    guidance_url,
+                    guidance_type=guidance_type,
+                    risk_rule=risk_rule,
+                    use_cache=False,
+                    async_cache_save=False,
+                    prefecture_codes=REGION_PREFECTURES[region],
+                )
                 calculation_elapsed = time.perf_counter() - calculation_started_at
                 logger.info(
                     f"{trace_prefix} 計算処理完了: {cache_key} "
@@ -674,6 +692,8 @@ class MainController:
                 if not cache_saved:
                     self.cache_service.release_calculation_lock(cache_key)
                     lock_acquired = False
+                    self.cache_service.release_calculation_slot()
+                    calculation_slot_acquired = False
                     logger.error(
                         f"{trace_prefix} キャッシュ保存失敗: {cache_key} "
                         f"(cache_save_elapsed={cache_save_elapsed:.2f}s)"
@@ -685,6 +705,8 @@ class MainController:
 
                 self.cache_service.release_calculation_lock(cache_key)
                 lock_acquired = False
+                self.cache_service.release_calculation_slot()
+                calculation_slot_acquired = False
                 logger.info(
                     f"{trace_prefix} キャッシュ保存完了後に計算ロック解放: {cache_key} "
                     f"(cache_save_elapsed={cache_save_elapsed:.2f}s)"
@@ -753,6 +775,9 @@ class MainController:
                 if lock_acquired:
                     self.cache_service.release_calculation_lock(cache_key)
                     logger.info(f"{trace_prefix} 例外発生のため計算ロック解放: {cache_key}")
+                if calculation_slot_acquired:
+                    self.cache_service.release_calculation_slot()
+                    logger.info(f"{trace_prefix} 例外発生のため計算スロット解放: {cache_key}")
                 raise
 
         except Exception as e:
