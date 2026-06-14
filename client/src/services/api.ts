@@ -39,9 +39,13 @@ apiClient.interceptors.response.use(
   }
 );
 
-const isGatewayTimeout = (error: unknown): boolean => (
-  axios.isAxiosError(error) && error.response?.status === 504
+const isCalculationRequestTimeout = (error: unknown): boolean => (
+  axios.isAxiosError(error)
+  && (error.response?.status === 504 || error.code === 'ECONNABORTED')
 );
+
+const CALCULATION_POLL_INTERVAL_MS = 2000;
+const CALCULATION_POLL_TIMEOUT_MS = 10 * 60 * 1000;
 
 const wait = (milliseconds: number): Promise<void> => (
   new Promise((resolve) => setTimeout(resolve, milliseconds))
@@ -76,23 +80,35 @@ export class SoilRainfallAPIClient {
   async calculateProductionSoilRainfallIndexWithUrls(
     params: ProductionCalculationParams
   ): Promise<LightweightCalculationResult> {
-    try {
-      const response = await this.postProductionCalculation(params);
-      return response.data;
-    } catch (error) {
-      if (!isGatewayTimeout(error)) {
-        throw error;
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < CALCULATION_POLL_TIMEOUT_MS) {
+      try {
+        const response = await this.postProductionCalculation(params);
+        if (response.status === 200 && response.data.status === 'success') {
+          return response.data;
+        }
+        if (response.status !== 202) {
+          throw new Error(response.data.message || '計算結果の取得に失敗しました');
+        }
+      } catch (error) {
+        if (!isCalculationRequestTimeout(error)) {
+          throw error;
+        }
+        console.warn('Calculation request timed out. Polling the cache.');
       }
 
-      console.warn('Gateway timeout while waiting for calculation response. Retrying once from cache.');
-      await wait(1000);
-      const retryResponse = await this.postProductionCalculation(params);
-      return retryResponse.data;
+      await wait(CALCULATION_POLL_INTERVAL_MS);
     }
+
+    throw new Error('計算が10分以内に完了しませんでした。しばらくして再実行してください。');
   }
 
   private postProductionCalculation(params: ProductionCalculationParams) {
-    return apiClient.post<LightweightCalculationResult>(
+    return apiClient.post<LightweightCalculationResult & {
+      message?: string;
+      retry_after?: number;
+    }>(
       '/production-soil-rainfall-index-with-urls',
       params
     );

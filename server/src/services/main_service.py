@@ -2,7 +2,7 @@
 """
 メイン処理サービス
 """
-from typing import Dict, Any, Tuple, Optional, Callable
+from typing import Dict, Any, Tuple, Optional, Callable, Sequence
 import logging
 from datetime import datetime, timedelta
 import time
@@ -81,6 +81,7 @@ class MainService:
         use_cache: bool = True,
         async_cache_save: bool = True,
         on_cache_saved: Optional[Callable[[bool], None]] = None,
+        prefecture_codes: Optional[Sequence[str]] = None,
     ) -> Dict[str, Any]:
         """
         個別URLベースのメイン処理（SWIとガイダンスのURLを個別指定）
@@ -131,7 +132,11 @@ class MainService:
 
             # 計算処理実行
             result, _ = self._run_calculation_pipeline(
-                swi_grib2, guidance_grib2_filtered, swi_initial_time, normalized_risk_rule
+                swi_grib2,
+                guidance_grib2_filtered,
+                swi_initial_time,
+                normalized_risk_rule,
+                prefecture_codes,
             )
 
             # キャッシュ保存はレスポンスをブロックしないよう非同期で実行
@@ -217,19 +222,23 @@ class MainService:
         guidance_grib2: Dict[str, Any],
         initial_time: datetime,
         risk_rule: str = "legacy",
+        prefecture_codes: Optional[Sequence[str]] = None,
     ) -> Tuple[Dict[str, Any], int]:
         """地域データ準備からレスポンス構築までの計算パイプライン"""
-        prefectures = self._prepare_prefectures()
+        prefectures = self._prepare_prefectures(prefecture_codes)
         total_meshes = self._calculate_meshes(prefectures, swi_grib2, guidance_grib2, risk_rule)
         self._aggregate_risk_timelines(prefectures, risk_rule)
         result = ResponseBuilder.build_prefecture_response(prefectures, initial_time)
         return result, total_meshes
 
-    def _prepare_prefectures(self):
+    def _prepare_prefectures(
+        self,
+        prefecture_codes: Optional[Sequence[str]] = None,
+    ):
         """地域データを構築する"""
         logger.info("地域データ構築開始")
         area_start = time.time()
-        prefectures = self.data_service.prepare_areas()
+        prefectures = self.data_service.prepare_areas(prefecture_codes)
         logger.info(f"地域データ構築完了: {time.time() - area_start:.2f}秒")
         return prefectures
 

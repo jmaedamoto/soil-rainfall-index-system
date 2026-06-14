@@ -38,6 +38,9 @@ def _build_controller():
         is_calculation_in_progress=Mock(return_value=False),
         wait_for_cache_materialization=Mock(return_value=False),
         acquire_calculation_lock=Mock(return_value=False),
+        acquire_calculation_slot=Mock(return_value=True),
+        release_calculation_lock=Mock(),
+        release_calculation_slot=Mock(),
     )
     return controller
 
@@ -66,7 +69,7 @@ def test_lock_failure_waits_for_cache_instead_of_recomputing():
     controller.main_service.main_process_from_separate_urls.assert_not_called()
 
 
-def test_lock_failure_returns_503_when_cache_never_materializes():
+def test_lock_failure_returns_202_when_cache_never_materializes():
     app = Flask(__name__)
     controller = _build_controller()
 
@@ -78,8 +81,32 @@ def test_lock_failure_returns_503_when_cache_never_materializes():
             "risk_rule": "legacy",
         }
     ):
-        response, status_code = controller.production_soil_rainfall_index_with_urls()
+        response = controller.production_soil_rainfall_index_with_urls()
 
-    assert status_code == 503
-    assert response.get_json()["status"] == "error"
+    assert response.status_code == 202
+    assert response.headers["Retry-After"] == "2"
+    assert response.get_json()["status"] == "calculating"
+    controller.main_service.main_process_from_separate_urls.assert_not_called()
+
+
+def test_busy_calculation_slot_releases_key_lock_and_returns_202():
+    app = Flask(__name__)
+    controller = _build_controller()
+    controller.cache_service.acquire_calculation_lock.return_value = True
+    controller.cache_service.acquire_calculation_slot.return_value = False
+
+    with app.test_request_context(
+        json={
+            "swi_initial": "2026-05-20T00:00:00Z",
+            "guidance_initial": "2026-05-20T00:00:00Z",
+            "guidance_type": "msm",
+            "risk_rule": "legacy",
+            "region": "shikoku",
+        }
+    ):
+        response = controller.production_soil_rainfall_index_with_urls()
+
+    assert response.status_code == 202
+    assert response.get_json()["status"] == "calculating"
+    controller.cache_service.release_calculation_lock.assert_called_once_with("cache-key")
     controller.main_service.main_process_from_separate_urls.assert_not_called()

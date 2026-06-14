@@ -133,6 +133,10 @@ curl -X POST http://localhost/staging/dosya/api/production-soil-rainfall-index-w
 python scripts/check_production_promotion.py
 ```
 
+集中アクセス時は、計算中の後続リクエストへ `202 Accepted` と `Retry-After: 2` が返ることを確認します。クライアントは計算結果のgzipキャッシュが完成するまで自動的に再確認します。
+
+Apache設定は `request-timeout`、`socket-timeout`、`Timeout` を900秒にそろえます。設定変更後は `apachectl configtest` を通してからhttpdを再起動してください。
+
 ## 10. 昇格時の不要ファイル
 
 リリースpayloadには以下を含めません。

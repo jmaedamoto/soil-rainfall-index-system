@@ -49,8 +49,10 @@ def _build_controller(cache_save_result=True, session_service=None):
         is_calculation_in_progress=Mock(return_value=False),
         wait_for_cache_materialization=Mock(return_value=False),
         acquire_calculation_lock=Mock(return_value=True),
+        acquire_calculation_slot=Mock(return_value=True),
         set_cached_result=Mock(return_value=cache_save_result),
         release_calculation_lock=Mock(),
+        release_calculation_slot=Mock(),
     )
     return controller, result
 
@@ -82,6 +84,7 @@ def test_calculation_owner_saves_region_cache_before_returning_session():
         risk_rule="legacy",
         use_cache=False,
         async_cache_save=False,
+        prefecture_codes=["shiga", "kyoto", "hyogo", "osaka", "nara", "wakayama"],
     )
     controller.cache_service.set_cached_result.assert_called_once_with(
         "cache-key",
@@ -92,6 +95,7 @@ def test_calculation_owner_saves_region_cache_before_returning_session():
         "legacy",
     )
     controller.cache_service.release_calculation_lock.assert_called_once_with("cache-key")
+    controller.cache_service.release_calculation_slot.assert_called_once_with()
     session_service.create_session.assert_called_once()
 
 
@@ -109,4 +113,5 @@ def test_cache_save_failure_releases_lock_and_returns_500():
     assert status_code == 500
     assert response.get_json()["status"] == "error"
     controller.cache_service.release_calculation_lock.assert_called_once_with("cache-key")
+    controller.cache_service.release_calculation_slot.assert_called_once_with()
     session_service.create_session.assert_not_called()
