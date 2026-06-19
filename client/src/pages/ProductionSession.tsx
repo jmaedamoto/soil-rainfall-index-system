@@ -13,7 +13,7 @@ import {
 import {
   useProductionSession,
 } from '../features/production-session/hooks/useProductionSession';
-import type { RiskRule } from '../types/api';
+import type { RiskRule, RiskTimelineViewMode } from '../types/api';
 import { REGION_CONFIGS, type RegionCode } from '../features/production-session/regions';
 
 interface ProductionSessionProps {
@@ -31,6 +31,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
   const [guidanceInitialTime, setGuidanceInitialTime] = useState<string>('');
   const [guidanceType, setGuidanceType] = useState<'msm' | 'gsm'>('msm');
   const [riskRule, setRiskRule] = useState<RiskRule>('legacy');
+  const [riskTimelineViewMode, setRiskTimelineViewMode] = useState<RiskTimelineViewMode>('municipality');
 
   const {
     error,
@@ -41,6 +42,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
     loadData,
     loadRiskAtTime,
     loading,
+    loadingAllPrefectures,
     loadingPrefecture,
     meshCoords,
     meshRisksAtTime,
@@ -107,6 +109,22 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
     }
   };
   const guidanceHourOptions = getGuidanceHourOptions(guidanceType);
+
+  const handleLoadData = async () => {
+    setRiskTimelineViewMode('municipality');
+    await loadData();
+  };
+
+  const handleRiskTimelineViewModeChange = async (mode: RiskTimelineViewMode) => {
+    if (mode === 'prefecture-all') {
+      const loaded = await loadAllPrefectures();
+      if (!loaded) {
+        return;
+      }
+    }
+
+    setRiskTimelineViewMode(mode);
+  };
 
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
@@ -304,7 +322,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
         </div>
 
         <button
-          onClick={loadData}
+          onClick={handleLoadData}
           disabled={loading || !swiInitialTime || !guidanceInitialTime}
           style={{
             backgroundColor: loading ? '#ccc' : '#1976D2',
@@ -417,13 +435,11 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
                   }
                   selectedPrefecture={selectedPrefecture}
                   selectedTime={selectedTime}
+                  viewMode={riskTimelineViewMode}
+                  loadingAllPrefectures={loadingAllPrefectures}
                   onPrefectureChange={handlePrefectureChange}
                   onTimeSelect={handleTimeChange}
-                  onViewModeChange={(mode) => {
-                    if (mode === 'prefecture-all') {
-                      loadAllPrefectures();
-                    }
-                  }}
+                  onViewModeChange={handleRiskTimelineViewModeChange}
                   initialTime={sessionInfo.swi_initial_time}
                 />
               </div>
@@ -446,6 +462,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
           dataSource="production"
           onSessionRecalculated={async (newSessionId, _meshRisks, _newMeshCoords, metadata) => {
             // フォークセッションIDに切り替え（以降の時刻変更で編集済みデータを取得するため）
+            setRiskTimelineViewMode('municipality');
             setSessionId(newSessionId);
             setIsAdjustedData(true);
             setSessionInfo((prev) => prev ? ({

@@ -101,6 +101,17 @@ npm run build
 python scripts/check_production_promotion.py
 ```
 
+## ドキュメント更新
+
+ソースコードを改修した場合は、同じ作業内で関連する Markdown も確認し、実装内容・運用手順・既知課題と矛盾しないように更新します。特に API、キャッシュ、セッション、デプロイ、調査メモ、作業再開プロンプトに影響する変更では、以下を確認対象に含めます。
+
+- `CLAUDE.md`
+- `docs/work-resume-prompt.md`
+- `docs/staging-promotion-rules.md`
+- `server/docs/CACHE_SYSTEM.md`
+- `server/deploy/DEPLOY_GUIDE.md`
+- 関連する `docs/*.md`
+
 ## 昇格前の注意
 
 `staging` / `main` への昇格前は、production profile のルート確認と不要ファイル確認を行います。`server/tests/`、`.pytest_cache/`、`__pycache__/`、`*.pyc` はリリース payload に含めません。
