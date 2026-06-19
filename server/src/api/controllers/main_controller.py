@@ -562,9 +562,20 @@ class MainController:
                     guidance_url,
                 )
 
+            calculation_in_progress = self.cache_service.is_calculation_in_progress(cache_key)
+            stale_tmp_deleted = 0
+            if not calculation_in_progress:
+                stale_tmp_deleted = self.cache_service.cleanup_stale_cache_write_temps(cache_key)
+                if stale_tmp_deleted:
+                    logger.warning(
+                        "%s 古いキャッシュ保存tmpを削除して再計算を許可: %s deleted=%s",
+                        trace_prefix,
+                        cache_key,
+                        stale_tmp_deleted,
+                    )
+
             cache_write_in_progress = self.cache_service.is_cache_write_in_progress(cache_key)
             cache_materializing = self.cache_service.is_cache_materializing(cache_key)
-            calculation_in_progress = self.cache_service.is_calculation_in_progress(cache_key)
             if cache_write_in_progress or cache_materializing or calculation_in_progress:
                 wait_started_at = time.perf_counter()
                 logger.info(

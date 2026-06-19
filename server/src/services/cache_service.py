@@ -90,6 +90,10 @@ class CacheService:
         """キャッシュ保存中の一時ファイルglob"""
         return f"{cache_key}.json.gz.*.tmp"
 
+    def _get_cache_temp_paths(self, cache_key: str) -> List[Path]:
+        """キャッシュ保存中の一時ファイル一覧"""
+        return list(self.cache_dir.glob(self._get_cache_temp_glob(cache_key)))
+
     def _get_legacy_meta_path(self, cache_key: str) -> Path:
         """旧メタデータファイルパス取得（後方互換の削除用）"""
         return self.cache_dir / f"{cache_key}.meta.json"
@@ -199,7 +203,39 @@ class CacheService:
 
     def is_cache_write_in_progress(self, cache_key: str) -> bool:
         """キャッシュ保存用tmpファイルが存在するか確認"""
-        return any(self.cache_dir.glob(self._get_cache_temp_glob(cache_key)))
+        return bool(self._get_cache_temp_paths(cache_key))
+
+    def cleanup_stale_cache_write_temps(
+        self,
+        cache_key: str,
+        max_age_seconds: int = 300,
+    ) -> int:
+        """
+        古いキャッシュ保存用tmpファイルを削除する。
+
+        計算ロックが生きている間は保存中の可能性があるため削除しない。
+        """
+        if self.exists(cache_key) or self.is_calculation_in_progress(cache_key):
+            return 0
+
+        deleted_count = 0
+        now = time.time()
+        for temp_path in self._get_cache_temp_paths(cache_key):
+            try:
+                age_seconds = now - temp_path.stat().st_mtime
+                if age_seconds < max_age_seconds:
+                    continue
+                temp_path.unlink(missing_ok=True)
+                deleted_count += 1
+                logger.warning(
+                    "古いキャッシュ保存tmpを削除: %s age=%.1fs",
+                    temp_path.name,
+                    age_seconds,
+                )
+            except OSError as e:
+                logger.error(f"古いキャッシュ保存tmp削除エラー: {temp_path.name} - {e}")
+
+        return deleted_count
 
     def is_cache_materializing(self, cache_key: str) -> bool:
         """キャッシュ本体はあるが保存用tmpがまだ残っている中間状態か確認"""
