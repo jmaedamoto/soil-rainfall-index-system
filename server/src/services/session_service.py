@@ -133,6 +133,8 @@ class SessionService:
             return None
 
         cached_result = self.cache_service.get_cached_result(cache_key)
+        if cached_result:
+            self.cache_service.cleanup_completed_calculation_lock(cache_key)
         if not cached_result:
             cache_write_in_progress = self.cache_service.is_cache_write_in_progress(cache_key)
             cache_materializing = self.cache_service.is_cache_materializing(cache_key)
@@ -152,6 +154,8 @@ class SessionService:
                     timeout_seconds=5.0,
                 ):
                     cached_result = self.cache_service.get_cached_result(cache_key)
+                    if cached_result:
+                        self.cache_service.cleanup_completed_calculation_lock(cache_key)
 
         if not cached_result or 'prefectures' not in cached_result:
             logger.warning(f"Session restore skipped, cache unavailable: {session_id} -> {cache_key}")

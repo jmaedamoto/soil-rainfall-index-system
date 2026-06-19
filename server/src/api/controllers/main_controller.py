@@ -545,6 +545,7 @@ class MainController:
             # 先にキャッシュを確認し、ヒット時はGRIB2取得前に即返却する
             cached_result = self.cache_service.get_cached_result(cache_key)
             if cached_result:
+                self.cache_service.cleanup_completed_calculation_lock(cache_key)
                 elapsed = time.perf_counter() - request_started_at
                 logger.info(
                     f"{trace_prefix} キャッシュ即時返却: {cache_key} "
@@ -590,6 +591,7 @@ class MainController:
                 if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=2.0):
                     cached_result = self.cache_service.get_cached_result(cache_key)
                     if cached_result:
+                        self.cache_service.cleanup_completed_calculation_lock(cache_key)
                         wait_elapsed = time.perf_counter() - wait_started_at
                         total_elapsed = time.perf_counter() - request_started_at
                         logger.info(
@@ -631,6 +633,7 @@ class MainController:
                 if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=2.0):
                     cached_result = self.cache_service.get_cached_result(cache_key)
                     if cached_result:
+                        self.cache_service.cleanup_completed_calculation_lock(cache_key)
                         wait_elapsed = time.perf_counter() - wait_started_at
                         total_elapsed = time.perf_counter() - request_started_at
                         logger.info(
@@ -660,8 +663,10 @@ class MainController:
 
             calculation_slot_acquired = self.cache_service.acquire_calculation_slot(cache_key)
             if not calculation_slot_acquired:
-                self.cache_service.release_calculation_lock(cache_key)
-                lock_acquired = False
+                lock_released = self.cache_service.release_calculation_lock(cache_key)
+                lock_acquired = not lock_released
+                if not lock_released:
+                    logger.error(f"{trace_prefix} 計算スロット取得失敗後の計算ロック解放失敗: {cache_key}")
                 logger.info(
                     f"{trace_prefix} 別条件の計算が実行中のため再試行応答: {cache_key}"
                 )
@@ -701,10 +706,14 @@ class MainController:
                 )
                 cache_save_elapsed = time.perf_counter() - cache_save_started_at
                 if not cache_saved:
-                    self.cache_service.release_calculation_lock(cache_key)
-                    lock_acquired = False
-                    self.cache_service.release_calculation_slot()
-                    calculation_slot_acquired = False
+                    lock_released = self.cache_service.release_calculation_lock(cache_key)
+                    slot_released = self.cache_service.release_calculation_slot()
+                    lock_acquired = not lock_released
+                    calculation_slot_acquired = not slot_released
+                    if not lock_released:
+                        logger.error(f"{trace_prefix} キャッシュ保存失敗後の計算ロック解放失敗: {cache_key}")
+                    if not slot_released:
+                        logger.error(f"{trace_prefix} キャッシュ保存失敗後の計算スロット解放失敗: {cache_key}")
                     logger.error(
                         f"{trace_prefix} キャッシュ保存失敗: {cache_key} "
                         f"(cache_save_elapsed={cache_save_elapsed:.2f}s)"
@@ -714,13 +723,20 @@ class MainController:
                         "message": "計算結果のキャッシュ保存に失敗しました。しばらくして再試行してください。"
                     }), 500
 
-                self.cache_service.release_calculation_lock(cache_key)
-                lock_acquired = False
-                self.cache_service.release_calculation_slot()
-                calculation_slot_acquired = False
+                lock_released = self.cache_service.release_calculation_lock(cache_key)
+                if not lock_released:
+                    lock_released = self.cache_service.cleanup_completed_calculation_lock(cache_key)
+                slot_released = self.cache_service.release_calculation_slot()
+                lock_acquired = not lock_released
+                calculation_slot_acquired = not slot_released
+                if not lock_released:
+                    logger.error(f"{trace_prefix} キャッシュ保存完了後の計算ロック解放失敗: {cache_key}")
+                if not slot_released:
+                    logger.error(f"{trace_prefix} キャッシュ保存完了後の計算スロット解放失敗: {cache_key}")
                 logger.info(
                     f"{trace_prefix} キャッシュ保存完了後に計算ロック解放: {cache_key} "
-                    f"(cache_save_elapsed={cache_save_elapsed:.2f}s)"
+                    f"(cache_save_elapsed={cache_save_elapsed:.2f}s lock_released={lock_released} "
+                    f"slot_released={slot_released})"
                 )
 
                 # セッションサービスが有効な場合、セッション作成して軽量レスポンスを返す
@@ -756,9 +772,12 @@ class MainController:
                 # セッションサービスが無効な場合、従来通り全データを返す
                 if lock_acquired:
                     # セッションを使わない経路ではレスポンス前にロックを解放してよい
-                    self.cache_service.release_calculation_lock(cache_key)
-                    lock_acquired = False
-                    logger.info(f"{trace_prefix} セッション未使用経路のため計算ロック解放: {cache_key}")
+                    lock_released = self.cache_service.release_calculation_lock(cache_key)
+                    lock_acquired = not lock_released
+                    logger.info(
+                        f"{trace_prefix} セッション未使用経路のため計算ロック解放: "
+                        f"{cache_key} released={lock_released}"
+                    )
 
                 result["status"] = "success"
 
@@ -784,11 +803,19 @@ class MainController:
             except Exception as e:
                 # エラー時はロックを解放
                 if lock_acquired:
-                    self.cache_service.release_calculation_lock(cache_key)
-                    logger.info(f"{trace_prefix} 例外発生のため計算ロック解放: {cache_key}")
+                    lock_released = self.cache_service.release_calculation_lock(cache_key)
+                    lock_acquired = not lock_released
+                    logger.info(
+                        f"{trace_prefix} 例外発生のため計算ロック解放: "
+                        f"{cache_key} released={lock_released}"
+                    )
                 if calculation_slot_acquired:
-                    self.cache_service.release_calculation_slot()
-                    logger.info(f"{trace_prefix} 例外発生のため計算スロット解放: {cache_key}")
+                    slot_released = self.cache_service.release_calculation_slot()
+                    calculation_slot_acquired = not slot_released
+                    logger.info(
+                        f"{trace_prefix} 例外発生のため計算スロット解放: "
+                        f"{cache_key} released={slot_released}"
+                    )
                 raise
 
         except Exception as e:

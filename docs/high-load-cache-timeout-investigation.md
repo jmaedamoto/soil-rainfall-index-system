@@ -14,6 +14,8 @@
 - 別条件の重い計算は `calculation-slot` で直列化し、高負荷時の同時実行数を抑える。
 - 完成 `.json.gz` がなく、計算ロックもない古い保存用 `.tmp` は stale と判定して削除し、再計算へ進める。
 - キャッシュ保存は一時ファイル経由の atomic rename とし、保存完了後に計算ロックを解放する。
+- gzip保存後に `.calculating.json` が残った場合は、完成済みキャッシュの残留計算ロックとして回収する。
+- 計算ロック解放は削除成否をログに残し、同一プロセス所有のロックは所有トークンがメモリから失われていても削除できる。
 
 検証:
 
@@ -147,13 +149,17 @@ Z__C_RJTD_20260618120000_SRF_GPV_Ggis1km_Psw_Aper10min_ANAL_grib2.bin
 
 現在は初期計算 API が計算中に長時間リクエストを保持し続けず、短時間待機後に `202 Accepted` を返す。gzip 作成後の取得中表示が続く場合は、セッション作成後の軽量レスポンス返却、府県データ取得、`risk-at-time` のどこで止まっているかをログで確認する。
 
+加えて、gzip 作成後に `.calculating.json` が残るケースでは、ロック解放の成否とキャッシュ読み込みの成否を切り分ける。初期計算 API は `calculating` 判定より先に `get_cached_result(cache_key)` を実行するため、gzip が正常に読める場合は残留ロックを回収してキャッシュレスポンスを返す。
+
 ## 再試験時に確認すべきログ
 
 再取得時の `.json.gz` 作成直後に、以下のログがどこまで出ているか確認する。
 
 ```text
 キャッシュ保存完了
-キャッシュ保存完了後に計算ロック解放
+キャッシュ保存完了後に計算ロック解放 ... lock_released=True slot_released=True
+完成済みキャッシュの残留計算ロックを削除
+キャッシュ読み込みエラー
 軽量セッションレスポンス返却
 Base session created
 /session/<session_id>/prefecture
@@ -173,6 +179,8 @@ Timeout when reading response headers
 判断基準:
 
 - `キャッシュ保存完了` はあるが `軽量セッションレスポンス返却` がない場合、サーバー側で gzip 作成後からレスポンス前までに詰まっている。
+- `キャッシュ保存完了後に計算ロック解放` の `lock_released=False` が出る場合、ロック削除に失敗している。後続で `完成済みキャッシュの残留計算ロックを削除` が出れば回収済み。
+- `.json.gz` があるのに `キャッシュ読み込みエラー` が出る場合、残留ロックではなく gzip 読み込み失敗が直接原因。
 - `軽量セッションレスポンス返却` はあるが画面が取得中の場合、後続の府県データ取得または risk-at-time で詰まっている。
 - 同時刻に `Timeout when reading response headers` が出る場合、Apache/mod_wsgi 側の応答待ちタイムアウトが濃厚。
 
@@ -200,6 +208,8 @@ Timeout when reading response headers
 - 別条件の計算は `calculation-slot` で直列化する。
 - クライアントは `202 Accepted` と一部 timeout を受けて同じ条件を再確認する。
 - Apache/mod_wsgi の timeout 設定方針を `server/deploy/DEPLOY_GUIDE.md` に反映する。
+- gzip保存後に残った `.calculating.json` を完成済みキャッシュの残留ロックとして回収する。
+- 計算ロック/計算スロット解放の成否をログへ出し、削除失敗を成功扱いで見落とさない。
 
 ## 残課題候補
 

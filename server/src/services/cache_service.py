@@ -554,6 +554,12 @@ class CacheService:
             return True
         return self._process_is_alive(owner_pid)
 
+    def _lock_owner_is_current_process(self, lock_data: Dict) -> bool:
+        return (
+            lock_data.get("hostname") == socket.gethostname()
+            and lock_data.get("pid") == os.getpid()
+        )
+
     def _read_lock_data(self, lock_path: Path) -> Optional[Dict]:
         try:
             with open(lock_path, 'r', encoding='utf-8') as f:
@@ -634,23 +640,60 @@ class CacheService:
             logger.error(f"ロック取得エラー: {lock_name} - {e}")
             return False
 
-    def _release_file_lock(self, lock_path: Path, lock_name: str) -> None:
+    def _release_file_lock(self, lock_path: Path, lock_name: str) -> bool:
         with self._lock_tokens_guard:
             owned_token = self._lock_tokens.pop(str(lock_path), None)
-        if not owned_token:
-            logger.warning(f"所有していないロックの削除をスキップ: {lock_name}")
-            return
+
+        if not lock_path.exists():
+            logger.info(f"ロックは既に削除済み: {lock_name}")
+            return True
 
         lock_data = self._read_lock_data(lock_path)
-        if lock_data and lock_data.get("token") != owned_token:
+        if lock_data is None:
+            logger.warning(f"読み込めないロックの削除をスキップ: {lock_name}")
+            return False
+
+        if not owned_token:
+            if not self._lock_owner_is_current_process(lock_data):
+                logger.warning(f"所有していないロックの削除をスキップ: {lock_name}")
+                return False
+            logger.warning(
+                "所有tokenはないが同一プロセス所有のロックを削除: %s pid=%s",
+                lock_name,
+                lock_data.get("pid"),
+            )
+
+        if owned_token and lock_data.get("token") != owned_token:
             logger.warning(f"所有者が変わったロックの削除をスキップ: {lock_name}")
-            return
+            return False
 
         try:
             lock_path.unlink(missing_ok=True)
             logger.info(f"ロック削除: {lock_name}")
+            return True
         except OSError as e:
             logger.error(f"ロック削除エラー: {lock_name} - {e}")
+            return False
+
+    def cleanup_completed_calculation_lock(self, cache_key: str) -> bool:
+        """完成済みgzipがあるのに残った計算ロックを回収する"""
+        lock_path = self._get_lock_path(cache_key)
+        if (
+            not lock_path.exists()
+            or not self.exists(cache_key)
+            or self.is_cache_write_in_progress(cache_key)
+        ):
+            return False
+
+        try:
+            lock_path.unlink(missing_ok=True)
+            with self._lock_tokens_guard:
+                self._lock_tokens.pop(str(lock_path), None)
+            logger.warning(f"完成済みキャッシュの残留計算ロックを削除: {cache_key}")
+            return True
+        except OSError as e:
+            logger.error(f"完成済みキャッシュの残留計算ロック削除エラー: {cache_key} - {e}")
+            return False
 
     def is_calculation_in_progress(self, cache_key: str) -> bool:
         """
@@ -664,6 +707,9 @@ class CacheService:
         """
         lock_path = self._get_lock_path(cache_key)
         if not lock_path.exists():
+            return False
+
+        if self.cleanup_completed_calculation_lock(cache_key):
             return False
 
         return not self._remove_stale_lock(lock_path, cache_key)
@@ -692,13 +738,13 @@ class CacheService:
             cache_key,
         )
 
-    def release_calculation_slot(self) -> None:
-        self._release_file_lock(
+    def release_calculation_slot(self) -> bool:
+        return self._release_file_lock(
             self._get_calculation_slot_path(),
             "calculation-slot",
         )
 
-    def release_calculation_lock(self, cache_key: str, base_session_id: str = None):
+    def release_calculation_lock(self, cache_key: str, base_session_id: str = None) -> bool:
         """
         計算ロックを解放
 
@@ -706,7 +752,7 @@ class CacheService:
             cache_key: キャッシュキー
             base_session_id: 互換性維持のための未使用引数
         """
-        self._release_file_lock(self._get_lock_path(cache_key), cache_key)
+        return self._release_file_lock(self._get_lock_path(cache_key), cache_key)
 
     def cleanup_calculation_locks(self, max_age_minutes: int = 30) -> int:
         """
