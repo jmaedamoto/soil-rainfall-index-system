@@ -258,6 +258,66 @@ class MainController:
         }
         return jsonify(cached_result)
 
+    def _build_cached_summary_response(
+        self,
+        summary: dict,
+        swi_initial,
+        guidance_initial,
+        guidance_type: str,
+        risk_rule: str,
+        region: str,
+        cache_key: str,
+        swi_url: str,
+        guidance_url: str,
+    ):
+        """キャッシュサマリーから軽量レスポンスを組み立てる"""
+        if self.session_service:
+            session_id = self.session_service.create_session_from_cache_summary(
+                summary,
+                datetime.now().isoformat(),
+            )
+            return jsonify({
+                "status": "success",
+                "session_id": session_id,
+                "swi_initial_time": swi_initial.isoformat() + 'Z',
+                "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+                "guidance_type": guidance_type,
+                "risk_rule": risk_rule,
+                "region": region,
+                "available_prefectures": summary.get("available_prefectures", []),
+                "available_prefecture_details": summary.get("available_prefecture_details", []),
+                "available_times": summary.get("available_times", []),
+                "used_urls": {
+                    "swi_url": swi_url,
+                    "swi_initial_time": swi_initial.isoformat() + 'Z',
+                    "guidance_url": guidance_url,
+                    "guidance_initial_time": guidance_initial.isoformat() + 'Z',
+                    "guidance_type": guidance_type,
+                    "risk_rule": risk_rule,
+                    "region": region,
+                    "cache_key": cache_key,
+                    "cache_response": "summary",
+                }
+            })
+
+        cached_result = self.cache_service.get_cached_result(cache_key)
+        if cached_result:
+            return self._build_cached_response(
+                cached_result,
+                swi_initial,
+                guidance_initial,
+                guidance_type,
+                risk_rule,
+                region,
+                cache_key,
+                swi_url,
+                guidance_url,
+            )
+
+        return self._calculation_pending_response(
+            "キャッシュサマリーを作成中です。自動的に再確認します。"
+        )
+
     @staticmethod
     def _normalize_region(region_value: str) -> str:
         normalized_region = (region_value or "kinki").strip().lower()
@@ -542,17 +602,23 @@ class MainController:
             )
             logger.info(f"{trace_prefix} キャッシュキー算出: {cache_key}")
 
-            # 先にキャッシュを確認し、ヒット時はGRIB2取得前に即返却する
-            cached_result = self.cache_service.get_cached_result(cache_key)
-            if cached_result:
+            # 先に軽量キャッシュサマリーを確認し、ヒット時はGRIB2取得前に即返却する
+            cached_summary = self.cache_service.get_cached_summary(
+                cache_key,
+                swi_initial.isoformat(),
+                guidance_initial.isoformat(),
+                guidance_type,
+                risk_rule,
+            )
+            if cached_summary:
                 self.cache_service.cleanup_completed_calculation_lock(cache_key)
                 elapsed = time.perf_counter() - request_started_at
                 logger.info(
-                    f"{trace_prefix} キャッシュ即時返却: {cache_key} "
+                    f"{trace_prefix} キャッシュサマリー即時返却: {cache_key} "
                     f"(elapsed={elapsed:.2f}s)"
                 )
-                return self._build_cached_response(
-                    cached_result,
+                return self._build_cached_summary_response(
+                    cached_summary,
                     swi_initial,
                     guidance_initial,
                     guidance_type,
@@ -561,6 +627,11 @@ class MainController:
                     cache_key,
                     swi_url,
                     guidance_url,
+                )
+
+            if self.cache_service.exists(cache_key):
+                return self._calculation_pending_response(
+                    "キャッシュサマリーを作成中です。自動的に再確認します。"
                 )
 
             calculation_in_progress = self.cache_service.is_calculation_in_progress(cache_key)
@@ -589,17 +660,23 @@ class MainController:
                 )
 
                 if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=2.0):
-                    cached_result = self.cache_service.get_cached_result(cache_key)
-                    if cached_result:
+                    cached_summary = self.cache_service.get_cached_summary(
+                        cache_key,
+                        swi_initial.isoformat(),
+                        guidance_initial.isoformat(),
+                        guidance_type,
+                        risk_rule,
+                    )
+                    if cached_summary:
                         self.cache_service.cleanup_completed_calculation_lock(cache_key)
                         wait_elapsed = time.perf_counter() - wait_started_at
                         total_elapsed = time.perf_counter() - request_started_at
                         logger.info(
-                            f"{trace_prefix} キャッシュ確定後返却: {cache_key} "
+                            f"{trace_prefix} キャッシュサマリー確定後返却: {cache_key} "
                             f"(wait_elapsed={wait_elapsed:.2f}s total_elapsed={total_elapsed:.2f}s)"
                         )
-                        return self._build_cached_response(
-                            cached_result,
+                        return self._build_cached_summary_response(
+                            cached_summary,
                             swi_initial,
                             guidance_initial,
                             guidance_type,
@@ -631,17 +708,23 @@ class MainController:
                     f"{trace_prefix} 別リクエストが計算を開始したため待機に切り替え: {cache_key}"
                 )
                 if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=2.0):
-                    cached_result = self.cache_service.get_cached_result(cache_key)
-                    if cached_result:
+                    cached_summary = self.cache_service.get_cached_summary(
+                        cache_key,
+                        swi_initial.isoformat(),
+                        guidance_initial.isoformat(),
+                        guidance_type,
+                        risk_rule,
+                    )
+                    if cached_summary:
                         self.cache_service.cleanup_completed_calculation_lock(cache_key)
                         wait_elapsed = time.perf_counter() - wait_started_at
                         total_elapsed = time.perf_counter() - request_started_at
                         logger.info(
-                            f"{trace_prefix} ロック取得失敗後にキャッシュ返却: {cache_key} "
+                            f"{trace_prefix} ロック取得失敗後にキャッシュサマリー返却: {cache_key} "
                             f"(wait_elapsed={wait_elapsed:.2f}s total_elapsed={total_elapsed:.2f}s)"
                         )
-                        return self._build_cached_response(
-                            cached_result,
+                        return self._build_cached_summary_response(
+                            cached_summary,
                             swi_initial,
                             guidance_initial,
                             guidance_type,

@@ -54,6 +54,12 @@ Apache / systemd / WSGI の環境変数でも以下を固定してください�
 SOIL_RAINFALL_ROUTE_PROFILE=production
 ```
 
+キャッシュヒット時の gzip 再展開を抑えるため、プロセス内で保持する展開済みキャッシュ件数を必要に応じて設定できます。未設定時は2件です。メモリ使用量を優先する場合は `0` で無効化します。
+
+```text
+CACHE_MEMORY_MAX_RESULTS=2
+```
+
 プロキシ、GRIB2取得元、タイムアウトは `server/config/URL_CONFIG_GUIDE.md` を参照してください。
 
 ## 5. データファイル

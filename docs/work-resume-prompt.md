@@ -37,6 +37,9 @@
 - バックエンドは Flask、フロントは React/TypeScript/Vite。
 - キャッシュ、セッション復元、同時計算ロック、雨量調整再計算、フロントのセッション表示状態管理が最近の主要テーマ。
 - 高負荷試験で確認された stale tmp 起因の10分タイムアウトは対処済み。詳細は docs/high-load-cache-timeout-investigation.md を参照する。
+- キャッシュヒット時の初期APIは `.summary.json` を使い、`.json.gz` 全体を展開せずに軽量セッションレスポンスを返す。summary がない既存gzipでは `*.summary.lock.json` で作成を1件に絞る。
+- キャッシュヒットで作るベースセッションは、最初は cache_key と summary だけを保持する。府県データなど完全データが必要になった時点で gzip から materialize する。
+- 同一プロセス内では `CACHE_MEMORY_MAX_RESULTS` 件まで gzip 展開済み結果を共有する。未設定時は2件、0で無効。
 - `.json.gz` 作成後も `.calculating.json` が残り、フロントがデータ取得中のままになる不具合への対策を追加済み。
   - `POST /production-soil-rainfall-index-with-urls` は先に `get_cached_result(cache_key)` を実行する。`.json.gz` が正常に読める場合は、残留 `.calculating.json` を完成済みキャッシュのロックとして回収してキャッシュ即時返却する。
   - `cache_service.py` の `release_calculation_lock()` / `release_calculation_slot()` は削除成否を返す。同一プロセス所有のロックは、所有 token がメモリから失われていても削除を許可する。

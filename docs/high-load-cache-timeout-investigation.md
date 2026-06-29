@@ -16,6 +16,8 @@
 - キャッシュ保存は一時ファイル経由の atomic rename とし、保存完了後に計算ロックを解放する。
 - gzip保存後に `.calculating.json` が残った場合は、完成済みキャッシュの残留計算ロックとして回収する。
 - 計算ロック解放は削除成否をログに残し、同一プロセス所有のロックは所有トークンがメモリから失われていても削除できる。
+- キャッシュヒット時の初期APIは `.summary.json` を使って軽量レスポンスを返し、`.json.gz` 全体の展開を避ける。
+- 同一プロセス内では `cache_key` ごとに gzip 展開結果を短期共有し、同時アクセス時の重複 gzip 展開と JSON parse を抑える。
 
 検証:
 
@@ -210,6 +212,8 @@ Timeout when reading response headers
 - Apache/mod_wsgi の timeout 設定方針を `server/deploy/DEPLOY_GUIDE.md` に反映する。
 - gzip保存後に残った `.calculating.json` を完成済みキャッシュの残留ロックとして回収する。
 - 計算ロック/計算スロット解放の成否をログへ出し、削除失敗を成功扱いで見落とさない。
+- キャッシュサマリー `*.summary.json` を保存し、キャッシュヒット時の初期レスポンスで gzip 全展開を避ける。
+- `CACHE_MEMORY_MAX_RESULTS` 件まで、プロセス内で gzip 展開済みのキャッシュ結果を共有する。
 
 ## 残課題候補
 

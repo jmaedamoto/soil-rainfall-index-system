@@ -45,6 +45,11 @@ class CacheService:
         self.default_ttl_days = default_ttl_days
         self._lock_tokens: Dict[str, str] = {}
         self._lock_tokens_guard = Lock()
+        self._memory_cache: Dict[str, Dict] = {}
+        self._memory_cache_order: List[str] = []
+        self._memory_cache_guard = Lock()
+        self._memory_load_locks: Dict[str, Lock] = {}
+        self._memory_cache_max_results = int(os.environ.get("CACHE_MEMORY_MAX_RESULTS", "2"))
 
         logger.info(f"CacheService初期化: dir={self.cache_dir}, "
                     f"TTL={default_ttl_days}日")
@@ -97,6 +102,68 @@ class CacheService:
     def _get_legacy_meta_path(self, cache_key: str) -> Path:
         """旧メタデータファイルパス取得（後方互換の削除用）"""
         return self.cache_dir / f"{cache_key}.meta.json"
+
+    def _get_memory_load_lock(self, cache_key: str) -> Lock:
+        with self._memory_cache_guard:
+            lock = self._memory_load_locks.get(cache_key)
+            if lock is None:
+                lock = Lock()
+                self._memory_load_locks[cache_key] = lock
+            return lock
+
+    def _get_cache_signature(self, cache_key: str) -> Optional[dict]:
+        cache_path = self._get_cache_path(cache_key)
+        if not cache_path.exists():
+            return None
+        stat = cache_path.stat()
+        return {
+            "mtime_ns": stat.st_mtime_ns,
+            "size": stat.st_size,
+        }
+
+    def _get_memory_cached_result(self, cache_key: str) -> Optional[dict]:
+        signature = self._get_cache_signature(cache_key)
+        if signature is None:
+            return None
+
+        with self._memory_cache_guard:
+            entry = self._memory_cache.get(cache_key)
+            if not entry or entry.get("signature") != signature:
+                return None
+            if cache_key in self._memory_cache_order:
+                self._memory_cache_order.remove(cache_key)
+            self._memory_cache_order.append(cache_key)
+            return entry.get("result")
+
+    def _store_memory_cached_result(self, cache_key: str, result: dict) -> None:
+        if self._memory_cache_max_results <= 0:
+            return
+
+        signature = self._get_cache_signature(cache_key)
+        if signature is None:
+            return
+
+        with self._memory_cache_guard:
+            self._memory_cache[cache_key] = {
+                "signature": signature,
+                "result": result,
+            }
+            if cache_key in self._memory_cache_order:
+                self._memory_cache_order.remove(cache_key)
+            self._memory_cache_order.append(cache_key)
+
+            while len(self._memory_cache_order) > self._memory_cache_max_results:
+                evicted_key = self._memory_cache_order.pop(0)
+                self._memory_cache.pop(evicted_key, None)
+                logger.info(f"メモリキャッシュ退避: {evicted_key}")
+
+    def _get_summary_path(self, cache_key: str) -> Path:
+        """軽量レスポンス用サマリーファイルパス取得"""
+        return self.cache_dir / f"{cache_key}.summary.json"
+
+    def _get_summary_lock_path(self, cache_key: str) -> Path:
+        """サマリー作成中ロックファイルパス取得"""
+        return self.cache_dir / f"{cache_key}.summary.lock.json"
 
     @staticmethod
     def _extract_cache_sample(result: dict) -> dict:
@@ -157,6 +224,79 @@ class CacheService:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
             raise
+
+    @staticmethod
+    def _extract_available_times(prefectures: dict) -> list:
+        if not prefectures:
+            return []
+
+        first_pref = next(iter(prefectures.values()))
+        areas = first_pref.get("areas") or []
+        if not areas or not areas[0].get("meshes"):
+            return []
+
+        first_mesh = areas[0]["meshes"][0]
+        return sorted(set(
+            [point["ft"] for point in first_mesh.get("risk_3hour_max_timeline", [])] +
+            [point["ft"] for point in first_mesh.get("risk_hourly_timeline", [])]
+        ))
+
+    @staticmethod
+    def _build_available_prefecture_details(prefectures: dict) -> list:
+        details = []
+        for code, prefecture in prefectures.items():
+            details.append({
+                "code": code,
+                "name": prefecture.get("name", code) if isinstance(prefecture, dict) else code,
+            })
+        return details
+
+    def _build_cache_summary(
+        self,
+        cache_key: str,
+        result: dict,
+        swi_initial: str,
+        guidance_initial: str,
+        guidance_type: str,
+        risk_rule: str,
+    ) -> dict:
+        prefectures = result.get("prefectures") or {}
+        return {
+            "cache_key": cache_key,
+            "swi_initial_time": swi_initial,
+            "guidance_initial_time": guidance_initial,
+            "guidance_type": guidance_type,
+            "risk_rule": risk_rule,
+            "available_prefectures": list(prefectures.keys()),
+            "available_prefecture_details": self._build_available_prefecture_details(prefectures),
+            "available_times": self._extract_available_times(prefectures),
+            "created_at": datetime.now().isoformat(),
+        }
+
+    def _read_cache_summary(self, cache_key: str) -> Optional[dict]:
+        summary_path = self._get_summary_path(cache_key)
+        if not summary_path.exists():
+            return None
+
+        try:
+            with open(summary_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"キャッシュサマリー読み込みエラー: {cache_key} - {e}")
+            return None
+
+    def wait_for_cache_summary(
+        self,
+        cache_key: str,
+        timeout_seconds: float = 2.0,
+        poll_interval: float = 0.2,
+    ) -> bool:
+        start_time = time.time()
+        while time.time() - start_time < timeout_seconds:
+            if self._get_summary_path(cache_key).exists():
+                return True
+            time.sleep(poll_interval)
+        return self._get_summary_path(cache_key).exists()
 
     def _write_gzip_json_atomic(self, path: Path, data: dict) -> None:
         """gzip JSONを一時ファイル経由で原子的に保存する"""
@@ -286,12 +426,31 @@ class CacheService:
             self.invalidate_cache(cache_key)
             return None
 
+        memory_result = self._get_memory_cached_result(cache_key)
+        if memory_result is not None:
+            logger.info(f"メモリキャッシュヒット: {cache_key}")
+            return memory_result
+
+        load_lock = self._get_memory_load_lock(cache_key)
+        with load_lock:
+            memory_result = self._get_memory_cached_result(cache_key)
+            if memory_result is not None:
+                logger.info(f"メモリキャッシュヒット（待機後）: {cache_key}")
+                return memory_result
+
+            return self._load_cached_result_from_disk(cache_key)
+
+    def _load_cached_result_from_disk(self, cache_key: str) -> Optional[dict]:
+        cache_path = self._get_cache_path(cache_key)
+
         try:
             logger.info(f"キャッシュ読み込み開始: {cache_key}")
             start_time = datetime.now()
 
             with gzip.open(cache_path, 'rt', encoding='utf-8') as f:
                 result = json.load(f)
+
+            self._store_memory_cached_result(cache_key, result)
 
             elapsed = (datetime.now() - start_time).total_seconds()
             file_size_mb = cache_path.stat().st_size / (1024 * 1024)
@@ -306,6 +465,61 @@ class CacheService:
         except Exception as e:
             logger.error(f"キャッシュ読み込みエラー: {cache_key} - {e}")
             return None
+
+    def get_cached_summary(
+        self,
+        cache_key: str,
+        swi_initial: str,
+        guidance_initial: str,
+        guidance_type: str = "msm",
+        risk_rule: str = "legacy",
+        materialize_if_missing: bool = True,
+    ) -> Optional[dict]:
+        """軽量レスポンス用キャッシュサマリーを取得する"""
+        if not self.exists(cache_key):
+            return None
+
+        if not self._is_cache_valid(cache_key):
+            logger.info(f"キャッシュサマリー対象が期限切れ: {cache_key}")
+            self.invalidate_cache(cache_key)
+            return None
+
+        summary = self._read_cache_summary(cache_key)
+        if summary:
+            return summary
+
+        if not materialize_if_missing:
+            return None
+
+        lock_path = self._get_summary_lock_path(cache_key)
+        if not self._acquire_file_lock(lock_path, f"{cache_key}.summary", cache_key):
+            logger.info(f"キャッシュサマリー作成待機: {cache_key}")
+            if self.wait_for_cache_summary(cache_key, timeout_seconds=2.0):
+                return self._read_cache_summary(cache_key)
+            return None
+
+        try:
+            summary = self._read_cache_summary(cache_key)
+            if summary:
+                return summary
+
+            cached_result = self.get_cached_result(cache_key)
+            if not cached_result:
+                return None
+
+            summary = self._build_cache_summary(
+                cache_key,
+                cached_result,
+                swi_initial,
+                guidance_initial,
+                guidance_type,
+                risk_rule,
+            )
+            self._write_json_atomic(self._get_summary_path(cache_key), summary)
+            logger.info(f"キャッシュサマリー作成完了: {cache_key}")
+            return summary
+        finally:
+            self._release_file_lock(lock_path, f"{cache_key}.summary")
 
     def set_cached_result(
         self,
@@ -334,6 +548,16 @@ class CacheService:
 
             # データ保存（temp file + atomic rename）
             self._write_gzip_json_atomic(cache_path, result)
+            summary = self._build_cache_summary(
+                cache_key,
+                result,
+                swi_initial,
+                guidance_initial,
+                guidance_type,
+                risk_rule,
+            )
+            self._write_json_atomic(self._get_summary_path(cache_key), summary)
+            self._store_memory_cached_result(cache_key, result)
             if legacy_meta_path.exists():
                 legacy_meta_path.unlink()
 
@@ -352,6 +576,9 @@ class CacheService:
             legacy_meta_path = self._get_legacy_meta_path(cache_key)
             if legacy_meta_path.exists():
                 legacy_meta_path.unlink()
+            summary_path = self._get_summary_path(cache_key)
+            if summary_path.exists():
+                summary_path.unlink()
             return False
 
     def set_cached_result_async(
@@ -446,6 +673,14 @@ class CacheService:
         """
         cache_path = self._get_cache_path(cache_key)
         legacy_meta_path = self._get_legacy_meta_path(cache_key)
+        summary_path = self._get_summary_path(cache_key)
+        summary_lock_path = self._get_summary_lock_path(cache_key)
+
+        with self._memory_cache_guard:
+            self._memory_cache.pop(cache_key, None)
+            if cache_key in self._memory_cache_order:
+                self._memory_cache_order.remove(cache_key)
+            self._memory_load_locks.pop(cache_key, None)
 
         if cache_path.exists():
             cache_path.unlink()
@@ -453,6 +688,10 @@ class CacheService:
 
         if legacy_meta_path.exists():
             legacy_meta_path.unlink()
+        if summary_path.exists():
+            summary_path.unlink()
+        if summary_lock_path.exists():
+            summary_lock_path.unlink()
 
     def list_caches(self) -> List[Dict]:
         """
