@@ -19,7 +19,7 @@ export const useProductionSession = ({
   swiInitialTime,
   guidanceInitialTime,
   guidanceType = 'msm',
-  riskRule = 'legacy',
+  riskRule = 'lead_time_to_level4',
   regionCode,
 }: UseProductionSessionParams) => {
   const [sessionId, setSessionId] = useState<string | null>(null);

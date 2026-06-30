@@ -30,7 +30,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
   const [swiInitialTime, setSwiInitialTime] = useState<string>('');
   const [guidanceInitialTime, setGuidanceInitialTime] = useState<string>('');
   const [guidanceType, setGuidanceType] = useState<'msm' | 'gsm'>('msm');
-  const [riskRule, setRiskRule] = useState<RiskRule>('legacy');
+  const [riskRule, setRiskRule] = useState<RiskRule>('lead_time_to_level4');
   const [riskTimelineViewMode, setRiskTimelineViewMode] = useState<RiskTimelineViewMode>('municipality');
 
   const {
@@ -204,7 +204,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
                 checked={riskRule === 'legacy'}
                 onChange={() => setRiskRule('legacy')}
               />
-              従来ルール
+              旧基準
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <input
@@ -214,7 +214,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
                 checked={riskRule === 'lead_time_to_level4'}
                 onChange={() => setRiskRule('lead_time_to_level4')}
               />
-              レベル4先行ルール
+              現行基準
             </label>
           </div>
           <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
