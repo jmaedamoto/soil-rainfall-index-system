@@ -14,7 +14,7 @@ production と staging は同一サーバー上で並列稼働します。Apache
 
 | 環境 | クライアントURL | API URL | キャッシュ |
 | --- | --- | --- | --- |
-| production | `/dosya` | `/dosya/api` | `/var/cache/nyapp/dosya` |
+| production | `/dosya` | `/dosya/api` | `/var/cache/myapp/dosya` |
 | staging | `/staging/dosya` | `/staging/dosya/api` | `/var/cache/myapp/staging/dosya` |
 
 ## 1. パッケージ
@@ -80,7 +80,7 @@ Apache 設定例:
 - production: `server/deploy/apache-soil-rainfall-production.conf`
 - staging: `server/deploy/apache-soil-rainfall.conf`
 
-production は `/dosya/api` と `/var/cache/nyapp/dosya`、staging は `/staging/dosya/api` と `/var/cache/myapp/staging/dosya` を使います。
+production は `/dosya/api` と `/var/cache/myapp/dosya`、staging は `/staging/dosya/api` と `/var/cache/myapp/staging/dosya` を使います。
 
 フロントビルドは配置するブランチで実行します。production は `main` ブランチ、staging は `staging` ブランチを使い、それぞれの通常 `dist` を公開先へ配置します。
 
@@ -128,15 +128,15 @@ sudo chmod -R 755 /var/www/html/dosya
 sudo chmod -R 755 /var/www/app/staging/soil-rainfall-index-system
 sudo chmod -R 755 /var/www/html/staging/dosya
 
-sudo mkdir -p /var/cache/nyapp/dosya
-sudo mkdir -p /var/cache/nyapp/dosya/session_refs
+sudo mkdir -p /var/cache/myapp/dosya
+sudo mkdir -p /var/cache/myapp/dosya/session_refs
 sudo mkdir -p /var/cache/myapp/staging/dosya
 sudo mkdir -p /var/cache/myapp/staging/dosya/session_refs
-sudo chown -R apache:apache /var/cache/nyapp
+sudo chown -R apache:apache /var/cache/myapp
 sudo chown -R apache:apache /var/cache/myapp/staging
-sudo chmod 775 /var/cache/nyapp
-sudo chmod 775 /var/cache/nyapp/dosya
-sudo chmod 775 /var/cache/nyapp/dosya/session_refs
+sudo chmod 775 /var/cache/myapp
+sudo chmod 775 /var/cache/myapp/dosya
+sudo chmod 775 /var/cache/myapp/dosya/session_refs
 sudo chmod 775 /var/cache/myapp/staging
 sudo chmod 775 /var/cache/myapp/staging/dosya
 sudo chmod 775 /var/cache/myapp/staging/dosya/session_refs
@@ -152,13 +152,13 @@ sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/app/soil-rainfall-ind
 sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/html/dosya(/.*)?"
 sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/app/staging/soil-rainfall-index-system(/.*)?"
 sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/html/staging/dosya(/.*)?"
-sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/cache/nyapp(/.*)?"
+sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/cache/myapp(/.*)?"
 sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/cache/myapp/staging(/.*)?"
 sudo restorecon -Rv /var/www/app/soil-rainfall-index-system
 sudo restorecon -Rv /var/www/html/dosya
 sudo restorecon -Rv /var/www/app/staging/soil-rainfall-index-system
 sudo restorecon -Rv /var/www/html/staging/dosya
-sudo restorecon -Rv /var/cache/nyapp
+sudo restorecon -Rv /var/cache/myapp
 sudo restorecon -Rv /var/cache/myapp/staging
 ```
 

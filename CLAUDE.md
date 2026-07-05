@@ -30,7 +30,7 @@ Excel VBAで運用されていた土壌雨量指数計算を、Python/Flask API 
 
 | 環境 | クライアントURL | API URL | キャッシュ |
 | --- | --- | --- | --- |
-| production | `/dosya` | `/dosya/api` | `/var/cache/nyapp/dosya` |
+| production | `/dosya` | `/dosya/api` | `/var/cache/myapp/dosya` |
 | staging | `/staging/dosya` | `/staging/dosya/api` | `/var/cache/myapp/staging/dosya` |
 
 フロントの本番ビルドは既定で `/dosya/` を使います。staging ビルドでは `VITE_BASE_PATH=/staging/dosya/` を指定します。

@@ -28,7 +28,7 @@
 - 現在の主作業ブランチは staging。
 - staging は production profile 前提のリリース用ブランチ。
 - 本運用では production と staging を同一サーバー上で並列稼働する。
-  - production: クライアント `/dosya`、API `/dosya/api`、キャッシュ `/var/cache/nyapp/dosya`
+  - production: クライアント `/dosya`、API `/dosya/api`、キャッシュ `/var/cache/myapp/dosya`
   - staging: クライアント `/staging/dosya`、API `/staging/dosya/api`、キャッシュ `/var/cache/myapp/staging/dosya`
   - フロントの production ビルドは既定の `/dosya/`、staging ビルドは `VITE_BASE_PATH=/staging/dosya/` を使う。
 - 本番公開 API は以下のみ:
