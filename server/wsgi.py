@@ -10,11 +10,17 @@ import sys
 import os
 from pathlib import Path
 
-os.environ.setdefault("CACHE_DIR", "/var/cache/myapp/staging/dosya")
-os.environ.setdefault("SOIL_RAINFALL_API_PREFIX", "")
-
 # アプリケーションのルートディレクトリを設定
 application_root = os.path.dirname(os.path.abspath(__file__))
+application_path = Path(application_root).resolve()
+
+default_cache_dir = (
+    "/var/cache/myapp/staging/dosya"
+    if "staging" in application_path.parts
+    else "/var/cache/myapp/dosya"
+)
+os.environ.setdefault("CACHE_DIR", default_cache_dir)
+os.environ.setdefault("SOIL_RAINFALL_API_PREFIX", "")
 
 # Pythonパスに追加（インポート前に必要）
 sys.path.insert(0, application_root)
