@@ -129,7 +129,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
       <h1 style={{ marginBottom: '20px' }}>
-        土壌雨量指数監視システム（{region.name}・動作検証環境）
+        土壌雨量指数監視システム（{region.name}）
       </h1>
 
       {/* ローディング表示 */}
@@ -338,23 +338,17 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
           {loading ? 'データ取得中...' : 'データを取得'}
         </button>
 
-        {/* セッション情報表示 */}
-        {sessionInfo && (
+        {/* 雨量調整済み表示 */}
+        {sessionInfo && isAdjustedData && (
           <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#e3f2fd', borderRadius: '4px', fontSize: '14px' }}>
-            {isAdjustedData && (
-              <div style={{
-                backgroundColor: '#fff3cd',
-                padding: '10px',
-                borderRadius: '4px',
-                marginBottom: '10px',
-                border: '1px solid #ffc107'
-              }}>
-                <strong>⚠️ 雨量調整済みデータ</strong> - ユーザーが編集した雨量予想に基づく計算結果
-              </div>
-            )}
-            <div><strong>セッションID:</strong> {sessionInfo.session_id}</div>
-            <div><strong>利用可能な府県:</strong> {sessionInfo.available_prefectures.join(', ')}</div>
-            <div><strong>データ転送量:</strong> 初回レスポンス ~1KB（従来比 99.9%削減）</div>
+            <div style={{
+              backgroundColor: '#fff3cd',
+              padding: '10px',
+              borderRadius: '4px',
+              border: '1px solid #ffc107'
+            }}>
+              <strong>⚠️ 雨量調整済みデータ</strong> - ユーザーが編集した雨量予想に基づく計算結果
+            </div>
           </div>
         )}
 

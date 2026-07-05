@@ -25,8 +25,10 @@
 - server/config/app_config.yaml
 
 前回把握した前提:
-- 現在の主作業ブランチは staging。
-- staging は production profile 前提のリリース用ブランチ。
+- 前回は staging の内容を main に反映し、本番運用へ進んだ。
+- 現在の本番運用ブランチは main。
+- staging は production profile 前提の検証・リリース準備用ブランチ。
+- main の本番クライアントでは環境名を表示しない。`動作検証環境`、セッションID、利用可能な府県、データ転送量などの検証・診断用情報は表示しない。
 - 本運用では production と staging を同一サーバー上で並列稼働する。
   - production: クライアント `/dosya`、API `/dosya/api`、キャッシュ `/var/cache/myapp/dosya`
   - staging: クライアント `/staging/dosya`、API `/staging/dosya/api`、キャッシュ `/var/cache/myapp/staging/dosya`
