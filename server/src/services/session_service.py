@@ -101,6 +101,7 @@ class SessionService:
         return self.session_ref_dir / f"{session_id}.json"
 
     def _write_json_atomic(self, path: Path, data: Dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
         fd, temp_path = tempfile.mkstemp(
             prefix=f"{path.name}.",
             suffix=".tmp",
