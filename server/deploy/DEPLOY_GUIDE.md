@@ -5,8 +5,17 @@
 - OS: Rocky Linux 9系
 - Web Server: Apache httpd + mod_wsgi
 - Python: 3.9+
-- クライアント配信先例: `/var/www/html/staging/dosya`
-- API配置先例: `/var/www/app/staging/soil-rainfall-index-system`
+- production クライアント配信先例: `/var/www/html/dosya`
+- production API配置先例: `/var/www/app/production/soil-rainfall-index-system`
+- staging クライアント配信先例: `/var/www/html/staging/dosya`
+- staging API配置先例: `/var/www/app/staging/soil-rainfall-index-system`
+
+production と staging は同一サーバー上で並列稼働します。Apache の daemon process、WSGIScriptAlias、`CACHE_DIR` は環境ごとに分離してください。
+
+| 環境 | クライアントURL | API URL | キャッシュ |
+| --- | --- | --- | --- |
+| production | `/dosya` | `/dosya/api` | `/var/cache/nyapp/dosya` |
+| staging | `/staging/dosya` | `/staging/dosya/api` | `/var/cache/myapp/staging/dosya` |
 
 ## 1. パッケージ
 
@@ -19,8 +28,12 @@ sudo dnf groupinstall -y "Development Tools"
 ## 2. 配置先
 
 ```bash
+sudo mkdir -p /var/www/app/production/soil-rainfall-index-system
+sudo mkdir -p /var/www/html/dosya
 sudo mkdir -p /var/www/app/staging/soil-rainfall-index-system
 sudo mkdir -p /var/www/html/staging/dosya
+sudo chown -R $USER:$USER /var/www/app/production/soil-rainfall-index-system
+sudo chown -R $USER:$USER /var/www/html/dosya
 sudo chown -R $USER:$USER /var/www/app/staging/soil-rainfall-index-system
 sudo chown -R $USER:$USER /var/www/html/staging/dosya
 ```
@@ -28,7 +41,7 @@ sudo chown -R $USER:$USER /var/www/html/staging/dosya
 ## 3. Python環境
 
 ```bash
-cd /var/www/app/staging/soil-rainfall-index-system
+cd /var/www/app/production/soil-rainfall-index-system
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
@@ -62,6 +75,27 @@ CACHE_MEMORY_MAX_RESULTS=2
 
 プロキシ、GRIB2取得元、タイムアウトは `server/config/URL_CONFIG_GUIDE.md` を参照してください。
 
+Apache 設定例:
+
+- production: `server/deploy/apache-soil-rainfall-production.conf`
+- staging: `server/deploy/apache-soil-rainfall.conf`
+
+production は `/dosya/api` と `/var/cache/nyapp/dosya`、staging は `/staging/dosya/api` と `/var/cache/myapp/staging/dosya` を使います。
+
+フロントビルド:
+
+```bash
+cd client
+npm run build:production
+```
+
+```bash
+cd client
+npm run build:staging
+```
+
+`build:production` は既定の `/dosya/`、`build:staging` は `VITE_BASE_PATH=/staging/dosya/` で asset path と API base を組み立てます。
+
 ## 5. データファイル
 
 `server/data` に対象地方のCSVを配置します。
@@ -83,13 +117,21 @@ prefectures.csv
 ## 6. 権限
 
 ```bash
+sudo chown -R apache:apache /var/www/app/production/soil-rainfall-index-system
+sudo chown -R apache:apache /var/www/html/dosya
 sudo chown -R apache:apache /var/www/app/staging/soil-rainfall-index-system
 sudo chown -R apache:apache /var/www/html/staging/dosya
+sudo chmod -R 755 /var/www/app/production/soil-rainfall-index-system
+sudo chmod -R 755 /var/www/html/dosya
 sudo chmod -R 755 /var/www/app/staging/soil-rainfall-index-system
 sudo chmod -R 755 /var/www/html/staging/dosya
 
+sudo mkdir -p /var/cache/nyapp/dosya
 sudo mkdir -p /var/cache/myapp/staging/dosya
+sudo chown -R apache:apache /var/cache/nyapp
 sudo chown -R apache:apache /var/cache/myapp/staging
+sudo chmod 775 /var/cache/nyapp
+sudo chmod 775 /var/cache/nyapp/dosya
 sudo chmod 775 /var/cache/myapp/staging
 sudo chmod 775 /var/cache/myapp/staging/dosya
 ```
@@ -100,11 +142,17 @@ SELinuxが有効な環境では以下を設定します。
 
 ```bash
 sudo setsebool -P httpd_can_network_connect 1
+sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/app/production/soil-rainfall-index-system(/.*)?"
+sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/html/dosya(/.*)?"
 sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/app/staging/soil-rainfall-index-system(/.*)?"
 sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/html/staging/dosya(/.*)?"
+sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/cache/nyapp(/.*)?"
 sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/cache/myapp/staging(/.*)?"
+sudo restorecon -Rv /var/www/app/production/soil-rainfall-index-system
+sudo restorecon -Rv /var/www/html/dosya
 sudo restorecon -Rv /var/www/app/staging/soil-rainfall-index-system
 sudo restorecon -Rv /var/www/html/staging/dosya
+sudo restorecon -Rv /var/cache/nyapp
 sudo restorecon -Rv /var/cache/myapp/staging
 ```
 
@@ -122,7 +170,7 @@ sudo systemctl status httpd
 本番プロファイルでは開発用 `/health` や `/data-check` は公開しません。クライアントの地方別ページと本番APIで確認します。
 
 ```bash
-curl -X POST http://localhost/staging/dosya/api/production-soil-rainfall-index-with-urls \
+curl -X POST http://localhost/dosya/api/production-soil-rainfall-index-with-urls \
   -H "Content-Type: application/json" \
   -d '{
     "swi_initial": "2026-06-05T00:00:00.000Z",
@@ -132,6 +180,8 @@ curl -X POST http://localhost/staging/dosya/api/production-soil-rainfall-index-w
     "region": "kinki"
   }'
 ```
+
+staging は同じ payload を `/staging/dosya/api/production-soil-rainfall-index-with-urls` に送って確認します。
 
 昇格前のローカル確認:
 

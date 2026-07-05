@@ -26,6 +26,15 @@ Excel VBAで運用されていた土壌雨量指数計算を、Python/Flask API 
 
 `staging` / `main` では `SOIL_RAINFALL_ROUTE_PROFILE=production` を使い、本番クライアントに必要なルートだけを公開します。
 
+本運用では production と staging を同一サーバー上で並列稼働します。
+
+| 環境 | クライアントURL | API URL | キャッシュ |
+| --- | --- | --- | --- |
+| production | `/dosya` | `/dosya/api` | `/var/cache/nyapp/dosya` |
+| staging | `/staging/dosya` | `/staging/dosya/api` | `/var/cache/myapp/staging/dosya` |
+
+フロントの本番ビルドは既定で `/dosya/` を使います。staging ビルドでは `VITE_BASE_PATH=/staging/dosya/` を指定します。
+
 - `POST /production-soil-rainfall-index-with-urls`
 - `GET /session/<session_id>/prefecture/<prefecture_code>`
 - `GET /session/<session_id>/risk-at-time`
