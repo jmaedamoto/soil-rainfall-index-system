@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:production": "tsc && vite build",
-    "build:staging": "tsc && VITE_BASE_PATH=/staging/dosya/ vite build",
+    "build:production": "tsc && VITE_OUT_DIR=dist-production vite build",
+    "build:staging": "tsc && VITE_BASE_PATH=/staging/dosya/ VITE_OUT_DIR=dist-staging vite build",
     "preview": "vite preview",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

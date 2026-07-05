@@ -89,12 +89,16 @@ cd client
 npm run build:production
 ```
 
+`client/dist-production` の中身を `/var/www/html/dosya` に配置します。
+
 ```bash
 cd client
 npm run build:staging
 ```
 
-`build:production` は既定の `/dosya/`、`build:staging` は `VITE_BASE_PATH=/staging/dosya/` で asset path と API base を組み立てます。
+`client/dist-staging` の中身を `/var/www/html/staging/dosya` に配置します。
+
+`build:production` は `/dosya/`、`build:staging` は `/staging/dosya/` で asset path と API base を組み立てます。staging に `dist-production` または通常の `dist` を配置すると、HTML が `/dosya/assets/...` を参照して 404 になります。
 
 ## 5. データファイル
 

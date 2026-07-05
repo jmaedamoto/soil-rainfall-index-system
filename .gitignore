@@ -6,6 +6,8 @@
 build/
 develop-eggs/
 dist/
+client/dist-production/
+client/dist-staging/
 downloads/
 eggs/
 .eggs/
