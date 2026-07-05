@@ -82,23 +82,21 @@ Apache 設定例:
 
 production は `/dosya/api` と `/var/cache/nyapp/dosya`、staging は `/staging/dosya/api` と `/var/cache/myapp/staging/dosya` を使います。
 
-フロントビルド:
+フロントビルドは配置するブランチで実行します。production は `main` ブランチ、staging は `staging` ブランチを使い、それぞれの通常 `dist` を公開先へ配置します。
 
 ```bash
 cd client
-npm run build:production
+npm run build
 ```
 
-`client/dist-production` の中身を `/var/www/html/dosya` に配置します。
+`main` ブランチで生成した `client/dist` の中身を `/var/www/html/dosya` に配置します。
 
 ```bash
 cd client
-npm run build:staging
+npm run build
 ```
 
-`client/dist-staging` の中身を `/var/www/html/staging/dosya` に配置します。
-
-`build:production` は `/dosya/`、`build:staging` は `/staging/dosya/` で asset path と API base を組み立てます。staging に `dist-production` または通常の `dist` を配置すると、HTML が `/dosya/assets/...` を参照して 404 になります。
+`staging` ブランチで生成した `client/dist` の中身を `/var/www/html/staging/dosya` に配置します。staging の `index.html` は `/staging/dosya/assets/...`、main の `index.html` は `/dosya/assets/...` を参照します。
 
 ## 5. データファイル
 
