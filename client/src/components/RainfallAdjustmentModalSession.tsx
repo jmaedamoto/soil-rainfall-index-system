@@ -6,12 +6,14 @@ import {
   buildRainfallAdjustments,
   cloneRainfallMap,
   countModifiedCells,
+  getAdjustmentModeDescription,
   getAdjustmentModeLabel,
   getAllowedAdjustmentModes,
   getDefaultAdjustmentMode,
   getCellKey,
   groupRainfallByPrefecture,
 } from '../features/rainfall-adjustment/utils';
+import '../styles/RainfallAdjustment.css';
 
 interface RainfallAdjustmentModalSessionProps {
   isOpen: boolean;
@@ -33,6 +35,13 @@ interface RainfallAdjustmentModalSessionProps {
     }
   ) => void;
 }
+
+const TooltipHelp: React.FC<{ text: string }> = ({ text }) => (
+  <span className="rainfall-tooltip" aria-label={text}>
+    <span className="rainfall-tooltip-icon" aria-hidden="true">?</span>
+    <span className="rainfall-tooltip-content" role="tooltip">{text}</span>
+  </span>
+);
 
 const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionProps> = ({
   isOpen,
@@ -64,6 +73,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
   const [viewMode, setViewMode] = useState<RainfallViewMode>('municipality');
   const [inputMode, setInputMode] = useState<InputMode>('3hour');
   const [adjustmentMode, setAdjustmentMode] = useState<AdjustmentMode>('ratio_3hour');
+  const usesAreaMaxFill = adjustmentMode === 'fill_3hour_area_max';
 
   // セル選択状態
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
@@ -238,6 +248,10 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
   // 一括編集を適用
   const applyBulkEdit = () => {
+    if (usesAreaMaxFill) {
+      return;
+    }
+
     const value = parseFloat(bulkEditValue);
     if (isNaN(value) || value < 0) {
       alert('0以上の数値を入力してください');
@@ -281,6 +295,10 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
   // 単一セルの値変更
   const handleRainfallChange = (areaName: string, ft: number, value: string) => {
+    if (usesAreaMaxFill) {
+      return;
+    }
+
     const numValue = parseFloat(value);
     if (isNaN(numValue) || numValue < 0) return;
 
@@ -400,14 +418,18 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
     try {
       const adjustments = inputMode === '3hour'
-        ? buildRainfallAdjustments(currentOriginalMap, currentAdjustedMap)
+        ? (
+          usesAreaMaxFill
+            ? cloneRainfallMap(originalRainfall)
+            : buildRainfallAdjustments(currentOriginalMap, currentAdjustedMap)
+        )
         : {};
       const aggregateAdjustments = inputMode === '24hour'
         ? buildRainfallAdjustments(currentOriginalMap, currentAdjustedMap)
         : {};
 
       // 変更がない場合は何もせずに閉じる
-      if (Object.keys(adjustments).length === 0 && Object.keys(aggregateAdjustments).length === 0) {
+      if (!usesAreaMaxFill && Object.keys(adjustments).length === 0 && Object.keys(aggregateAdjustments).length === 0) {
         onClose();
         return;
       }
@@ -449,6 +471,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
   const totalModifiedCount = useMemo(() => {
     return countModifiedCells(currentOriginalMap, currentAdjustedMap);
   }, [currentOriginalMap, currentAdjustedMap]);
+  const canRecalculate = usesAreaMaxFill || totalModifiedCount > 0;
 
   const currentPrefectureData = currentGroupedMap[selectedPrefecture] || {};
 
@@ -571,7 +594,11 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                 {getAllowedAdjustmentModes(inputMode).map(mode => (
                   <button
                     key={mode}
-                    onClick={() => setAdjustmentMode(mode)}
+                    onClick={() => {
+                      setAdjustmentMode(mode);
+                      setSelectedCells(new Set());
+                    }}
+                    className="rainfall-adjustment-mode-button"
                     style={{
                       padding: '8px 16px',
                       backgroundColor: adjustmentMode === mode ? '#1976D2' : '#f5f5f5',
@@ -581,7 +608,8 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                       cursor: 'pointer'
                     }}
                   >
-                    {getAdjustmentModeLabel(mode)}
+                    <span>{getAdjustmentModeLabel(mode)}</span>
+                    <TooltipHelp text={getAdjustmentModeDescription(mode)} />
                   </button>
                 ))}
               </div>
@@ -642,13 +670,14 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                   <span style={{ fontWeight: 'bold' }}>選択中: {selectedCells.size}セル</span>
                   <button
                     onClick={() => setShowBulkEdit(true)}
+                    disabled={usesAreaMaxFill}
                     style={{
                       padding: '8px 16px',
-                      backgroundColor: '#4CAF50',
+                      backgroundColor: usesAreaMaxFill ? '#9e9e9e' : '#4CAF50',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
-                      cursor: 'pointer'
+                      cursor: usesAreaMaxFill ? 'not-allowed' : 'pointer'
                     }}
                   >
                     一括編集
@@ -767,6 +796,11 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                 <span style={{ marginRight: '20px' }}>
                   調整方式: {getAdjustmentModeLabel(adjustmentMode)}
                 </span>
+                {usesAreaMaxFill && (
+                  <span style={{ marginRight: '20px', color: '#1976D2', fontWeight: 'bold' }}>
+                    入力値は使わず、現在のガイダンスの市町村最大格子値で全格子を更新します
+                  </span>
+                )}
                 <span style={{ marginRight: '20px' }}>
                   表示中: {selectedPrefecture} - 全{currentDisplayOrder.length}{viewMode === 'municipality' ? '市町村' : '二次細分'}
                 </span>
@@ -886,6 +920,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                                 min="0"
                                 value={Math.round(point.value)}
                                 onChange={(e) => handleRainfallChange(areaName, point.ft, e.target.value)}
+                                disabled={usesAreaMaxFill}
                                 className="rainfall-input"
                                 style={{
                                   width: '100%',
@@ -893,9 +928,10 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                                   border: 'none',
                                   borderRadius: '0',
                                   textAlign: 'center',
-                                  backgroundColor: 'transparent',
+                                  backgroundColor: usesAreaMaxFill ? '#f5f5f5' : 'transparent',
                                   fontSize: '13px',
-                                  fontWeight: isModified ? 'bold' : 'normal'
+                                  fontWeight: isModified ? 'bold' : 'normal',
+                                  color: usesAreaMaxFill ? '#666' : 'inherit'
                                 }}
                                 onClick={(e) => e.stopPropagation()}
                               />
@@ -941,19 +977,21 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
               </button>
               <button
                 onClick={handleRecalculate}
-                disabled={totalModifiedCount === 0}
+                disabled={!canRecalculate}
                 style={{
                   padding: '10px 24px',
-                  backgroundColor: totalModifiedCount > 0 ? '#1976D2' : '#ccc',
+                  backgroundColor: canRecalculate ? '#1976D2' : '#ccc',
                   color: 'white',
                   border: 'none',
                   borderRadius: '4px',
-                  cursor: totalModifiedCount > 0 ? 'pointer' : 'not-allowed',
+                  cursor: canRecalculate ? 'pointer' : 'not-allowed',
                   fontSize: '14px',
                   fontWeight: 'bold'
                 }}
               >
-                再計算実行 ({totalModifiedCount}セル修正)
+                {usesAreaMaxFill
+                  ? '再計算実行（ガイダンス最大格子で塗りつぶし）'
+                  : `再計算実行 (${totalModifiedCount}セル修正)`}
               </button>
             </div>
           </>

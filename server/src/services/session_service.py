@@ -74,6 +74,29 @@ class SessionService:
             'last_accessed': now,
         }
 
+    def _build_metadata_session_data(
+        self,
+        summary: Dict[str, Any],
+        calculation_time: str,
+    ) -> Dict[str, Any]:
+        now = datetime.now()
+        expires_at = now + timedelta(hours=self.ttl_hours)
+        return {
+            'is_fork': False,
+            'cache_key': summary['cache_key'],
+            'cache_summary': summary,
+            'swi_initial_time': summary['swi_initial_time'],
+            'guidance_initial_time': summary['guidance_initial_time'],
+            'guidance_type': summary.get('guidance_type', 'msm'),
+            'risk_rule': summary.get('risk_rule', 'legacy'),
+            'input_mode': '3hour',
+            'adjustment_mode': 'ratio_3hour',
+            'calculation_time': calculation_time,
+            'created_at': now,
+            'expires_at': expires_at,
+            'last_accessed': now,
+        }
+
     def _get_session_ref_path(self, session_id: str) -> Path:
         return self.session_ref_dir / f"{session_id}.json"
 
@@ -133,6 +156,8 @@ class SessionService:
             return None
 
         cached_result = self.cache_service.get_cached_result(cache_key)
+        if cached_result:
+            self.cache_service.cleanup_completed_calculation_lock(cache_key)
         if not cached_result:
             cache_write_in_progress = self.cache_service.is_cache_write_in_progress(cache_key)
             cache_materializing = self.cache_service.is_cache_materializing(cache_key)
@@ -149,9 +174,11 @@ class SessionService:
                 )
                 if self.cache_service.wait_for_cache_materialization(
                     cache_key,
-                    timeout_seconds=600.0,
+                    timeout_seconds=5.0,
                 ):
                     cached_result = self.cache_service.get_cached_result(cache_key)
+                    if cached_result:
+                        self.cache_service.cleanup_completed_calculation_lock(cache_key)
 
         if not cached_result or 'prefectures' not in cached_result:
             logger.warning(f"Session restore skipped, cache unavailable: {session_id} -> {cache_key}")
@@ -172,6 +199,31 @@ class SessionService:
 
         logger.info(f"Session restored from cache reference: {session_id} -> {cache_key}")
         return session_data
+
+    def _materialize_session_prefectures(
+        self,
+        session_id: str,
+        session_data: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        if 'prefectures' in session_data:
+            return session_data
+
+        cache_key = session_data.get('cache_key')
+        if not cache_key:
+            return session_data
+
+        cached_result = self.cache_service.get_cached_result(cache_key)
+        if not cached_result or 'prefectures' not in cached_result:
+            logger.warning(f"Session materialization skipped, cache unavailable: {session_id} -> {cache_key}")
+            return None
+
+        with self.lock:
+            current_session = self.sessions.get(session_id, session_data)
+            current_session['prefectures'] = cached_result['prefectures']
+            self.sessions[session_id] = current_session
+
+        logger.info(f"Session materialized from cache: {session_id} -> {cache_key}")
+        return current_session
 
     def create_session(
         self,
@@ -215,6 +267,28 @@ class SessionService:
             f"Base session created: {session_id}, "
             f"expires at {session_data['expires_at'].isoformat()}, "
             f"prefectures: {list(prefectures.keys())}"
+        )
+
+        return session_id
+
+    def create_session_from_cache_summary(
+        self,
+        summary: Dict[str, Any],
+        calculation_time: str,
+    ) -> str:
+        """全キャッシュを展開せず、軽量サマリーだけでベースセッションを作る"""
+        session_id = secrets.token_urlsafe(16)
+        session_data = self._build_metadata_session_data(summary, calculation_time)
+
+        with self.lock:
+            self.sessions[session_id] = session_data
+
+        self._save_session_reference(session_id, session_data)
+
+        logger.info(
+            f"Metadata session created: {session_id}, "
+            f"expires at {session_data['expires_at'].isoformat()}, "
+            f"prefectures: {summary.get('available_prefectures', [])}"
         )
 
         return session_id
@@ -371,7 +445,7 @@ class SessionService:
                     return session
                 return self._merge_fork_with_base(session)
 
-            return session
+        return self._materialize_session_prefectures(session_id, session)
 
     def _merge_fork_with_base(self, fork_session: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
@@ -442,8 +516,14 @@ class SessionService:
                             'risk_3hour_max_timeline', mesh.get('risk_3hour_max_timeline', []))
                         mesh['swi_timeline'] = recalc_data.get(
                             'swi_timeline', mesh.get('swi_timeline', []))
+                        mesh['swi_hourly_timeline'] = recalc_data.get(
+                            'swi_hourly_timeline', mesh.get('swi_hourly_timeline', []))
                         mesh['rain_timeline'] = recalc_data.get(
                             'rain_timeline', mesh.get('rain_timeline', []))
+                        mesh['rain_1hour_timeline'] = recalc_data.get(
+                            'rain_1hour_timeline', mesh.get('rain_1hour_timeline', []))
+                        mesh['rain_1hour_max_timeline'] = recalc_data.get(
+                            'rain_1hour_max_timeline', mesh.get('rain_1hour_max_timeline', []))
                         if 'risk_hourly_timeline' in recalc_data:
                             mesh['risk_hourly_timeline'] = recalc_data['risk_hourly_timeline']
 

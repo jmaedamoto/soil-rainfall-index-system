@@ -5,19 +5,22 @@ import type {
   LightweightCalculationResult,
   LightweightPrefectureData,
 } from '../../../types/session';
+import type { RegionCode } from '../regions';
 
 interface UseProductionSessionParams {
   swiInitialTime: string;
   guidanceInitialTime: string;
   guidanceType?: 'msm' | 'gsm';
   riskRule?: 'legacy' | 'lead_time_to_level4';
+  regionCode: RegionCode;
 }
 
 export const useProductionSession = ({
   swiInitialTime,
   guidanceInitialTime,
   guidanceType = 'msm',
-  riskRule = 'legacy',
+  riskRule = 'lead_time_to_level4',
+  regionCode,
 }: UseProductionSessionParams) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionInfo, setSessionInfo] = useState<LightweightCalculationResult | null>(null);
@@ -26,6 +29,7 @@ export const useProductionSession = ({
   const [meshCoords, setMeshCoords] = useState<Record<string, { lat: number; lon: number }>>({});
   const [loading, setLoading] = useState(false);
   const [loadingPrefecture, setLoadingPrefecture] = useState<string | null>(null);
+  const [loadingAllPrefectures, setLoadingAllPrefectures] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState(0);
   const [selectedPrefecture, setSelectedPrefecture] = useState('');
@@ -90,19 +94,32 @@ export const useProductionSession = ({
     }
   };
 
-  const loadAllPrefectures = async () => {
-    if (!sessionId || !sessionInfo) return;
+  const loadAllPrefectures = async (): Promise<boolean> => {
+    if (!sessionId || !sessionInfo) return false;
 
     const unloadedPrefectures = sessionInfo.available_prefectures.filter(
       (code) => !prefectureRiskData[code]
     );
 
-    if (unloadedPrefectures.length === 0) return;
+    if (unloadedPrefectures.length === 0) return true;
+
+    const requestId = activeLoadRequestIdRef.current;
 
     try {
+      setLoadingAllPrefectures(true);
+      setError(null);
       const results = await Promise.all(
         unloadedPrefectures.map((prefCode) => sessionApiClient.getPrefectureData(sessionId, prefCode))
       );
+
+      if (!isLatestLoadRequest(requestId)) {
+        return false;
+      }
+
+      const failedPrefecture = results.find((response) => response.status !== 'success');
+      if (failedPrefecture) {
+        throw new Error(failedPrefecture.error || '全府県データの読み込みに失敗しました');
+      }
 
       setPrefectureRiskData((prev) => {
         const nextData = { ...prev };
@@ -113,8 +130,17 @@ export const useProductionSession = ({
         });
         return nextData;
       });
+      return true;
     } catch (err) {
       console.error('全府県データ読み込みエラー:', err);
+      if (isLatestLoadRequest(requestId)) {
+        setError(err instanceof Error ? err.message : '全府県データの読み込みに失敗しました');
+      }
+      return false;
+    } finally {
+      if (isLatestLoadRequest(requestId)) {
+        setLoadingAllPrefectures(false);
+      }
     }
   };
 
@@ -139,6 +165,7 @@ export const useProductionSession = ({
         guidance_initial: guidanceInitialTime,
         guidance_type: guidanceType,
         risk_rule: riskRule,
+        region: regionCode,
       });
 
       if (!isLatestLoadRequest(requestId)) {
@@ -208,6 +235,7 @@ export const useProductionSession = ({
     loadPrefectureData,
     loadRiskAtTime,
     loading,
+    loadingAllPrefectures,
     loadingPrefecture,
     meshCoords,
     meshRisksAtTime,

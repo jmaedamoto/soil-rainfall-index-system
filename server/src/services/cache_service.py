@@ -14,11 +14,13 @@ import logging
 import time
 import tempfile
 import io
-from threading import Thread
+from threading import Lock, Thread
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, Dict, List, Callable
 import os
+import socket
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,13 @@ class CacheService:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True)
         self.default_ttl_days = default_ttl_days
+        self._lock_tokens: Dict[str, str] = {}
+        self._lock_tokens_guard = Lock()
+        self._memory_cache: Dict[str, Dict] = {}
+        self._memory_cache_order: List[str] = []
+        self._memory_cache_guard = Lock()
+        self._memory_load_locks: Dict[str, Lock] = {}
+        self._memory_cache_max_results = int(os.environ.get("CACHE_MEMORY_MAX_RESULTS", "2"))
 
         logger.info(f"CacheService初期化: dir={self.cache_dir}, "
                     f"TTL={default_ttl_days}日")
@@ -50,7 +59,8 @@ class CacheService:
         swi_initial: str,
         guidance_initial: str,
         guidance_type: str = "msm",
-        risk_rule: str = "legacy"
+        risk_rule: str = "legacy",
+        region: Optional[str] = None,
     ) -> str:
         """
         キャッシュキー生成
@@ -70,7 +80,12 @@ class CacheService:
         swi_key = swi_dt.strftime("%Y%m%d%H%M%S")
         guid_key = guid_dt.strftime("%Y%m%d%H%M%S")
 
-        return f"swi_{swi_key}_guid_{guidance_type.lower()}_{guid_key}_risk_{risk_rule.lower()}"
+        cache_key = (
+            f"swi_{swi_key}_guid_{guidance_type.lower()}_{guid_key}_risk_{risk_rule.lower()}"
+        )
+        if region:
+            cache_key = f"{cache_key}_region_{region.lower()}"
+        return cache_key
 
     def _get_cache_path(self, cache_key: str) -> Path:
         """キャッシュファイルパス取得（.json.gz）"""
@@ -80,9 +95,75 @@ class CacheService:
         """キャッシュ保存中の一時ファイルglob"""
         return f"{cache_key}.json.gz.*.tmp"
 
+    def _get_cache_temp_paths(self, cache_key: str) -> List[Path]:
+        """キャッシュ保存中の一時ファイル一覧"""
+        return list(self.cache_dir.glob(self._get_cache_temp_glob(cache_key)))
+
     def _get_legacy_meta_path(self, cache_key: str) -> Path:
         """旧メタデータファイルパス取得（後方互換の削除用）"""
         return self.cache_dir / f"{cache_key}.meta.json"
+
+    def _get_memory_load_lock(self, cache_key: str) -> Lock:
+        with self._memory_cache_guard:
+            lock = self._memory_load_locks.get(cache_key)
+            if lock is None:
+                lock = Lock()
+                self._memory_load_locks[cache_key] = lock
+            return lock
+
+    def _get_cache_signature(self, cache_key: str) -> Optional[dict]:
+        cache_path = self._get_cache_path(cache_key)
+        if not cache_path.exists():
+            return None
+        stat = cache_path.stat()
+        return {
+            "mtime_ns": stat.st_mtime_ns,
+            "size": stat.st_size,
+        }
+
+    def _get_memory_cached_result(self, cache_key: str) -> Optional[dict]:
+        signature = self._get_cache_signature(cache_key)
+        if signature is None:
+            return None
+
+        with self._memory_cache_guard:
+            entry = self._memory_cache.get(cache_key)
+            if not entry or entry.get("signature") != signature:
+                return None
+            if cache_key in self._memory_cache_order:
+                self._memory_cache_order.remove(cache_key)
+            self._memory_cache_order.append(cache_key)
+            return entry.get("result")
+
+    def _store_memory_cached_result(self, cache_key: str, result: dict) -> None:
+        if self._memory_cache_max_results <= 0:
+            return
+
+        signature = self._get_cache_signature(cache_key)
+        if signature is None:
+            return
+
+        with self._memory_cache_guard:
+            self._memory_cache[cache_key] = {
+                "signature": signature,
+                "result": result,
+            }
+            if cache_key in self._memory_cache_order:
+                self._memory_cache_order.remove(cache_key)
+            self._memory_cache_order.append(cache_key)
+
+            while len(self._memory_cache_order) > self._memory_cache_max_results:
+                evicted_key = self._memory_cache_order.pop(0)
+                self._memory_cache.pop(evicted_key, None)
+                logger.info(f"メモリキャッシュ退避: {evicted_key}")
+
+    def _get_summary_path(self, cache_key: str) -> Path:
+        """軽量レスポンス用サマリーファイルパス取得"""
+        return self.cache_dir / f"{cache_key}.summary.json"
+
+    def _get_summary_lock_path(self, cache_key: str) -> Path:
+        """サマリー作成中ロックファイルパス取得"""
+        return self.cache_dir / f"{cache_key}.summary.lock.json"
 
     @staticmethod
     def _extract_cache_sample(result: dict) -> dict:
@@ -144,6 +225,79 @@ class CacheService:
                 os.unlink(temp_path)
             raise
 
+    @staticmethod
+    def _extract_available_times(prefectures: dict) -> list:
+        if not prefectures:
+            return []
+
+        first_pref = next(iter(prefectures.values()))
+        areas = first_pref.get("areas") or []
+        if not areas or not areas[0].get("meshes"):
+            return []
+
+        first_mesh = areas[0]["meshes"][0]
+        return sorted(set(
+            [point["ft"] for point in first_mesh.get("risk_3hour_max_timeline", [])] +
+            [point["ft"] for point in first_mesh.get("risk_hourly_timeline", [])]
+        ))
+
+    @staticmethod
+    def _build_available_prefecture_details(prefectures: dict) -> list:
+        details = []
+        for code, prefecture in prefectures.items():
+            details.append({
+                "code": code,
+                "name": prefecture.get("name", code) if isinstance(prefecture, dict) else code,
+            })
+        return details
+
+    def _build_cache_summary(
+        self,
+        cache_key: str,
+        result: dict,
+        swi_initial: str,
+        guidance_initial: str,
+        guidance_type: str,
+        risk_rule: str,
+    ) -> dict:
+        prefectures = result.get("prefectures") or {}
+        return {
+            "cache_key": cache_key,
+            "swi_initial_time": swi_initial,
+            "guidance_initial_time": guidance_initial,
+            "guidance_type": guidance_type,
+            "risk_rule": risk_rule,
+            "available_prefectures": list(prefectures.keys()),
+            "available_prefecture_details": self._build_available_prefecture_details(prefectures),
+            "available_times": self._extract_available_times(prefectures),
+            "created_at": datetime.now().isoformat(),
+        }
+
+    def _read_cache_summary(self, cache_key: str) -> Optional[dict]:
+        summary_path = self._get_summary_path(cache_key)
+        if not summary_path.exists():
+            return None
+
+        try:
+            with open(summary_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"キャッシュサマリー読み込みエラー: {cache_key} - {e}")
+            return None
+
+    def wait_for_cache_summary(
+        self,
+        cache_key: str,
+        timeout_seconds: float = 2.0,
+        poll_interval: float = 0.2,
+    ) -> bool:
+        start_time = time.time()
+        while time.time() - start_time < timeout_seconds:
+            if self._get_summary_path(cache_key).exists():
+                return True
+            time.sleep(poll_interval)
+        return self._get_summary_path(cache_key).exists()
+
     def _write_gzip_json_atomic(self, path: Path, data: dict) -> None:
         """gzip JSONを一時ファイル経由で原子的に保存する"""
         fd, temp_path = tempfile.mkstemp(
@@ -189,7 +343,39 @@ class CacheService:
 
     def is_cache_write_in_progress(self, cache_key: str) -> bool:
         """キャッシュ保存用tmpファイルが存在するか確認"""
-        return any(self.cache_dir.glob(self._get_cache_temp_glob(cache_key)))
+        return bool(self._get_cache_temp_paths(cache_key))
+
+    def cleanup_stale_cache_write_temps(
+        self,
+        cache_key: str,
+        max_age_seconds: int = 300,
+    ) -> int:
+        """
+        古いキャッシュ保存用tmpファイルを削除する。
+
+        計算ロックが生きている間は保存中の可能性があるため削除しない。
+        """
+        if self.exists(cache_key) or self.is_calculation_in_progress(cache_key):
+            return 0
+
+        deleted_count = 0
+        now = time.time()
+        for temp_path in self._get_cache_temp_paths(cache_key):
+            try:
+                age_seconds = now - temp_path.stat().st_mtime
+                if age_seconds < max_age_seconds:
+                    continue
+                temp_path.unlink(missing_ok=True)
+                deleted_count += 1
+                logger.warning(
+                    "古いキャッシュ保存tmpを削除: %s age=%.1fs",
+                    temp_path.name,
+                    age_seconds,
+                )
+            except OSError as e:
+                logger.error(f"古いキャッシュ保存tmp削除エラー: {temp_path.name} - {e}")
+
+        return deleted_count
 
     def is_cache_materializing(self, cache_key: str) -> bool:
         """キャッシュ本体はあるが保存用tmpがまだ残っている中間状態か確認"""
@@ -240,12 +426,31 @@ class CacheService:
             self.invalidate_cache(cache_key)
             return None
 
+        memory_result = self._get_memory_cached_result(cache_key)
+        if memory_result is not None:
+            logger.info(f"メモリキャッシュヒット: {cache_key}")
+            return memory_result
+
+        load_lock = self._get_memory_load_lock(cache_key)
+        with load_lock:
+            memory_result = self._get_memory_cached_result(cache_key)
+            if memory_result is not None:
+                logger.info(f"メモリキャッシュヒット（待機後）: {cache_key}")
+                return memory_result
+
+            return self._load_cached_result_from_disk(cache_key)
+
+    def _load_cached_result_from_disk(self, cache_key: str) -> Optional[dict]:
+        cache_path = self._get_cache_path(cache_key)
+
         try:
             logger.info(f"キャッシュ読み込み開始: {cache_key}")
             start_time = datetime.now()
 
             with gzip.open(cache_path, 'rt', encoding='utf-8') as f:
                 result = json.load(f)
+
+            self._store_memory_cached_result(cache_key, result)
 
             elapsed = (datetime.now() - start_time).total_seconds()
             file_size_mb = cache_path.stat().st_size / (1024 * 1024)
@@ -260,6 +465,61 @@ class CacheService:
         except Exception as e:
             logger.error(f"キャッシュ読み込みエラー: {cache_key} - {e}")
             return None
+
+    def get_cached_summary(
+        self,
+        cache_key: str,
+        swi_initial: str,
+        guidance_initial: str,
+        guidance_type: str = "msm",
+        risk_rule: str = "legacy",
+        materialize_if_missing: bool = True,
+    ) -> Optional[dict]:
+        """軽量レスポンス用キャッシュサマリーを取得する"""
+        if not self.exists(cache_key):
+            return None
+
+        if not self._is_cache_valid(cache_key):
+            logger.info(f"キャッシュサマリー対象が期限切れ: {cache_key}")
+            self.invalidate_cache(cache_key)
+            return None
+
+        summary = self._read_cache_summary(cache_key)
+        if summary:
+            return summary
+
+        if not materialize_if_missing:
+            return None
+
+        lock_path = self._get_summary_lock_path(cache_key)
+        if not self._acquire_file_lock(lock_path, f"{cache_key}.summary", cache_key):
+            logger.info(f"キャッシュサマリー作成待機: {cache_key}")
+            if self.wait_for_cache_summary(cache_key, timeout_seconds=2.0):
+                return self._read_cache_summary(cache_key)
+            return None
+
+        try:
+            summary = self._read_cache_summary(cache_key)
+            if summary:
+                return summary
+
+            cached_result = self.get_cached_result(cache_key)
+            if not cached_result:
+                return None
+
+            summary = self._build_cache_summary(
+                cache_key,
+                cached_result,
+                swi_initial,
+                guidance_initial,
+                guidance_type,
+                risk_rule,
+            )
+            self._write_json_atomic(self._get_summary_path(cache_key), summary)
+            logger.info(f"キャッシュサマリー作成完了: {cache_key}")
+            return summary
+        finally:
+            self._release_file_lock(lock_path, f"{cache_key}.summary")
 
     def set_cached_result(
         self,
@@ -288,6 +548,16 @@ class CacheService:
 
             # データ保存（temp file + atomic rename）
             self._write_gzip_json_atomic(cache_path, result)
+            summary = self._build_cache_summary(
+                cache_key,
+                result,
+                swi_initial,
+                guidance_initial,
+                guidance_type,
+                risk_rule,
+            )
+            self._write_json_atomic(self._get_summary_path(cache_key), summary)
+            self._store_memory_cached_result(cache_key, result)
             if legacy_meta_path.exists():
                 legacy_meta_path.unlink()
 
@@ -306,6 +576,9 @@ class CacheService:
             legacy_meta_path = self._get_legacy_meta_path(cache_key)
             if legacy_meta_path.exists():
                 legacy_meta_path.unlink()
+            summary_path = self._get_summary_path(cache_key)
+            if summary_path.exists():
+                summary_path.unlink()
             return False
 
     def set_cached_result_async(
@@ -400,6 +673,14 @@ class CacheService:
         """
         cache_path = self._get_cache_path(cache_key)
         legacy_meta_path = self._get_legacy_meta_path(cache_key)
+        summary_path = self._get_summary_path(cache_key)
+        summary_lock_path = self._get_summary_lock_path(cache_key)
+
+        with self._memory_cache_guard:
+            self._memory_cache.pop(cache_key, None)
+            if cache_key in self._memory_cache_order:
+                self._memory_cache_order.remove(cache_key)
+            self._memory_load_locks.pop(cache_key, None)
 
         if cache_path.exists():
             cache_path.unlink()
@@ -407,6 +688,10 @@ class CacheService:
 
         if legacy_meta_path.exists():
             legacy_meta_path.unlink()
+        if summary_path.exists():
+            summary_path.unlink()
+        if summary_lock_path.exists():
+            summary_lock_path.unlink()
 
     def list_caches(self) -> List[Dict]:
         """
@@ -481,6 +766,174 @@ class CacheService:
         """計算中ロックファイルパス取得（.calculating.json）"""
         return self.cache_dir / f"{cache_key}.calculating.json"
 
+    def _get_calculation_slot_path(self) -> Path:
+        """サーバー全体の重い計算を直列化するロックパス"""
+        return self.cache_dir / ".calculation-slot.json"
+
+    @staticmethod
+    def _process_is_alive(pid: object) -> bool:
+        if not isinstance(pid, int) or pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        except OSError:
+            return False
+
+    def _lock_owner_is_alive(self, lock_data: Dict) -> bool:
+        owner_host = lock_data.get("hostname")
+        owner_pid = lock_data.get("pid")
+        if not owner_host or not owner_pid:
+            return False
+        if owner_host != socket.gethostname():
+            return True
+        return self._process_is_alive(owner_pid)
+
+    def _lock_owner_is_current_process(self, lock_data: Dict) -> bool:
+        return (
+            lock_data.get("hostname") == socket.gethostname()
+            and lock_data.get("pid") == os.getpid()
+        )
+
+    def _read_lock_data(self, lock_path: Path) -> Optional[Dict]:
+        try:
+            with open(lock_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"ロックファイル読み込みエラー: {lock_path.name} - {e}")
+            return None
+
+    def _remove_stale_lock(self, lock_path: Path, lock_name: str) -> bool:
+        lock_data = self._read_lock_data(lock_path)
+        if lock_data is None:
+            try:
+                if time.time() - lock_path.stat().st_mtime <= 5:
+                    return False
+            except OSError:
+                return True
+            try:
+                lock_path.unlink(missing_ok=True)
+                logger.warning(f"破損ロックを削除: {lock_name}")
+                return True
+            except OSError as e:
+                logger.error(f"破損ロック削除エラー: {lock_name} - {e}")
+                return False
+
+        try:
+            started_at = datetime.fromisoformat(lock_data["started_at"])
+        except (KeyError, TypeError, ValueError):
+            started_at = datetime.min
+
+        owner_alive = self._lock_owner_is_alive(lock_data)
+        expired = datetime.now() - started_at > timedelta(minutes=30)
+        if owner_alive and not expired:
+            return False
+
+        try:
+            lock_path.unlink(missing_ok=True)
+            logger.warning(
+                "停止または期限切れのロックを削除: %s pid=%s host=%s expired=%s",
+                lock_name,
+                lock_data.get("pid"),
+                lock_data.get("hostname"),
+                expired,
+            )
+            return True
+        except OSError as e:
+            logger.error(f"古いロック削除エラー: {lock_name} - {e}")
+            return False
+
+    def _acquire_file_lock(self, lock_path: Path, lock_name: str, cache_key: str) -> bool:
+        token = uuid.uuid4().hex
+        lock_data = {
+            "cache_key": cache_key,
+            "started_at": datetime.now().isoformat(),
+            "pid": os.getpid(),
+            "hostname": socket.gethostname(),
+            "token": token,
+        }
+        try:
+            fd = os.open(
+                lock_path,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                0o644,
+            )
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(lock_data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            with self._lock_tokens_guard:
+                self._lock_tokens[str(lock_path)] = token
+            logger.info(f"ロック取得成功: {lock_name}")
+            return True
+        except FileExistsError:
+            if self._remove_stale_lock(lock_path, lock_name):
+                return self._acquire_file_lock(lock_path, lock_name, cache_key)
+            logger.info(f"ロック取得失敗（既に処理中）: {lock_name}")
+            return False
+        except Exception as e:
+            logger.error(f"ロック取得エラー: {lock_name} - {e}")
+            return False
+
+    def _release_file_lock(self, lock_path: Path, lock_name: str) -> bool:
+        with self._lock_tokens_guard:
+            owned_token = self._lock_tokens.pop(str(lock_path), None)
+
+        if not lock_path.exists():
+            logger.info(f"ロックは既に削除済み: {lock_name}")
+            return True
+
+        lock_data = self._read_lock_data(lock_path)
+        if lock_data is None:
+            logger.warning(f"読み込めないロックの削除をスキップ: {lock_name}")
+            return False
+
+        if not owned_token:
+            if not self._lock_owner_is_current_process(lock_data):
+                logger.warning(f"所有していないロックの削除をスキップ: {lock_name}")
+                return False
+            logger.warning(
+                "所有tokenはないが同一プロセス所有のロックを削除: %s pid=%s",
+                lock_name,
+                lock_data.get("pid"),
+            )
+
+        if owned_token and lock_data.get("token") != owned_token:
+            logger.warning(f"所有者が変わったロックの削除をスキップ: {lock_name}")
+            return False
+
+        try:
+            lock_path.unlink(missing_ok=True)
+            logger.info(f"ロック削除: {lock_name}")
+            return True
+        except OSError as e:
+            logger.error(f"ロック削除エラー: {lock_name} - {e}")
+            return False
+
+    def cleanup_completed_calculation_lock(self, cache_key: str) -> bool:
+        """完成済みgzipがあるのに残った計算ロックを回収する"""
+        lock_path = self._get_lock_path(cache_key)
+        if (
+            not lock_path.exists()
+            or not self.exists(cache_key)
+            or self.is_cache_write_in_progress(cache_key)
+        ):
+            return False
+
+        try:
+            lock_path.unlink(missing_ok=True)
+            with self._lock_tokens_guard:
+                self._lock_tokens.pop(str(lock_path), None)
+            logger.warning(f"完成済みキャッシュの残留計算ロックを削除: {cache_key}")
+            return True
+        except OSError as e:
+            logger.error(f"完成済みキャッシュの残留計算ロック削除エラー: {cache_key} - {e}")
+            return False
+
     def is_calculation_in_progress(self, cache_key: str) -> bool:
         """
         計算中かどうか確認
@@ -495,21 +948,10 @@ class CacheService:
         if not lock_path.exists():
             return False
 
-        # ロックファイルのタイムアウトチェック（10分）
-        try:
-            with open(lock_path, 'r', encoding='utf-8') as f:
-                lock_data = json.load(f)
-
-            started_at = datetime.fromisoformat(lock_data['started_at'])
-            if datetime.now() - started_at > timedelta(minutes=10):
-                # タイムアウト: 古いロックを削除
-                logger.warning(f"計算ロックタイムアウト: {cache_key}")
-                self.release_calculation_lock(cache_key)
-                return False
-            return True
-        except Exception as e:
-            logger.error(f"ロックファイル読み込みエラー: {cache_key} - {e}")
+        if self.cleanup_completed_calculation_lock(cache_key):
             return False
+
+        return not self._remove_stale_lock(lock_path, cache_key)
 
     def acquire_calculation_lock(self, cache_key: str) -> bool:
         """
@@ -521,43 +963,27 @@ class CacheService:
         Returns:
             ロック取得成功: True、既にロック中: False
         """
-        lock_path = self._get_lock_path(cache_key)
+        return self._acquire_file_lock(
+            self._get_lock_path(cache_key),
+            cache_key,
+            cache_key,
+        )
 
-        try:
-            lock_data = {
-                "cache_key": cache_key,
-                "started_at": datetime.now().isoformat(),
-            }
-            fd = os.open(
-                lock_path,
-                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-                0o644,
-            )
-            with os.fdopen(fd, 'w', encoding='utf-8') as f:
-                json.dump(lock_data, f, ensure_ascii=False, indent=2)
-                f.flush()
-                os.fsync(f.fileno())
+    def acquire_calculation_slot(self, cache_key: str) -> bool:
+        """異なる条件を含め、重い初期計算を同時に1件だけ実行する"""
+        return self._acquire_file_lock(
+            self._get_calculation_slot_path(),
+            "calculation-slot",
+            cache_key,
+        )
 
-            logger.info(f"計算ロック取得成功: {cache_key}")
-            return True
+    def release_calculation_slot(self) -> bool:
+        return self._release_file_lock(
+            self._get_calculation_slot_path(),
+            "calculation-slot",
+        )
 
-        except FileExistsError:
-            if self.is_calculation_in_progress(cache_key):
-                logger.info(f"計算ロック取得失敗（既にロック中）: {cache_key}")
-                return False
-            logger.warning(f"古い計算ロックを検出: {cache_key} - 再取得を試行")
-            try:
-                if lock_path.exists():
-                    lock_path.unlink()
-            except Exception as cleanup_error:
-                logger.error(f"古いロック削除エラー: {cache_key} - {cleanup_error}")
-                return False
-            return self.acquire_calculation_lock(cache_key)
-        except Exception as e:
-            logger.error(f"計算ロック取得エラー: {cache_key} - {e}")
-            return False
-
-    def release_calculation_lock(self, cache_key: str, base_session_id: str = None):
+    def release_calculation_lock(self, cache_key: str, base_session_id: str = None) -> bool:
         """
         計算ロックを解放
 
@@ -565,14 +991,7 @@ class CacheService:
             cache_key: キャッシュキー
             base_session_id: 互換性維持のための未使用引数
         """
-        lock_path = self._get_lock_path(cache_key)
-
-        try:
-            if lock_path.exists():
-                lock_path.unlink()
-            logger.info(f"計算ロック削除: {cache_key}")
-        except Exception as e:
-            logger.error(f"計算ロック削除エラー: {cache_key} - {e}")
+        return self._release_file_lock(self._get_lock_path(cache_key), cache_key)
 
     def cleanup_calculation_locks(self, max_age_minutes: int = 30) -> int:
         """

@@ -29,7 +29,10 @@ class DataService:
         self.global_level4_curve_lookup: Optional[Dict[str, np.ndarray]] = None
         self.global_mesh_static_info_lookup: Optional[Dict[str, Dict[str, Any]]] = None
 
-    def get_prefecture_definitions(self) -> List[Dict[str, Any]]:
+    def get_prefecture_definitions(
+        self,
+        prefecture_codes: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
         """府県定義一覧を取得する"""
         prefectures_file = os.path.join(self.data_dir, "prefectures.csv")
         fallback_definitions = [
@@ -47,52 +50,58 @@ class DataService:
                 f"Prefecture master not found: {prefectures_file}. "
                 "Falling back to built-in prefecture list."
             )
-            return fallback_definitions
+            definitions = fallback_definitions
+        else:
+            definitions: List[Dict[str, Any]] = []
+            try:
+                with open(prefectures_file, "r", encoding="utf-8-sig", newline="") as csv_file:
+                    reader = csv.DictReader(csv_file)
+                    for row in reader:
+                        code = (row.get("prefecture_code") or "").strip()
+                        name = (row.get("prefecture_name") or "").strip()
+                        if not code or not name:
+                            logger.warning(f"Skipping prefecture row with missing code/name: {row}")
+                            continue
 
-        definitions: List[Dict[str, Any]] = []
-        try:
-            with open(prefectures_file, "r", encoding="utf-8-sig", newline="") as csv_file:
-                reader = csv.DictReader(csv_file)
-                for row in reader:
-                    code = (row.get("prefecture_code") or "").strip()
-                    name = (row.get("prefecture_name") or "").strip()
-                    if not code or not name:
-                        logger.warning(f"Skipping prefecture row with missing code/name: {row}")
-                        continue
+                        sort_order_raw = (row.get("sort_order") or "").strip()
+                        try:
+                            sort_order = int(sort_order_raw) if sort_order_raw else 9999
+                        except ValueError:
+                            logger.warning(
+                                f"Invalid sort_order for prefecture {code}: {sort_order_raw}. "
+                                "Using fallback order."
+                            )
+                            sort_order = 9999
 
-                    sort_order_raw = (row.get("sort_order") or "").strip()
-                    try:
-                        sort_order = int(sort_order_raw) if sort_order_raw else 9999
-                    except ValueError:
-                        logger.warning(
-                            f"Invalid sort_order for prefecture {code}: {sort_order_raw}. "
-                            "Using fallback order."
-                        )
-                        sort_order = 9999
+                        enabled_raw = (row.get("enabled") or "1").strip().lower()
+                        enabled = enabled_raw in ("1", "true", "yes", "on")
+                        if not enabled:
+                            continue
 
-                    enabled_raw = (row.get("enabled") or "1").strip().lower()
-                    enabled = enabled_raw in ("1", "true", "yes", "on")
-                    if not enabled:
-                        continue
-
-                    definitions.append({
-                        "code": code,
-                        "name": name,
-                        "sort_order": sort_order,
-                        "enabled": enabled,
-                    })
-        except Exception as e:
-            logger.error(f"Error loading prefecture master {prefectures_file}: {e}")
-            return fallback_definitions
+                        definitions.append({
+                            "code": code,
+                            "name": name,
+                            "sort_order": sort_order,
+                            "enabled": enabled,
+                        })
+            except Exception as e:
+                logger.error(f"Error loading prefecture master {prefectures_file}: {e}")
+                definitions = fallback_definitions
 
         if not definitions:
             logger.warning(
                 f"No enabled prefectures found in {prefectures_file}. "
                 "Falling back to built-in prefecture list."
             )
-            return fallback_definitions
+            definitions = fallback_definitions
 
         definitions.sort(key=lambda item: (item["sort_order"], item["code"]))
+        if prefecture_codes:
+            requested_codes = set(prefecture_codes)
+            definitions = [
+                definition for definition in definitions
+                if definition["code"] in requested_codes
+            ]
         return definitions
 
     def meshcode_to_coordinate(self, code: str) -> Tuple[float, float]:
@@ -354,15 +363,19 @@ class DataService:
 
         return dosha_data, level4_curve_lookup, vba_swi_data
 
-    def prepare_areas(self) -> List[Prefecture]:
+    def prepare_areas(self, prefecture_codes: Optional[List[str]] = None) -> List[Prefecture]:
         """地域データ構築（最適化版）"""
+        cache_key = "prefectures"
+        if prefecture_codes:
+            cache_key = f"prefectures:{','.join(prefecture_codes)}"
+
         # キャッシュチェック
         current_time = time.time()
         if (self.cache_timestamp and
             current_time - self.cache_timestamp < self.cache_ttl and
-            'prefectures' in self.cache):
+            cache_key in self.cache):
             logger.info("キャッシュからデータを取得")
-            return self.cache['prefectures']
+            return self.cache[cache_key]
 
         logger.info("CSVファイルからデータを構築中...")
         start_time = time.time()
@@ -373,7 +386,7 @@ class DataService:
         all_level4_curve_lookup = {}
         all_vba_swi_data = {}
 
-        prefecture_definitions = self.get_prefecture_definitions()
+        prefecture_definitions = self.get_prefecture_definitions(prefecture_codes)
 
         for pref in prefecture_definitions:
             pref_code = pref["code"]
@@ -573,7 +586,7 @@ class DataService:
         logger.info(f"  処理速度: {total_meshes/total_time:.0f} meshes/second")
 
         # キャッシュに保存
-        self.cache['prefectures'] = prefectures
+        self.cache[cache_key] = prefectures
         self.cache_timestamp = current_time
 
         return prefectures

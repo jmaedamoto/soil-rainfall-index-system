@@ -1,14 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { Area, Prefecture, SecondarySubdivision, RISK_COLORS, RiskLevel, RISK_LABELS, RiskTimelineViewMode } from '../../types/api';
+import { Prefecture, RISK_COLORS, RiskLevel, RISK_LABELS, RiskTimelineViewMode } from '../../types/api';
 
 interface AreaRiskBarChartProps {
   prefectures: Prefecture[];
   availablePrefectures?: Array<{ code: string; name: string }>; // 利用可能な全府県リスト
   selectedTime: number;
   selectedPrefecture: string;
+  viewMode: RiskTimelineViewMode;
+  loadingAllPrefectures?: boolean;
   onPrefectureChange: (prefectureCode: string) => void;
   onTimeSelect?: (ft: number) => void; // 時刻選択コールバック
-  onViewModeChange?: (mode: RiskTimelineViewMode) => void; // 表示モード変更コールバック
+  onViewModeChange?: (mode: RiskTimelineViewMode) => void | Promise<void>; // 表示モード変更コールバック
   initialTime: string; // UTC時刻（ISO8601形式）
   title?: string;
   height?: number;
@@ -19,6 +21,8 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
   availablePrefectures,
   selectedTime,
   selectedPrefecture,
+  viewMode,
+  loadingAllPrefectures = false,
   onPrefectureChange,
   onTimeSelect,
   onViewModeChange,
@@ -27,11 +31,9 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
   height = 800
 }) => {
   const [hoveredCell, setHoveredCell] = useState<{area: string, time: number, risk: number} | null>(null);
-  const [viewMode, setViewMode] = useState<RiskTimelineViewMode>('municipality');
 
   // 表示モード変更ハンドラ
   const handleViewModeChange = (mode: RiskTimelineViewMode) => {
-    setViewMode(mode);
     if (onViewModeChange) {
       onViewModeChange(mode);
     }
@@ -40,7 +42,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
   // viewModeに応じた表示データの準備
   type DisplayRow = {
     name: string;
-    risk_timeline: Array<{ ft: number; value: number }>;
+    risk_timeline: Array<{ ft: number; value: number; rainfall_to_level4_1h_mm?: number | null }>;
     swi_timeline?: Array<{ ft: number; value: number }>;
     rain_3hour_timeline?: Array<{ ft: number; value: number }>;
   };
@@ -176,13 +178,15 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
           <label style={{ fontWeight: 'bold' }}>表示:</label>
           <button
             onClick={() => handleViewModeChange('municipality')}
+            disabled={loadingAllPrefectures}
             style={{
               padding: '8px 12px',
               borderRadius: '4px',
               border: viewMode === 'municipality' ? '2px solid #1976d2' : '1px solid #ddd',
               backgroundColor: viewMode === 'municipality' ? '#e3f2fd' : '#fff',
               fontSize: '14px',
-              cursor: 'pointer',
+              cursor: loadingAllPrefectures ? 'not-allowed' : 'pointer',
+              opacity: loadingAllPrefectures ? 0.6 : 1,
               fontWeight: viewMode === 'municipality' ? 'bold' : 'normal'
             }}
           >
@@ -190,13 +194,15 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
           </button>
           <button
             onClick={() => handleViewModeChange('subdivision')}
+            disabled={loadingAllPrefectures}
             style={{
               padding: '8px 12px',
               borderRadius: '4px',
               border: viewMode === 'subdivision' ? '2px solid #1976d2' : '1px solid #ddd',
               backgroundColor: viewMode === 'subdivision' ? '#e3f2fd' : '#fff',
               fontSize: '14px',
-              cursor: 'pointer',
+              cursor: loadingAllPrefectures ? 'not-allowed' : 'pointer',
+              opacity: loadingAllPrefectures ? 0.6 : 1,
               fontWeight: viewMode === 'subdivision' ? 'bold' : 'normal'
             }}
           >
@@ -204,17 +210,19 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
           </button>
           <button
             onClick={() => handleViewModeChange('prefecture-all')}
+            disabled={loadingAllPrefectures}
             style={{
               padding: '8px 12px',
               borderRadius: '4px',
               border: viewMode === 'prefecture-all' ? '2px solid #1976d2' : '1px solid #ddd',
               backgroundColor: viewMode === 'prefecture-all' ? '#e3f2fd' : '#fff',
               fontSize: '14px',
-              cursor: 'pointer',
+              cursor: loadingAllPrefectures ? 'not-allowed' : 'pointer',
+              opacity: loadingAllPrefectures ? 0.6 : 1,
               fontWeight: viewMode === 'prefecture-all' ? 'bold' : 'normal'
             }}
           >
-            全府県一覧
+            {loadingAllPrefectures ? '全府県読み込み中...' : '全府県一覧'}
           </button>
         </div>
       </div>
@@ -325,6 +333,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                   dateGroup.hours.map((hourInfo, hourIndex) => {
                     const riskPoint = row.risk_timeline.find(r => r.ft === hourInfo.ft);
                     const riskLevel = riskPoint ? riskPoint.value : 0;
+                    const rainfallToLevel4 = riskPoint?.rainfall_to_level4_1h_mm;
                     const swiPoint = row.swi_timeline?.find(point => point.ft === hourInfo.ft);
                     const rainPoint = row.rain_3hour_timeline?.find(point => point.ft === hourInfo.ft);
                     const color = RISK_COLORS[riskLevel as RiskLevel];
@@ -368,6 +377,11 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
                         <div>
                           3h {rainPoint ? Math.round(rainPoint.value) : '-'}
                         </div>
+                        {viewMode === 'municipality' && (
+                          <div>
+                            あとR1 {rainfallToLevel4 == null ? '-' : `${rainfallToLevel4}mm`}
+                          </div>
+                        )}
                       </td>
                     );
                   })

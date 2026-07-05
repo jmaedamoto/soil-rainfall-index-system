@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import { LatLngBounds } from 'leaflet';
 import { Mesh, RISK_COLORS, RiskLevel, TimeSeriesPoint } from '../../types/api';
 import MapLegend from './MapLegend';
@@ -84,8 +84,25 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
         [maxLat, maxLon]
       );
       setBounds(mapBounds);
+      return;
     }
-  }, [meshes]);
+
+    if (meshCoords && Object.keys(meshCoords).length > 0) {
+      const coords = Object.values(meshCoords);
+      const lats = coords.map(coord => coord.lat);
+      const lons = coords.map(coord => coord.lon);
+      const minLat = Math.min(...lats);
+      const maxLat = Math.max(...lats);
+      const minLon = Math.min(...lons);
+      const maxLon = Math.max(...lons);
+
+      const mapBounds = new LatLngBounds(
+        [minLat, minLon],
+        [maxLat, maxLon]
+      );
+      setBounds(mapBounds);
+    }
+  }, [meshes, meshCoords]);
 
   // メッシュ間隔を動的に計算
   const meshIntervals = useMemo(() => {
@@ -196,6 +213,19 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
     return `${currentDate.getUTCFullYear()}/${currentDate.getUTCMonth() + 1}/${currentDate.getUTCDate()} ${String(currentDate.getUTCHours()).padStart(2, '0')}:${String(currentDate.getUTCMinutes()).padStart(2, '0')}`;
   }, [selectedTime, swiInitialTime]);
 
+  const MapViewportUpdater: React.FC<{ targetBounds: LatLngBounds | null }> = ({ targetBounds }) => {
+    const map = useMap();
+
+    useEffect(() => {
+      if (!targetBounds) {
+        return;
+      }
+      map.fitBounds(targetBounds, { padding: [20, 20] });
+    }, [map, targetBounds]);
+
+    return null;
+  };
+
   return (
     <div style={{ height: '600px', width: '100%', position: 'relative' }}>
       {/* 時刻情報表示（地図の左上） */}
@@ -246,6 +276,8 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
         minZoom={8}
         maxZoom={14}
       >
+        <MapViewportUpdater targetBounds={bounds} />
+
         {/* 純白地図ベース */}
         <TileLayer
           url="https://cyberjapandata.gsi.go.jp/xyz/blank/{z}/{x}/{y}.png"

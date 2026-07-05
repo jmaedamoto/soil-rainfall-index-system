@@ -14,6 +14,7 @@ export type InputMode = '3hour' | '24hour';
 export type AdjustmentMode =
   | 'ratio_3hour'
   | 'fill_3hour'
+  | 'fill_3hour_area_max'
   | 'fill_24hour_uniform'
   | 'ratio_24hour_uniform'
   | 'fill_24hour_peak_mesh'
