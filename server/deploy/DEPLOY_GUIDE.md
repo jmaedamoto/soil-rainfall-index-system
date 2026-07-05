@@ -129,13 +129,17 @@ sudo chmod -R 755 /var/www/app/staging/soil-rainfall-index-system
 sudo chmod -R 755 /var/www/html/staging/dosya
 
 sudo mkdir -p /var/cache/nyapp/dosya
+sudo mkdir -p /var/cache/nyapp/dosya/session_refs
 sudo mkdir -p /var/cache/myapp/staging/dosya
+sudo mkdir -p /var/cache/myapp/staging/dosya/session_refs
 sudo chown -R apache:apache /var/cache/nyapp
 sudo chown -R apache:apache /var/cache/myapp/staging
 sudo chmod 775 /var/cache/nyapp
 sudo chmod 775 /var/cache/nyapp/dosya
+sudo chmod 775 /var/cache/nyapp/dosya/session_refs
 sudo chmod 775 /var/cache/myapp/staging
 sudo chmod 775 /var/cache/myapp/staging/dosya
+sudo chmod 775 /var/cache/myapp/staging/dosya/session_refs
 ```
 
 ## 7. SELinux
@@ -218,5 +222,7 @@ sudo tail -f /var/log/httpd/soil-rainfall-access.log
 | --- | --- |
 | 500 | WSGIのPythonパス、仮想環境、Apache設定 |
 | 403 | ファイル権限、SELinux |
+| Target WSGI script not found | `WSGIScriptAlias` の実パスに `server/wsgi.py` が存在するか、production/staging の配置先が設定と一致しているか |
+| session_refs の FileNotFoundError | `CACHE_DIR/session_refs` の存在と apache 書き込み権限 |
 | GRIB2取得失敗 | プロキシ、取得元URL、対象時刻 |
 | 開発APIが404 | production profile では正常。開発時は `SOIL_RAINFALL_ROUTE_PROFILE=all` を使う |
