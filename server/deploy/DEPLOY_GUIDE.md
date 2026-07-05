@@ -6,7 +6,7 @@
 - Web Server: Apache httpd + mod_wsgi
 - Python: 3.9+
 - production クライアント配信先例: `/var/www/html/dosya`
-- production API配置先例: `/var/www/app/production/soil-rainfall-index-system`
+- production API配置先例: `/var/www/app/soil-rainfall-index-system`
 - staging クライアント配信先例: `/var/www/html/staging/dosya`
 - staging API配置先例: `/var/www/app/staging/soil-rainfall-index-system`
 
@@ -28,11 +28,11 @@ sudo dnf groupinstall -y "Development Tools"
 ## 2. 配置先
 
 ```bash
-sudo mkdir -p /var/www/app/production/soil-rainfall-index-system
+sudo mkdir -p /var/www/app/soil-rainfall-index-system
 sudo mkdir -p /var/www/html/dosya
 sudo mkdir -p /var/www/app/staging/soil-rainfall-index-system
 sudo mkdir -p /var/www/html/staging/dosya
-sudo chown -R $USER:$USER /var/www/app/production/soil-rainfall-index-system
+sudo chown -R $USER:$USER /var/www/app/soil-rainfall-index-system
 sudo chown -R $USER:$USER /var/www/html/dosya
 sudo chown -R $USER:$USER /var/www/app/staging/soil-rainfall-index-system
 sudo chown -R $USER:$USER /var/www/html/staging/dosya
@@ -41,7 +41,7 @@ sudo chown -R $USER:$USER /var/www/html/staging/dosya
 ## 3. Python環境
 
 ```bash
-cd /var/www/app/production/soil-rainfall-index-system
+cd /var/www/app/soil-rainfall-index-system
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
@@ -119,11 +119,11 @@ prefectures.csv
 ## 6. 権限
 
 ```bash
-sudo chown -R apache:apache /var/www/app/production/soil-rainfall-index-system
+sudo chown -R apache:apache /var/www/app/soil-rainfall-index-system
 sudo chown -R apache:apache /var/www/html/dosya
 sudo chown -R apache:apache /var/www/app/staging/soil-rainfall-index-system
 sudo chown -R apache:apache /var/www/html/staging/dosya
-sudo chmod -R 755 /var/www/app/production/soil-rainfall-index-system
+sudo chmod -R 755 /var/www/app/soil-rainfall-index-system
 sudo chmod -R 755 /var/www/html/dosya
 sudo chmod -R 755 /var/www/app/staging/soil-rainfall-index-system
 sudo chmod -R 755 /var/www/html/staging/dosya
@@ -148,13 +148,13 @@ SELinuxが有効な環境では以下を設定します。
 
 ```bash
 sudo setsebool -P httpd_can_network_connect 1
-sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/app/production/soil-rainfall-index-system(/.*)?"
+sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/app/soil-rainfall-index-system(/.*)?"
 sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/html/dosya(/.*)?"
 sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/app/staging/soil-rainfall-index-system(/.*)?"
 sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/html/staging/dosya(/.*)?"
 sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/cache/nyapp(/.*)?"
 sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/cache/myapp/staging(/.*)?"
-sudo restorecon -Rv /var/www/app/production/soil-rainfall-index-system
+sudo restorecon -Rv /var/www/app/soil-rainfall-index-system
 sudo restorecon -Rv /var/www/html/dosya
 sudo restorecon -Rv /var/www/app/staging/soil-rainfall-index-system
 sudo restorecon -Rv /var/www/html/staging/dosya
