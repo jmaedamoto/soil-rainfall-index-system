@@ -178,7 +178,8 @@ class Grib2Service:
 
     def unpack_runlength(self, data: bytes, bit_num: int, level_num: int, level_max: int,
                          grid_num: int, level: List[int], s_position: int,
-                         e_position: int) -> List[float]:
+                         e_position: int, missing_value: float = 0.0,
+                         decimal_scale_factor: int = 0) -> List[float]:
         """
         ランレングス圧縮データの展開（気象庁GRIB2テンプレート7.200準拠）
 
@@ -220,7 +221,12 @@ class Grib2Service:
                     break
 
                 # 実際の格子点値を取得
-                grid_value = self._get_level_value(level, value_index)
+                grid_value = self._get_level_value(
+                    level,
+                    value_index,
+                    missing_value=missing_value,
+                    decimal_scale_factor=decimal_scale_factor,
+                )
 
                 # 次のデータを先読み（値 or ランレングス判定用）
                 if position >= e_position:
@@ -246,22 +252,24 @@ class Grib2Service:
                             break
                         result.append(grid_value)
 
-            # 不足分を0.0で埋める
+            # 不足分を呼び出し側が指定した欠測値で埋める
             while len(result) < grid_num:
-                result.append(0.0)
+                result.append(missing_value)
 
             return result[:grid_num]
 
         except Exception as e:
             logger.error(f"ランレングス展開エラー: {e}")
-            return [0.0] * grid_num
+            return [missing_value] * grid_num
 
-    def _get_level_value(self, level: List[int], index: int) -> float:
+    def _get_level_value(self, level: List[int], index: int,
+                         missing_value: float = 0.0,
+                         decimal_scale_factor: int = 0) -> float:
         """level配列から値を安全に取得"""
         if 1 <= index < len(level):
-            return float(level[index])
+            return float(level[index]) * (10.0 ** -decimal_scale_factor)
         else:
-            return 0.0
+            return missing_value
 
     def _decode_runlength(self, data: bytes, start_pos: int, end_pos: int,
                           byte_size: int, MAXV: int, LNGU: int) -> int:
@@ -554,6 +562,144 @@ class Grib2Service:
 
         except Exception as e:
             logger.error(f"Guidance GRIB2解析エラー: {e}")
+            raise
+
+    def unpack_analyzed_rainfall_grib2_from_file(
+        self, file_path: str
+    ) -> Tuple[BaseInfo, Dict[str, Any]]:
+        """解析雨量GRIB2ファイルを読み取る。"""
+        try:
+            with open(file_path, 'rb') as f:
+                data = f.read()
+            return self.unpack_analyzed_rainfall_grib2(data)
+        except Exception as e:
+            logger.error(f"解析雨量GRIB2ファイル読み込みエラー: {e}")
+            raise
+
+    def unpack_analyzed_rainfall_grib2(
+        self, data: bytes
+    ) -> Tuple[BaseInfo, Dict[str, Any]]:
+        """
+        1kmメッシュ解析雨量を読み取る（気象庁仕様 No.11601）。
+
+        解析雨量と速報版解析雨量は同じテンプレートを使用するため、両方を
+        読み取れる。戻り値の ``rainfall`` は終了時刻までの1時間積算雨量
+        （mm）、レベル0（欠測）は NaN とする。
+        """
+        try:
+            if len(data) < 20 or data[:4] != b'GRIB' or data[7] != 2:
+                raise ValueError("GRIB2形式のデータではありません")
+
+            base_info, position, total_size = self.unpack_info(data, 0)
+            if total_size > len(data):
+                raise ValueError(
+                    f"GRIB2データが途中で切れています: expected={total_size}, actual={len(data)}"
+                )
+            if data[position + 4] != 4:
+                raise ValueError("解析雨量のプロダクト定義節（第4節）がありません")
+
+            section4_size = self.get_dat(data, position, 4)
+            product_template = self.get_dat(data, position + 7, 2)
+            parameter_category = self.get_dat(data, position + 9, 1)
+            parameter_number = self.get_dat(data, position + 10, 1)
+            if product_template != 50008:
+                raise ValueError(
+                    f"未対応のプロダクト定義テンプレートです: 4.{product_template}"
+                )
+            if parameter_category != 1 or parameter_number != 200:
+                raise ValueError(
+                    "解析雨量ではないパラメータです: "
+                    f"category={parameter_category}, number={parameter_number}"
+                )
+
+            valid_time = datetime(
+                self.get_dat(data, position + 34, 2),
+                self.get_dat(data, position + 36, 1),
+                self.get_dat(data, position + 37, 1),
+                self.get_dat(data, position + 38, 1),
+                self.get_dat(data, position + 39, 1),
+                self.get_dat(data, position + 40, 1),
+            )
+            accumulation_unit = self.get_dat(data, position + 48, 1)
+            accumulation_length = self.get_dat(data, position + 49, 4)
+            if accumulation_unit != 0:
+                raise ValueError(
+                    f"未対応の積算時間単位です: code={accumulation_unit}"
+                )
+
+            position += section4_size
+            if data[position + 4] != 5:
+                raise ValueError("解析雨量の資料表現節（第5節）がありません")
+            representation_template = self.get_dat(data, position + 9, 2)
+            if representation_template != 200:
+                raise ValueError(
+                    f"未対応の資料表現テンプレートです: 5.{representation_template}"
+                )
+
+            section5_size = self.get_dat(data, position, 4)
+            bit_num = self.get_dat(data, position + 11, 1)
+            level_max = self.get_dat(data, position + 12, 2)
+            level_num = self.get_dat(data, position + 14, 2)
+            decimal_scale_factor = self.get_dat(data, position + 16, 1)
+            if bit_num != 8:
+                raise ValueError(
+                    f"未対応のランレングスビット数です: {bit_num}"
+                )
+            if level_max > level_num:
+                raise ValueError(
+                    "圧縮レベル数が不正です: "
+                    f"used={level_max}, available={level_num}"
+                )
+            level = [0] * (level_num + 1)
+            for index in range(1, level_max + 1):
+                value = self.get_dat(data, position + 15 + 2 * index, 2)
+                if value >= 32768:
+                    value -= 65536
+                level[index] = value
+
+            position += section5_size
+            section6_size = self.get_dat(data, position, 4)
+            bitmap_indicator = self.get_dat(data, position + 5, 1)
+            if bitmap_indicator != 255:
+                raise ValueError(
+                    f"ビットマップを使用する解析雨量には未対応です: indicator={bitmap_indicator}"
+                )
+            position += section6_size
+
+            section7_size = self.get_dat(data, position, 4)
+            if data[position + 4] != 7:
+                raise ValueError("解析雨量の資料節（第7節）がありません")
+            rainfall = self.unpack_runlength(
+                data,
+                bit_num,
+                level_num,
+                level_max,
+                base_info.grid_num,
+                level,
+                position + 5,
+                position + section7_size,
+                missing_value=float('nan'),
+                decimal_scale_factor=decimal_scale_factor,
+            )
+
+            result = {
+                'base_info': base_info,
+                'rainfall': rainfall,
+                'data': rainfall,
+                'valid_time': valid_time,
+                'accumulation_minutes': accumulation_length,
+                'product_definition_template': product_template,
+                'data_representation_template': representation_template,
+            }
+            logger.info(
+                "解析雨量GRIB2解析完了: valid_time=%s, accumulation=%d分, grids=%d",
+                valid_time.isoformat(),
+                accumulation_length,
+                len(rainfall),
+            )
+            return base_info, result
+        except Exception as e:
+            logger.error(f"解析雨量GRIB2解析エラー: {e}")
             raise
 
     def _skip_data_section(self, data: bytes, position: int) -> int:

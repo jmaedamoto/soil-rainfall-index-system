@@ -11,6 +11,7 @@
 - git log --oneline --decorate --graph -25
 - CLAUDE.md
 - RAINFALL_ADJUSTMENT_FEATURE.md
+- docs/analyzed-rainfall-grib2.md
 - docs/staging-promotion-rules.md
 - server/docs/CACHE_SYSTEM.md
 - server/deploy/DEPLOY_GUIDE.md
@@ -41,13 +42,20 @@
   - POST /session/<session_id>/recalculate
 - フロントは /kinki, /chugoku, /shikoku の地方別ページ。
 - バックエンドは Flask、フロントは React/TypeScript/Vite。
+- 解析雨量と速報版解析雨量のGRIB2（気象庁仕様No.11601）に対応済み。
+  - システム内実装は `server/src/services/grib2_service.py`。
+  - サーバー環境用CSV CLIは `server/decode_analyzed_rainfall.py`。
+  - 標準ライブラリだけで動く単独配布版は `standalone/analyzed-rainfall-decoder/`。
+  - 別リポジトリへの移植用に本体・`example_usage.py`・組み込み手順付きREADMEを同梱する。本体1ファイルを利用側Pythonファイルと同じディレクトリへコピーしてimportできる。
+  - `dist/analyzed-rainfall-decoder-1.0.0.zip` はGit管理外の再生成可能な成果物。
+  - 単独配布版READMEは移行先のCodex向け引き継ぎ・API・依頼例・確認手順を含む。ZIPをリポジトリ外へ展開し、標準ライブラリのみで合成2×2格子のデコード・CSV・サンプルを確認済み。移行先実データでの確認は別途必要。
 - キャッシュ、セッション復元、同時計算ロック、雨量調整再計算、フロントのセッション表示状態管理が最近の主要テーマ。
 - 高負荷試験で確認された stale tmp 起因の10分タイムアウトは対処済み。詳細は docs/high-load-cache-timeout-investigation.md を参照する。
 - キャッシュヒット時の初期APIは `.summary.json` を使い、`.json.gz` 全体を展開せずに軽量セッションレスポンスを返す。summary がない既存gzipでは `*.summary.lock.json` で作成を1件に絞る。
 - キャッシュヒットで作るベースセッションは、最初は cache_key と summary だけを保持する。府県データなど完全データが必要になった時点で gzip から materialize する。
 - 同一プロセス内では `CACHE_MEMORY_MAX_RESULTS` 件まで gzip 展開済み結果を共有する。未設定時は2件、0で無効。
 - `.json.gz` 作成後も `.calculating.json` が残り、フロントがデータ取得中のままになる不具合への対策を追加済み。
-  - `POST /production-soil-rainfall-index-with-urls` は先に `get_cached_result(cache_key)` を実行する。`.json.gz` が正常に読める場合は、残留 `.calculating.json` を完成済みキャッシュのロックとして回収してキャッシュ即時返却する。
+  - `POST /production-soil-rainfall-index-with-urls` は先に `get_cached_summary(...)` を実行する。サマリー取得時は `cleanup_completed_calculation_lock(cache_key)` で残留ロックの回収を試み、軽量セッションレスポンスを返す。完全データは必要時に `get_cached_result(cache_key)` で読み込む。
   - `cache_service.py` の `release_calculation_lock()` / `release_calculation_slot()` は削除成否を返す。同一プロセス所有のロックは、所有 token がメモリから失われていても削除を許可する。
   - `main_controller.py` はロック解放の成否をログへ出す。`キャッシュ保存完了後に計算ロック解放 ... lock_released=True slot_released=True` を確認する。
   - 実環境で再発する場合は、まず実ログで `キャッシュ読み込みエラー`、`完成済みキャッシュの残留計算ロックを削除`、`ロック削除エラー`、`キャッシュ作成中のため再試行応答` の有無を確認する。

@@ -74,6 +74,33 @@ Excel VBAで運用されていた土壌雨量指数計算を、Python/Flask API 
 - 境界メッシュは複数領域の入力またはガイダンス最大値を考慮し、保守的な値を採用します
 - 調整後は3時間・1時間の雨量/SWI/危険度タイムラインを更新します
 
+## 解析雨量GRIB2
+
+`server/src/services/grib2_service.py` は、気象庁「配信資料に関する仕様
+No.11601」の1kmメッシュ解析雨量と速報版解析雨量を読み取れます。
+`unpack_analyzed_rainfall_grib2()` はバイト列、
+`unpack_analyzed_rainfall_grib2_from_file()` はファイルパスを受け取り、1時間積算雨量を
+mm単位で返します。レベル0の欠測格子は `NaN` です。
+
+単独でCSVへ変換する場合:
+
+```bash
+python server/decode_analyzed_rainfall.py /path/to/Prr60lv_ANAL_grib2.bin
+```
+
+入力ファイルと同じディレクトリへ同名の `.csv` を出力します。CSVは格子番号、格子の
+x/y番号、緯度、経度、1時間積算雨量を持ち、欠測雨量は空欄になります。出力先を変える
+場合は `-o output.csv`、既存ファイルを上書きする場合は `--force` を指定します。
+
+サーバー環境から独立した配布版は `standalone/analyzed-rainfall-decoder/` にあります。
+Python標準ライブラリだけで動作し、ライブラリとしても読み込めます。配布用ZIPは
+`dist/analyzed-rainfall-decoder-1.0.0.zip` です。対応仕様、API、CSV形式、ZIP再生成方法は
+`docs/analyzed-rainfall-grib2.md` を参照してください。
+
+別プロジェクトへ組み込む場合は単独配布版の本体1ファイルをコピーします。
+配布ZIPには `example_usage.py` と、移行先のCodex向け引き継ぎ・API・確認手順を
+記載した `README.md` も含めます。ZIPはGit管理外で、GitHubには再生成用のソースを保存します。
+
 ## 設定
 
 主要設定は `server/config/app_config.yaml` で管理します。
