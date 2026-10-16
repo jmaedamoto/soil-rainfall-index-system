@@ -181,6 +181,15 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
   // セルクリックハンドラ
   const handleCellMouseDown = (areaName: string, ft: number, e: React.MouseEvent) => {
+    // 数値欄の操作では選択用の preventDefault を行わず、入力欄のフォーカスを許可する。
+    // 対象セルも単一選択しておくことで、直接編集と既存の選択状態を同期する。
+    if (e.target instanceof HTMLInputElement) {
+      setSelectedCells(new Set([getCellKey(areaName, ft)]));
+      setSelectionStart({ areaName, ft });
+      setIsSelecting(false);
+      return;
+    }
+
     e.preventDefault();
 
     if (e.ctrlKey || e.metaKey) {
@@ -880,6 +889,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                                 step="1"
                                 min="0"
                                 value={Math.round(point.value)}
+                                aria-label={`${areaName} FT${point.ft} 雨量 (mm)`}
                                 onChange={(e) => handleRainfallChange(areaName, point.ft, e.target.value)}
                                 disabled={usesAreaMaxFill}
                                 className="rainfall-input"
@@ -915,7 +925,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
               fontSize: '12px'
             }}>
               <strong>操作方法:</strong>
-              クリック=単一選択 | ドラッグ=範囲選択 | Ctrl+クリック=複数選択 | Shift+クリック=範囲拡張
+              数値欄をクリックして直接編集 | 数値欄以外をクリック=単一選択 | ドラッグ=範囲選択 | Ctrl+クリック=複数選択 | Shift+クリック=範囲拡張
               {inputMode === '24hour' && (
                 <> | 24時間合計は初期+24h と 初期+48h の2区間を編集</>
               )}
