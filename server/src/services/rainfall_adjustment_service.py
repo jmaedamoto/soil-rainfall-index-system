@@ -15,11 +15,6 @@ logger = logging.getLogger(__name__)
 class RainfallAdjustmentService:
     """雨量調整サービス"""
 
-    WINDOW_24H_MAP: Dict[int, Tuple[int, ...]] = {
-        24: (3, 6, 9, 12, 15, 18, 21, 24),
-        48: (27, 30, 33, 36, 39, 42, 45, 48),
-    }
-
     def calculate_mesh_ratios_from_session(
         self,
         prefectures_dict: Dict[str, Any],
@@ -673,10 +668,15 @@ class RainfallAdjustmentService:
     ) -> List[Dict[str, float]]:
         timeline: List[Dict[str, float]] = []
 
-        for window_end_ft, window_fts in self.WINDOW_24H_MAP.items():
+        mesh_timelines = [self._mesh_timeline_to_dict(mesh_dict) for mesh_dict in meshes]
+        max_ft = max((max(values, default=0) for values in mesh_timelines), default=0)
+        for window_end_ft in range(24, max_ft + 1, 3):
+            window_fts = self._window_fts_for_end(window_end_ft)
+            if not window_fts or not any(all(ft in values for ft in window_fts) for values in mesh_timelines):
+                continue
             max_value = 0.0
-            for mesh_dict in meshes:
-                total = self._sum_mesh_values_for_fts(mesh_dict, window_fts)
+            for values in mesh_timelines:
+                total = sum(values.get(ft, 0.0) for ft in window_fts)
                 max_value = max(max_value, total)
             timeline.append({"ft": window_end_ft, "value": round(max_value)})
 
@@ -860,7 +860,7 @@ class RainfallAdjustmentService:
         window_end_ft: int,
         target_24h: float
     ) -> Optional[Tuple[str, float, Dict[str, float], Dict[int, float]]]:
-        if window_end_ft not in self.WINDOW_24H_MAP:
+        if not self._window_fts_for_end(window_end_ft):
             return None
 
         peak_mesh_code = None
@@ -909,7 +909,14 @@ class RainfallAdjustmentService:
         }
 
     def _available_window_fts(self, timeline_dict: Dict[int, float], window_end_ft: int) -> List[int]:
-        return [ft for ft in self.WINDOW_24H_MAP.get(window_end_ft, ()) if ft in timeline_dict]
+        window_fts = self._window_fts_for_end(window_end_ft)
+        return list(window_fts) if window_fts and all(ft in timeline_dict for ft in window_fts) else []
+
+    def _window_fts_for_end(self, window_end_ft: int) -> Tuple[int, ...]:
+        """Return the eight 3-hour forecast steps ending at the selected 24-hour FT."""
+        if window_end_ft < 24 or window_end_ft % 3 != 0:
+            return ()
+        return tuple(range(window_end_ft - 21, window_end_ft + 1, 3))
 
     def _sum_mesh_values_for_fts(self, mesh_dict: Dict[str, Any], fts: Tuple[int, ...]) -> float:
         timeline_dict = self._mesh_timeline_to_dict(mesh_dict)
