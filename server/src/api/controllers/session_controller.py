@@ -771,6 +771,17 @@ class SessionController:
                 aggregate_adjustments[area_key] = {
                     point['ft']: point['value'] for point in timeline
                 }
+                window_ends = sorted(int(ft) for ft in aggregate_adjustments[area_key])
+                if any(not self.rainfall_adjustment_service._window_fts_for_end(ft) for ft in window_ends):
+                    return jsonify({
+                        'status': 'error',
+                        'error': '24時間雨量の始期は3時間刻みで指定してください',
+                    }), 400
+                if any(next_end - current_end < 24 for current_end, next_end in zip(window_ends, window_ends[1:])):
+                    return jsonify({
+                        'status': 'error',
+                        'error': '同一地域の24時間対象期間は重ならないようにしてください',
+                    }), 400
 
             adjustment_scope = data.get('adjustment_scope', 'municipality')
             if adjustment_scope not in {'municipality', 'subdivision', 'primary', 'prefecture'}:

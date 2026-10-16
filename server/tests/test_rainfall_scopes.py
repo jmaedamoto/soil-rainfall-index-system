@@ -58,12 +58,35 @@ def test_scope_deduplicates_meshes(prefectures):
 
 
 def test_24hour_is_maximum_mesh_total_not_sum_of_time_maxima(prefectures):
-    prefectures['shiga']['areas'][0]['meshes'][0]['rain_timeline'] = [{'ft': 3, 'value': 20}]
-    prefectures['shiga']['areas'][1]['meshes'][0]['rain_timeline'] = [{'ft': 6, 'value': 30}]
+    prefectures['shiga']['areas'][0]['meshes'][0]['rain_timeline'] = [
+        {'ft': ft, 'value': 20 if ft == 3 else 0} for ft in range(3, 25, 3)
+    ]
+    prefectures['shiga']['areas'][1]['meshes'][0]['rain_timeline'] = [
+        {'ft': ft, 'value': 30 if ft == 6 else 0} for ft in range(3, 25, 3)
+    ]
     scoped = build_scope_prefectures(prefectures, 'primary')
     totals, _ = RainfallAdjustmentService().aggregate_rainfall_24hour_from_session(scoped)
     assert totals['滋賀県_北部'][0]['value'] == 30
-    assert aggregate_three_hour(scoped)['滋賀県_北部'] == [{'ft': 3, 'value': 20}, {'ft': 6, 'value': 30}]
+    three_hour = aggregate_three_hour(scoped)['滋賀県_北部']
+    assert [(point['ft'], point['value']) for point in three_hour[:2]] == [(3, 20), (6, 30)]
+    assert len(three_hour) == 8
+
+
+def test_24hour_aggregation_exposes_rolling_windows_every_three_hours(prefectures):
+    totals, _ = RainfallAdjustmentService().aggregate_rainfall_24hour_from_session(prefectures)
+    assert [point['ft'] for point in totals['滋賀県_長浜市']] == list(range(24, 49, 3))
+    assert totals['滋賀県_長浜市'][0]['value'] == 80
+    assert totals['滋賀県_長浜市'][1]['value'] == 80
+
+
+def test_24hour_adjustment_accepts_rolling_window_end_ft(prefectures):
+    result = RainfallAdjustmentService().build_fill_24hour_uniform_from_session(
+        prefectures, {'滋賀県_長浜市': {27: 160}}
+    )
+    adjusted = dict(result['north1'])
+    assert all(adjusted[ft] == 20 for ft in range(6, 28, 3))
+    assert adjusted[3] == 10
+    assert adjusted[30] == 10
 
 
 @pytest.mark.parametrize('scope,key', [('primary', '滋賀県_北部'), ('prefecture', '滋賀県_全域')])
@@ -117,6 +140,21 @@ def test_recalculate_routes_scoped_meshes_and_preserves_scope(prefectures, scope
     assert args[1] == {key: {24: 160}}
     assert args[0]['shiga']['areas'][0]['name'] == ('北部' if scope == 'primary' else '全域')
     assert controller.session_service.create_fork_session.call_args.kwargs['adjustment_scope'] == scope
+
+
+def test_recalculate_rejects_overlapping_24hour_windows(prefectures):
+    controller = controller_for(prefectures)
+    with Flask(__name__).test_request_context(json={
+        'adjustments': {},
+        'aggregate_adjustments': {
+            '滋賀県_長浜市': [{'ft': 24, 'value': 100}, {'ft': 45, 'value': 120}],
+        },
+        'input_mode': '24hour',
+        'adjustment_mode': 'fill_24hour_uniform',
+    }):
+        _, status = controller.recalculate_with_adjusted_rainfall('base')
+    assert status == 400
+    controller.session_service.create_fork_session.assert_not_called()
 
 
 def test_invalid_scope_key_is_rejected(prefectures):

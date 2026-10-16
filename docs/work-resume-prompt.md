@@ -19,6 +19,7 @@
 - 3時間・24時間入力に対応。補正基準は選択した入力地域全体のメッシュから算出。
 - セル内の数値欄から1セルずつ直接編集でき、入力欄クリックでフォーカスと単一選択を同期。
   数値欄以外のセル面で範囲・複数選択を行う。最大格子塗りつぶし中は個別入力を無効化。
+- 24時間雨量はR24・Next24・NextNext24を同時表示し、始期は3時間刻みで指定。対象期間は重複させない。
 - 再計算では現在の入力・表示単位で変更したFTだけを送信。
 - APIの `scope_rainfall` / `scope_errors` / `adjustment_scope` を追加。
 - 詳細は `RAINFALL_ADJUSTMENT_FEATURE.md` と `server/config/FORECAST_AREA_HIERARCHY.md`。

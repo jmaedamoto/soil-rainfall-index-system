@@ -61,6 +61,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
   const [prefectureOrder, setPrefectureOrder] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<RainfallViewMode>('municipality');
   const [inputMode, setInputMode] = useState<InputMode>('3hour');
+  const [selected24HourEnds, setSelected24HourEnds] = useState<number[]>([24, 48, 72]);
   const [adjustmentMode, setAdjustmentMode] = useState<AdjustmentMode>('ratio_3hour');
   const showsAllPrefectures = viewMode === 'prefecture' || viewMode === 'primary';
   const scopeLabels: Record<RainfallViewMode, string> = { municipality: '市町村別', subdivision: '市町村等をまとめた地域別', primary: '一次細分ごと', prefecture: '府県ごと' };
@@ -84,6 +85,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
       setShowBulkEdit(false);
       setInputMode('3hour');
       setAdjustmentMode('ratio_3hour');
+      setSelected24HourEnds([24, 48, 72]);
     }
   }, [isOpen]);
 
@@ -120,10 +122,61 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
     return [...orderedPrefectures, ...remainingPrefectures];
   }, [currentGroupedMap, prefectureOrder]);
 
-  const currentPrefectureData = useMemo(() => showsAllPrefectures
+  const available24HourEnds = useMemo(() => {
+    const timelines = Object.values(currentOriginalMap);
+    if (timelines.length === 0) return [];
+    const firstTimeline = timelines[0];
+    return firstTimeline
+      .map(point => point.ft)
+      .filter(ft => ft >= 24 && ft % 3 === 0 && timelines.every(timeline => timeline.some(point => point.ft === ft)))
+      .sort((a, b) => a - b);
+  }, [currentOriginalMap]);
+
+  const active24HourEnds = useMemo(
+    () => selected24HourEnds.filter(ft => available24HourEnds.includes(ft)),
+    [selected24HourEnds, available24HourEnds]
+  );
+
+  useEffect(() => {
+    if (inputMode !== '24hour' || active24HourEnds.length > 0 || available24HourEnds.length === 0) return;
+    const firstEnd = available24HourEnds.includes(24) ? 24 : available24HourEnds[0];
+    const initialEnds = [firstEnd];
+    for (let index = 1; index < 3; index += 1) {
+      const nextEnd = available24HourEnds.find(endFt => endFt >= initialEnds[index - 1] + 24);
+      if (nextEnd === undefined) break;
+      initialEnds.push(nextEnd);
+    }
+    setSelected24HourEnds(initialEnds);
+  }, [inputMode, active24HourEnds, available24HourEnds]);
+  const currentPrefectureData = useMemo(() => {
+    const data = showsAllPrefectures
     ? Object.assign({}, ...availablePrefectures.map(name => currentGroupedMap[name])) as Record<string, TimeSeriesPoint[]>
-    : currentGroupedMap[selectedPrefecture] || {},
-  [showsAllPrefectures, availablePrefectures, currentGroupedMap, selectedPrefecture]);
+    : currentGroupedMap[selectedPrefecture] || {};
+    if (inputMode !== '24hour') return data;
+    const visibleEnds = new Set(active24HourEnds);
+    return Object.fromEntries(Object.entries(data).map(([areaName, timeline]) => [
+      areaName,
+      timeline.filter(point => visibleEnds.has(point.ft)),
+    ]));
+  }, [showsAllPrefectures, availablePrefectures, currentGroupedMap, selectedPrefecture, inputMode, active24HourEnds]);
+
+  const currentEditingOriginalMap = useMemo(() => {
+    if (inputMode !== '24hour') return currentOriginalMap;
+    const visibleEnds = new Set(active24HourEnds);
+    return Object.fromEntries(Object.entries(currentOriginalMap).map(([areaName, timeline]) => [
+      areaName,
+      timeline.filter(point => visibleEnds.has(point.ft)),
+    ]));
+  }, [currentOriginalMap, inputMode, active24HourEnds]);
+
+  const currentEditingAdjustedMap = useMemo(() => {
+    if (inputMode !== '24hour') return currentAdjustedMap;
+    const visibleEnds = new Set(active24HourEnds);
+    return Object.fromEntries(Object.entries(currentAdjustedMap).map(([areaName, timeline]) => [
+      areaName,
+      timeline.filter(point => visibleEnds.has(point.ft)),
+    ]));
+  }, [currentAdjustedMap, inputMode, active24HourEnds]);
 
   const updateCurrentMap = (edit: (previous: Record<string, TimeSeriesPoint[]>) => Record<string, TimeSeriesPoint[]>) => {
     if (showsAllPrefectures) {
@@ -136,6 +189,60 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
     } else {
       (viewMode === 'municipality' ? setAdjustedRainfall : setAdjustedSubdivisionRainfall)(edit);
     }
+  };
+
+  const update24HourPeriodEnd = (index: number, endFt: number) => {
+    const previous = active24HourEnds;
+    const next = previous.slice(0, index);
+    next[index] = endFt;
+    for (let nextIndex = index + 1; nextIndex < previous.length; nextIndex += 1) {
+      const minimumEnd = next[nextIndex - 1] + 24;
+      const existingEnd = previous[nextIndex];
+      const resolvedEnd = existingEnd >= minimumEnd && available24HourEnds.includes(existingEnd)
+        ? existingEnd
+        : available24HourEnds.find(candidate => candidate >= minimumEnd);
+      if (resolvedEnd === undefined) break;
+      next[nextIndex] = resolvedEnd;
+    }
+
+    const changedOldEnds = previous.slice(index).filter((oldEnd, offset) => next[index + offset] !== oldEnd);
+    const changedNewEnds = next.slice(index).filter((newEnd, offset) => previous[index + offset] !== newEnd);
+    const resetEnds = new Set([...changedOldEnds, ...changedNewEnds]);
+    if (resetEnds.size > 0) {
+      updateCurrentMap(previousMap => Object.fromEntries(Object.entries(previousMap).map(([areaName, timeline]) => {
+        const originals = new Map((currentOriginalMap[areaName] ?? []).map(point => [point.ft, point.value]));
+        return [areaName, timeline.map(point => resetEnds.has(point.ft) && originals.has(point.ft)
+          ? { ...point, value: originals.get(point.ft)! }
+          : point)];
+      })));
+    }
+    setSelected24HourEnds(next);
+    setSelectedCells(new Set());
+    setSelectionStart(null);
+    setIsSelecting(false);
+  };
+
+  const toggleAdditional24HourPeriod = () => {
+    if (active24HourEnds.length >= 3) {
+      const removedEnd = active24HourEnds[2];
+      updateCurrentMap(previousMap => Object.fromEntries(Object.entries(previousMap).map(([areaName, timeline]) => {
+        const original = currentOriginalMap[areaName]?.find(point => point.ft === removedEnd)?.value;
+        return [areaName, timeline.map(point => point.ft === removedEnd && original !== undefined
+          ? { ...point, value: original }
+          : point)];
+      })));
+      setSelected24HourEnds(active24HourEnds.slice(0, 2));
+      setSelectedCells(new Set());
+      return;
+    }
+
+    if (active24HourEnds.length === 0) {
+      if (available24HourEnds.length > 0) setSelected24HourEnds([available24HourEnds[0]]);
+      return;
+    }
+    const previousEnd = active24HourEnds[active24HourEnds.length - 1];
+    const nextEnd = available24HourEnds.find(endFt => endFt >= previousEnd + 24);
+    if (nextEnd !== undefined) setSelected24HourEnds([...active24HourEnds, nextEnd]);
   };
 
   useEffect(() => {
@@ -381,7 +488,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
         )
         : {};
       const aggregateAdjustments = inputMode === '24hour'
-        ? buildRainfallAdjustments(currentOriginalMap, currentAdjustedMap)
+        ? buildRainfallAdjustments(currentEditingOriginalMap, currentEditingAdjustedMap)
         : {};
 
       // 変更がない場合は何もせずに閉じる
@@ -423,15 +530,15 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
   // 修正数カウント
   const totalModifiedCount = useMemo(() => {
-    return countModifiedCells(currentOriginalMap, currentAdjustedMap);
-  }, [currentOriginalMap, currentAdjustedMap]);
-  const canRecalculate = Object.keys(currentOriginalMap).length > 0 && !scopeErrors[viewMode] && (usesAreaMaxFill || totalModifiedCount > 0);
+    return countModifiedCells(currentEditingOriginalMap, currentEditingAdjustedMap);
+  }, [currentEditingOriginalMap, currentEditingAdjustedMap]);
+  const canRecalculate = Object.keys(currentEditingOriginalMap).length > 0 && !scopeErrors[viewMode] && (usesAreaMaxFill || totalModifiedCount > 0);
 
 
   const modifiedCountInPrefecture = useMemo(() => {
-    const originalPrefectureData = showsAllPrefectures ? currentOriginalMap : groupRainfallByPrefecture(currentOriginalMap)[selectedPrefecture] || {};
+    const originalPrefectureData = showsAllPrefectures ? currentEditingOriginalMap : groupRainfallByPrefecture(currentEditingOriginalMap)[selectedPrefecture] || {};
     return countModifiedCells(originalPrefectureData, currentPrefectureData);
-  }, [showsAllPrefectures, currentOriginalMap, currentPrefectureData, selectedPrefecture]);
+  }, [showsAllPrefectures, currentEditingOriginalMap, currentPrefectureData, selectedPrefecture]);
 
   if (!isOpen) return null;
 
@@ -762,6 +869,21 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
               </button>
             </div>
 
+            {inputMode === '24hour' && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
+                <span>R24・Next24・NextNext24の始期を3時間刻みで選択できます。対象期間は重ならないように設定されます。</span>
+                {(active24HourEnds.length >= 3 || available24HourEnds.some(endFt => endFt >= (active24HourEnds[active24HourEnds.length - 1] ?? 0) + 24)) && (
+                  <button
+                    type="button"
+                    onClick={toggleAdditional24HourPeriod}
+                    style={{ padding: '5px 10px', border: '1px solid #1976D2', borderRadius: '4px', background: 'white', color: '#1976D2', cursor: 'pointer' }}
+                  >
+                    {active24HourEnds.length >= 3 ? 'NextNext24を非表示' : `${active24HourEnds.length === 1 ? 'Next24' : 'NextNext24'}を追加`}
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Excelライクな表 */}
             <div style={{
               flex: 1,
@@ -791,20 +913,53 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                     }}>
                       {viewMode === 'prefecture' ? '府県名' : viewMode === 'primary' ? '府県・一次細分名' : viewMode === 'municipality' ? '市町村名' : '市町村等をまとめた地域名'}
                     </th>
-                    {Object.keys(currentPrefectureData).length > 0 &&
-                      currentPrefectureData[Object.keys(currentPrefectureData)[0]]?.map(point => (
-                        <th key={point.ft} style={{
-                          padding: '10px 8px',
-                          borderRight: '1px solid #fff',
-                          textAlign: 'center',
-                          fontWeight: 'bold',
-                          minWidth: '80px'
-                        }}>
-                          {inputMode === '24hour'
-                            ? (point.ft === 24 ? '初期+24h' : point.ft === 48 ? '初期+48h' : `FT${point.ft}`)
-                            : `FT${point.ft}`}
-                        </th>
-                      ))}
+                    {inputMode === '24hour'
+                      ? active24HourEnds.map((endFt, index) => {
+                        const periodLabel = ['R24', 'Next24', 'NextNext24'][index];
+                        const minimumEnd = index === 0 ? 24 : active24HourEnds[index - 1] + 24;
+                        const options = available24HourEnds.filter(candidate => candidate >= minimumEnd);
+                        return (
+                          <th key={periodLabel} style={{
+                            padding: '8px',
+                            borderRight: '1px solid #fff',
+                            textAlign: 'center',
+                            fontWeight: 'bold',
+                            minWidth: '170px'
+                          }}>
+                            <div style={{ marginBottom: '6px' }}>{periodLabel}</div>
+                            <label style={{ display: 'block', fontSize: '11px', fontWeight: 'normal' }}>
+                              始期
+                              <select
+                                aria-label={`${periodLabel}の24時間雨量の始期`}
+                                value={endFt}
+                                onChange={event => update24HourPeriodEnd(index, Number(event.target.value))}
+                                style={{ display: 'block', width: '100%', marginTop: '3px', padding: '5px', fontSize: '12px' }}
+                              >
+                                {options.map(optionEnd => (
+                                  <option key={optionEnd} value={optionEnd}>
+                                    初期時刻 + {optionEnd - 24}時間
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <div style={{ marginTop: '4px', fontSize: '11px', fontWeight: 'normal' }}>
+                              初期+{endFt - 24}h ～ 初期+{endFt}h
+                            </div>
+                          </th>
+                        );
+                      })
+                      : Object.keys(currentPrefectureData).length > 0 &&
+                        currentPrefectureData[Object.keys(currentPrefectureData)[0]]?.map(point => (
+                          <th key={point.ft} style={{
+                            padding: '10px 8px',
+                            borderRight: '1px solid #fff',
+                            textAlign: 'center',
+                            fontWeight: 'bold',
+                            minWidth: '80px'
+                          }}>
+                            {`FT${point.ft}`}
+                          </th>
+                        ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -889,7 +1044,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
               <strong>操作方法:</strong>
               数値欄をクリックして直接編集 | 数値欄以外をクリック=単一選択 | ドラッグ=範囲選択 | Ctrl+クリック=複数選択 | Shift+クリック=範囲拡張
               {inputMode === '24hour' && (
-                <> | 24時間合計は初期+24h と 初期+48h の2区間を編集</>
+                <> | 始期は3時間刻みで選択、各期間は重ならないように連動</>
               )}
             </div>
 
