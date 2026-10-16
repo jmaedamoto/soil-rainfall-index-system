@@ -7,7 +7,7 @@ export interface CellSelection {
 
 export type RainfallMap = Record<string, TimeSeriesPoint[]>;
 
-export type RainfallViewMode = 'municipality' | 'subdivision';
+export type RainfallViewMode = 'municipality' | 'subdivision' | 'primary' | 'prefecture';
 
 export type InputMode = '3hour' | '24hour';
 
@@ -19,3 +19,5 @@ export type AdjustmentMode =
   | 'ratio_24hour_uniform'
   | 'fill_24hour_peak_mesh'
   | 'ratio_24hour_peak_mesh';
+
+export type ScopeRainfall = Partial<Record<RainfallViewMode, Record<InputMode, RainfallMap>>>;

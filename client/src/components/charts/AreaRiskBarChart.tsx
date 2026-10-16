@@ -69,7 +69,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
         });
       }
     } else if (viewMode === 'subdivision') {
-      // 二次細分別表示
+      // 市町村等をまとめた地域別表示
       const selectedPref = prefectures.find(p => p.code === selectedPrefecture);
       if (selectedPref && selectedPref.secondary_subdivisions) {
         rows = selectedPref.secondary_subdivisions.map(subdiv => ({
@@ -172,7 +172,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
         )}
 
         {/* 表示モード切り替え */}
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
           <label style={{ fontWeight: 'bold' }}>表示:</label>
           <button
             onClick={() => handleViewModeChange('municipality')}
@@ -200,7 +200,7 @@ const AreaRiskBarChart: React.FC<AreaRiskBarChartProps> = ({
               fontWeight: viewMode === 'subdivision' ? 'bold' : 'normal'
             }}
           >
-            二次細分別
+            市町村等をまとめた地域別
           </button>
           <button
             onClick={() => handleViewModeChange('prefecture-all')}

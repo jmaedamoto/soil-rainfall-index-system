@@ -60,12 +60,13 @@ export const buildRainfallAdjustments = (
     const originalTimeseries = originalData[areaName];
     if (!originalTimeseries) return;
 
-    const hasChange = timeseries.some(
-      (point, index) => Math.abs(point.value - originalTimeseries[index].value) > 0.01
-    );
+    const changedPoints = timeseries.filter(point => {
+      const original = originalTimeseries.find(candidate => candidate.ft === point.ft);
+      return original !== undefined && Math.abs(point.value - original.value) > 0.01;
+    });
 
-    if (hasChange) {
-      adjustments[areaName] = timeseries;
+    if (changedPoints.length > 0) {
+      adjustments[areaName] = changedPoints;
     }
   });
 

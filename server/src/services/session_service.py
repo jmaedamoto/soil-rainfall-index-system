@@ -225,7 +225,8 @@ class SessionService:
         adjustments: Dict[str, List[Dict]],
         recalculated_meshes: Dict[str, Dict],
         input_mode: str = '3hour',
-        adjustment_mode: str = 'ratio_3hour'
+        adjustment_mode: str = 'ratio_3hour',
+        adjustment_scope: str = 'municipality'
     ) -> Optional[str]:
         """
         フォークセッションを作成（編集用）
@@ -271,6 +272,7 @@ class SessionService:
                 'risk_rule': base_session.get('risk_rule', 'legacy'),
                 'input_mode': input_mode,
                 'adjustment_mode': adjustment_mode,
+                'adjustment_scope': adjustment_scope,
                 'created_at': now,
                 'expires_at': expires_at,
                 'last_accessed': now
@@ -485,7 +487,7 @@ class SessionService:
                         for ft in sorted(ft_max_risk.keys())
                     ]
 
-            # 影響を受けた府県のみ二次細分・府県タイムラインを再集約
+            # 影響を受けた府県のみ市町村等をまとめた地域・府県タイムラインを再集約
             for pref_code in affected_prefs:
                 prefecture = merged_prefectures[pref_code]
 
@@ -495,10 +497,10 @@ class SessionService:
                     if pc == pref_code
                 )
 
-                # 二次細分別リスクタイムライン再集約（影響を受けたエリアを含む二次細分のみ）
+                # 市町村等をまとめた地域別リスクタイムライン再集約（影響を受けたエリアを含む市町村等をまとめた地域のみ）
                 for subdiv in prefecture.get('secondary_subdivisions', []):
                     subdiv_area_names = set(subdiv.get('area_names', []))
-                    # この二次細分が影響を受けたエリアを含むかチェック
+                    # この市町村等をまとめた地域が影響を受けたエリアを含むかチェック
                     if subdiv_area_names & affected_area_names:
                         ft_max_risk = {}
                         for area_name in subdiv.get('area_names', []):
@@ -544,6 +546,7 @@ class SessionService:
             'guidance_type': fork_session.get('guidance_type', base_session.get('guidance_type', 'msm')),
             'risk_rule': fork_session.get('risk_rule', base_session.get('risk_rule', 'legacy')),
             'input_mode': fork_session.get('input_mode', base_session.get('input_mode', '3hour')),
+            'adjustment_scope': fork_session.get('adjustment_scope', 'municipality'),
             'adjustment_mode': fork_session.get('adjustment_mode', base_session.get('adjustment_mode', 'ratio_3hour')),
             'created_at': fork_session['created_at'],
             'expires_at': fork_session['expires_at'],

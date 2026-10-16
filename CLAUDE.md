@@ -18,6 +18,13 @@
 
 ## プロジェクト概要
 
+一次細分区域と市町村等をまとめた地域の全国対応表は
+`server/config/forecast_area_hierarchy.json`、説明と更新手順は
+`server/config/FORECAST_AREA_HIERARCHY.md` にあります。雨量調整の「一次細分ごと」はこの設定を
+利用します。「一次細分ごと」「府県ごと」はセッション内の全府県を同時表示し、
+府県選択を使いません。3時間・24時間入力に対応し、補正基準は選択した地域全体で算出します。
+詳細は `RAINFALL_ADJUSTMENT_FEATURE.md` を参照してください。
+
 ExcelのVBA（Visual Basic for Applications）で実装されていた土壌雨量指数計算システムを、PythonのWeb APIに変換するプロジェクトです。
 
 ### 変換対象
@@ -651,30 +658,30 @@ const buildIsoString = (date: string, hour: number): string => {
 - 開発環境用ローカルbinファイルパスを設定
 - 本番環境ではファイルが存在しないため無効（安全設計）
 
-### ✅ **二次細分区域の雨量調整展開**
+### ✅ **市町村等をまとめた地域の雨量調整展開**
 
-二次細分区域単位で雨量調整した場合、配下の市町村すべてに自動展開されるよう改善しました。
+市町村等をまとめた地域単位で雨量調整した場合、配下の市町村すべてに自動展開されるよう改善しました。
 
 #### **修正内容**
 
 **server/src/api/controllers/session_controller.py**:
-- 二次細分名→市町村名リストのマッピングを構築
-- 二次細分キーの調整を配下の市町村キーに展開
+- 市町村等をまとめた地域名→市町村名リストのマッピングを構築
+- 市町村等をまとめた地域キーの調整を配下の市町村キーに展開
 - 展開されたキーで各メッシュの雨量調整を適用
 
 ### ✅ **フォークセッションのリスクタイムライン再集約**
 
-メッシュの雨量調整後、エリア・二次細分・府県レベルのリスクタイムラインが正しく再集約されるよう修正しました。
+メッシュの雨量調整後、エリア・市町村等をまとめた地域・府県レベルのリスクタイムラインが正しく再集約されるよう修正しました。
 
 #### **問題**
-フォークセッションでメッシュを再計算後、上位レベル（エリア・二次細分・府県）のリスクタイムラインがベースセッションの値のまま更新されなかった。
+フォークセッションでメッシュを再計算後、上位レベル（エリア・市町村等をまとめた地域・府県）のリスクタイムラインがベースセッションの値のまま更新されなかった。
 
 #### **修正内容**
 
 **server/src/services/session_service.py** - `_merge_fork_with_base`メソッド:
 - 再計算済みメッシュの`risk_hourly_timeline`をマージデータに反映
 - エリア別リスクタイムライン再集約（配下メッシュの最大値）
-- 二次細分別リスクタイムライン再集約（配下エリアの最大値）
+- 市町村等をまとめた地域別リスクタイムライン再集約（配下エリアの最大値）
 - 府県全体リスクタイムライン再集約（全エリアの最大値）
 
 **server/src/api/controllers/session_controller.py**:
@@ -687,7 +694,7 @@ const buildIsoString = (date: string, hour: number): string => {
 - `client/src/services/api.ts` - 未使用コード削除
 - `client/src/types/api.ts` - 未使用型定義削除
 - `server/src/api/controllers/main_controller.py` - ローカルフォールバック追加
-- `server/src/api/controllers/session_controller.py` - 二次細分展開・risk_hourly追加
+- `server/src/api/controllers/session_controller.py` - 市町村等をまとめた地域展開・risk_hourly追加
 - `server/src/services/main_service.py` - フォールバックパラメータ追加
 - `server/src/services/session_service.py` - リスクタイムライン再集約
 
@@ -784,7 +791,7 @@ if session.get('is_fork'):
 **server/src/services/session_service.py** - `_merge_fork_with_base()`:
 - 再計算メッシュ適用時に影響を受けたエリアを`affected_areas`に記録
 - エリア再集約: 影響を受けたエリアのみ
-- 二次細分再集約: 影響を受けたエリアを含む二次細分のみ
+- 市町村等をまとめた地域再集約: 影響を受けたエリアを含む市町村等をまとめた地域のみ
 - 府県再集約: 影響を受けた府県のみ
 - 処理範囲をログ出力
 

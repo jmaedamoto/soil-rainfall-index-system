@@ -1,6 +1,6 @@
 import type { Mesh, RiskRule } from './api';
 import type { TimeSeriesPoint, RiskTimePoint } from './api';
-import type { AdjustmentMode, InputMode } from '../features/rainfall-adjustment/types';
+import type { AdjustmentMode, InputMode, RainfallViewMode, ScopeRainfall } from '../features/rainfall-adjustment/types';
 import type { RegionCode } from '../features/production-session/regions';
 
 export interface SessionInfo {
@@ -90,6 +90,9 @@ export interface MeshDetailResponse {
 }
 
 export interface RainfallDataResponse {
+  adjustment_scope?: RainfallViewMode;
+  scope_rainfall?: ScopeRainfall;
+  scope_errors?: Partial<Record<RainfallViewMode, string>>;
   area_rainfall: Record<string, TimeSeriesPoint[]>;
   subdivision_rainfall: Record<string, TimeSeriesPoint[]>;
   area_rainfall_24hour?: Record<string, TimeSeriesPoint[]>;
@@ -109,6 +112,7 @@ export interface RecalculateResponse {
 }
 
 export interface RecalculateRequest {
+  adjustment_scope?: RainfallViewMode;
   adjustments: Record<string, Array<{ ft: number; value: number }>>;
   aggregate_adjustments?: Record<string, Array<{ ft: number; value: number }>>;
   input_mode?: InputMode;

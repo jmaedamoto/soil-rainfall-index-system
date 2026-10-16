@@ -352,14 +352,14 @@ class TestController:
                     
                     pref_result["areas"].append(area_result)
 
-                # 二次細分ごとの集約計算
+                # 市町村等をまとめた地域ごとの集約計算
                 for subdivision in prefecture.secondary_subdivisions:
                     self.main_service.calculation_service.calc_secondary_subdivision_aggregates(subdivision)
 
                 # 府県全体の集約計算
                 self.main_service.calculation_service.calc_prefecture_aggregates(prefecture)
 
-                # 二次細分データをレスポンスに追加
+                # 市町村等をまとめた地域データをレスポンスに追加
                 pref_result["secondary_subdivisions"] = [
                     {
                         "name": subdiv.name,
@@ -395,7 +395,7 @@ class TestController:
                 ]
 
                 results[prefecture.code] = pref_result
-                logger.info(f"完了: {prefecture.name} - {len(pref_result['areas'])}エリア, {len(pref_result.get('secondary_subdivisions', []))}二次細分")
+                logger.info(f"完了: {prefecture.name} - {len(pref_result['areas'])}エリア, {len(pref_result.get('secondary_subdivisions', []))}市町村等をまとめた地域")
             
             total_time = time.time() - start_time
             logger.info(f"全処理完了: 総メッシュ数={total_meshes}, 処理成功={processed_meshes}, 処理時間={total_time:.2f}秒")
@@ -483,7 +483,7 @@ class TestController:
                 for area in prefecture.areas:
                     area.risk_timeline = self.main_service.calculation_service.calc_risk_timeline(area.meshes)
 
-                # 二次細分ごとの集約計算
+                # 市町村等をまとめた地域ごとの集約計算
                 for subdivision in prefecture.secondary_subdivisions:
                     self.main_service.calculation_service.calc_secondary_subdivision_aggregates(subdivision)
 

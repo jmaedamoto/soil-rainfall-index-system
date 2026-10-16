@@ -28,7 +28,7 @@ export interface Mesh {
 
 export interface Area {
   name: string;  // 地域名（市町村名）
-  secondary_subdivision_name?: string;  // 所属する二次細分名
+  secondary_subdivision_name?: string;  // 所属する市町村等をまとめた地域名
   meshes: Mesh[];  // メッシュデータ
   risk_timeline: RiskTimePoint[];  // リスク時系列
   swi_timeline?: TimeSeriesPoint[];  // 領域内のSWI最大値
@@ -36,19 +36,19 @@ export interface Area {
 }
 
 export interface SecondarySubdivision {
-  name: string;  // 二次細分名（例：「阪神」「播磨北西部」）
+  name: string;  // 市町村等をまとめた地域名（例：「阪神」「播磨北西部」）
   area_names: string[];  // 所属市町村名リスト
-  rain_1hour_max_timeline: TimeSeriesPoint[];  // 二次細分内の最大1時間雨量
-  rain_3hour_timeline: TimeSeriesPoint[];  // 二次細分内の最大3時間雨量
-  risk_timeline: RiskTimePoint[];  // 二次細分内の最大リスク
-  swi_timeline?: TimeSeriesPoint[];  // 二次細分内のSWI最大値
+  rain_1hour_max_timeline: TimeSeriesPoint[];  // 市町村等をまとめた地域内の最大1時間雨量
+  rain_3hour_timeline: TimeSeriesPoint[];  // 市町村等をまとめた地域内の最大3時間雨量
+  risk_timeline: RiskTimePoint[];  // 市町村等をまとめた地域内の最大リスク
+  swi_timeline?: TimeSeriesPoint[];  // 市町村等をまとめた地域内のSWI最大値
 }
 
 export interface Prefecture {
   name: string;  // 都道府県名
   code: string;  // 都道府県コード
   areas: Area[];  // 地域データ（市町村）
-  secondary_subdivisions?: SecondarySubdivision[];  // 二次細分リスト
+  secondary_subdivisions?: SecondarySubdivision[];  // 市町村等をまとめた地域リスト
   prefecture_rain_1hour_max_timeline?: TimeSeriesPoint[];  // 府県全体の最大1時間雨量
   prefecture_rain_3hour_timeline?: TimeSeriesPoint[];  // 府県全体の最大3時間雨量
   prefecture_risk_timeline?: RiskTimePoint[];  // 府県全体の最大リスク
