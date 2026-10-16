@@ -417,7 +417,7 @@ class DataService:
             vba_swi_data = all_vba_swi_data.get(pref_code)
 
             # pandas vectorized operations を使用
-            # 第1列: 二次細分名、第2列: 市町村名、第3列: メッシュコード
+            # 第1列: 市町村等をまとめた地域名、第2列: 市町村名、第3列: メッシュコード
             subdivision_names = dosha_data.iloc[:, 0].astype(str).str.strip().values
             area_names = dosha_data.iloc[:, 1].astype(str).str.strip().values
             mesh_codes = dosha_data.iloc[:, 2].astype(str).values
@@ -478,7 +478,7 @@ class DataService:
             # OrderedDictを使用してCSV出現順を保持
             meshes = []
             area_dict = OrderedDict()
-            subdivision_dict = OrderedDict()  # 二次細分用
+            subdivision_dict = OrderedDict()  # 市町村等をまとめた地域用
 
             # zip()を使った効率的なイテレーション
             for code, subdivision_name, area_name, coord, idx, adv, warn, dosa, level4_curve in zip(
@@ -537,7 +537,7 @@ class DataService:
                     logger.warning(f"Error creating mesh: {e}")
                     continue
 
-            # 二次細分構造を構築（CSV出現順を保持）
+            # 市町村等をまとめた地域構造を構築（CSV出現順を保持）
             for area in area_dict.values():
                 subdiv_name = area.secondary_subdivision_name
                 if subdiv_name not in subdivision_dict:

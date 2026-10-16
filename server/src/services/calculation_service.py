@@ -987,7 +987,7 @@ class CalculationService:
 
     def calc_secondary_subdivision_aggregates(self, subdivision: SecondarySubdivision):
         """
-        二次細分内の集約データを計算
+        市町村等をまとめた地域内の集約データを計算
         - 最大1時間雨量タイムライン
         - 最大3時間雨量タイムライン
         - 最大リスクタイムライン
@@ -1016,7 +1016,7 @@ class CalculationService:
             )
 
         except Exception as e:
-            logger.error(f"二次細分集約エラー ({subdivision.name}): {e}")
+            logger.error(f"市町村等をまとめた地域集約エラー ({subdivision.name}): {e}")
 
     def calc_prefecture_aggregates(self, prefecture: Prefecture):
         """

@@ -239,7 +239,7 @@ class RainfallAdjustmentService:
         prefectures_dict: Dict[str, Any]
     ) -> Tuple[Dict[str, List[Dict[str, float]]], Dict[str, List[Dict[str, float]]]]:
         """
-        セッション辞書形式データから、市町村別・二次細分別の24時間代表雨量を集計する。
+        セッション辞書形式データから、市町村別・市町村等をまとめた地域別の24時間代表雨量を集計する。
 
         各領域では、各メッシュの24時間合計を求めたうえで最大値を代表値とする。
         """
@@ -383,10 +383,10 @@ class RainfallAdjustmentService:
         guidance_grib2: Dict[str, Any]
     ) -> Dict[str, List[Dict[str, float]]]:
         """
-        二次細分ごとの雨量時系列を抽出
+        市町村等をまとめた地域ごとの雨量時系列を抽出
 
-        各二次細分の全メッシュから雨量データを収集し、
-        時刻（FT）ごとに最大値を取得して二次細分の代表値とする
+        各市町村等をまとめた地域の全メッシュから雨量データを収集し、
+        時刻（FT）ごとに最大値を取得して市町村等をまとめた地域の代表値とする
 
         Args:
             prefectures: 都道府県データリスト
@@ -402,7 +402,7 @@ class RainfallAdjustmentService:
                 ...
             }
         """
-        logger.info("二次細分別雨量時系列の抽出開始")
+        logger.info("市町村等をまとめた地域別雨量時系列の抽出開始")
         subdivision_rainfall = {}
 
         # FT値の範囲を取得
@@ -415,13 +415,13 @@ class RainfallAdjustmentService:
                 continue
 
             for subdivision in prefecture.secondary_subdivisions:
-                # 二次細分の一意キー
+                # 市町村等をまとめた地域の一意キー
                 subdiv_key = f"{prefecture.name}_{subdivision.name}"
 
                 # 各FTごとの最大雨量を収集
                 ft_max_values = {ft: 0.0 for ft in ft_list}
 
-                # 二次細分内の全市町村のメッシュから雨量を収集
+                # 市町村等をまとめた地域内の全市町村のメッシュから雨量を収集
                 for area in subdivision.areas:
                     for mesh in area.meshes:
                         # メッシュの3時間雨量を取得
@@ -438,7 +438,7 @@ class RainfallAdjustmentService:
                     for ft in sorted(ft_list)
                 ]
 
-        logger.info(f"二次細分別雨量時系列抽出完了: {len(subdivision_rainfall)}二次細分")
+        logger.info(f"市町村等をまとめた地域別雨量時系列抽出完了: {len(subdivision_rainfall)}市町村等をまとめた地域")
         return subdivision_rainfall
 
     def adjust_guidance_data_by_area_ratios(

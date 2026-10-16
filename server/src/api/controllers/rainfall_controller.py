@@ -166,7 +166,7 @@ class RainfallController:
                 prefectures, guidance_grib2
             )
 
-            # 二次細分別雨量時系列を抽出
+            # 市町村等をまとめた地域別雨量時系列を抽出
             subdivision_rainfall = self.rainfall_service.extract_subdivision_rainfall_timeseries(
                 prefectures, guidance_grib2
             )
@@ -323,11 +323,11 @@ class RainfallController:
             # 地域データ構築
             prefectures = self.data_service.prepare_areas()
 
-            # 調整対象の市町村/二次細分キーセットを作成
+            # 調整対象の市町村/市町村等をまとめた地域キーセットを作成
             adjusted_area_keys = set(converted_adjustments.keys())
-            logger.info(f"調整対象市町村/二次細分: {len(adjusted_area_keys)}件")
+            logger.info(f"調整対象市町村/市町村等をまとめた地域: {len(adjusted_area_keys)}件")
 
-            # 調整対象メッシュコードを収集（市町村別と二次細分別の両方に対応）
+            # 調整対象メッシュコードを収集（市町村別と市町村等をまとめた地域別の両方に対応）
             adjusted_mesh_codes = set()
             adjusted_municipality_keys = set()  # 市町村キーを保存
 
@@ -340,11 +340,11 @@ class RainfallController:
                         for mesh in area.meshes:
                             adjusted_mesh_codes.add(mesh.code)
 
-                # 二次細分別の調整を確認
+                # 市町村等をまとめた地域別の調整を確認
                 for subdivision in prefecture.secondary_subdivisions:
                     subdiv_key = f"{prefecture.name}_{subdivision.name}"
                     if subdiv_key in adjusted_area_keys:
-                        # この二次細分に所属する全市町村を追加
+                        # この市町村等をまとめた地域に所属する全市町村を追加
                         for area in subdivision.areas:
                             area_key = f"{prefecture.name}_{area.name}"
                             adjusted_municipality_keys.add(area_key)

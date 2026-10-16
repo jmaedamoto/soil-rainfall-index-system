@@ -66,6 +66,14 @@ Excel VBAで運用されていた土壌雨量指数計算を、Python/Flask API 
 
 ## 雨量調整
 
+一次細分区域と市町村等をまとめた地域の全国対応表は
+`server/config/forecast_area_hierarchy.json`、説明と更新手順は
+`server/config/FORECAST_AREA_HIERARCHY.md` にあります。雨量調整の「一次細分ごと」はこの設定を
+利用します。「一次細分ごと」「府県ごと」はセッション内の全府県を同時表示し、
+府県選択を使いません。3時間・24時間入力に対応し、補正基準は選択した地域全体で算出します。
+詳細は `RAINFALL_ADJUSTMENT_FEATURE.md` を参照してください。
+
+
 本番クライアントはセッションベースの雨量調整を使います。
 
 - 入力モード: 3時間雨量、24時間合計雨量

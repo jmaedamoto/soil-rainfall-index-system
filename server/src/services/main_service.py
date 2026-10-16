@@ -268,7 +268,7 @@ class MainService:
         return total_meshes
 
     def _aggregate_risk_timelines(self, prefectures, risk_rule: str = "legacy") -> None:
-        """エリア・二次細分・府県単位の集約を実行する"""
+        """エリア・市町村等をまとめた地域・府県単位の集約を実行する"""
         logger.info("リスクタイムライン計算開始")
         risk_start = time.time()
 

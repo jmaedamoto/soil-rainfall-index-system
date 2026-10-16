@@ -107,22 +107,13 @@ class SessionAPIClient {
    * 雨量調整用の雨量データ取得
    */
   async getRainfallData(sessionId: string): Promise<RainfallDataResponse> {
-    const response = await axios.get<{
-      status: string;
-      area_rainfall: RainfallDataResponse['area_rainfall'];
-      subdivision_rainfall: RainfallDataResponse['subdivision_rainfall'];
-      area_orders?: RainfallDataResponse['area_orders'];
-      subdivision_orders?: RainfallDataResponse['subdivision_orders'];
-      area_rainfall_24hour?: RainfallDataResponse['area_rainfall_24hour'];
-      subdivision_rainfall_24hour?: RainfallDataResponse['subdivision_rainfall_24hour'];
-      guidance_type?: RainfallDataResponse['guidance_type'];
-      risk_rule?: RainfallDataResponse['risk_rule'];
-      input_mode?: RainfallDataResponse['input_mode'];
-      adjustment_mode?: RainfallDataResponse['adjustment_mode'];
-    }>(
+    const response = await axios.get<RainfallDataResponse & { status: string }>(
       `${this.apiBaseUrl}/session/${sessionId}/rainfall-data`
     );
     return {
+      adjustment_scope: response.data.adjustment_scope,
+      scope_rainfall: response.data.scope_rainfall,
+      scope_errors: response.data.scope_errors,
       area_rainfall: response.data.area_rainfall,
       subdivision_rainfall: response.data.subdivision_rainfall,
       area_orders: response.data.area_orders,
@@ -149,7 +140,8 @@ class SessionAPIClient {
     guidanceInitial: string,
     dataSource: string,
     guidanceType?: RecalculateRequest['guidance_type'],
-    riskRule?: RecalculateRequest['risk_rule']
+    riskRule?: RecalculateRequest['risk_rule'],
+    adjustmentScope?: RecalculateRequest['adjustment_scope']
   ): Promise<RecalculateResponse> {
     const response = await axios.post<{
       status: string;
@@ -165,6 +157,7 @@ class SessionAPIClient {
       {
         adjustments,
         aggregate_adjustments: aggregateAdjustments,
+        adjustment_scope: adjustmentScope,
         input_mode: inputMode,
         adjustment_mode: adjustmentMode,
         swi_initial: swiInitial,
