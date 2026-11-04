@@ -8,6 +8,7 @@ import {
   buildIsoStringFromJst,
   getDefaultJstSelection,
   getGuidanceHourOptions,
+  getLatestAvailableJstSelection,
   MSM_HOUR_OPTIONS,
 } from '../features/production-session/utils/dateTime';
 import {
@@ -80,17 +81,16 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
     setGuidanceHour(defaultSelection.hour);
   }, []);
 
-  useEffect(() => {
-    const guidanceOptions = getGuidanceHourOptions(guidanceType);
-
-    if (!guidanceOptions.includes(guidanceHour)) {
-      const defaultSelection = getDefaultJstSelection(guidanceType);
-      setGuidanceHour(defaultSelection.hour);
-      if (!guidanceDate) {
-        setGuidanceDate(defaultSelection.date);
-      }
-    }
-  }, [guidanceDate, guidanceHour, guidanceType]);
+  const handleGuidanceTypeChange = (nextType: 'msm' | 'gsm') => {
+    const correctedSelection = getLatestAvailableJstSelection(
+      guidanceDate,
+      guidanceHour,
+      nextType,
+    );
+    setGuidanceType(nextType);
+    setGuidanceDate(correctedSelection.date);
+    setGuidanceHour(correctedSelection.hour);
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (!sessionInfo) return;
@@ -200,7 +200,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
                 name="guidanceType"
                 value="msm"
                 checked={guidanceType === 'msm'}
-                onChange={() => setGuidanceType('msm')}
+                onChange={() => handleGuidanceTypeChange('msm')}
               />
               MSM
             </label>
@@ -210,7 +210,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
                 name="guidanceType"
                 value="gsm"
                 checked={guidanceType === 'gsm'}
-                onChange={() => setGuidanceType('gsm')}
+                onChange={() => handleGuidanceTypeChange('gsm')}
               />
               GSM
             </label>
