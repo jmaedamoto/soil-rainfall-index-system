@@ -10,6 +10,29 @@ export const getGuidanceHourOptions = (guidanceType: 'msm' | 'gsm'): number[] =>
   return guidanceType === 'gsm' ? GSM_HOUR_OPTIONS : MSM_HOUR_OPTIONS;
 };
 
+export const getLatestAvailableJstSelection = (
+  date: string,
+  hour: number,
+  guidanceType: 'msm' | 'gsm'
+): DefaultDateTimeSelection => {
+  const allowedHours = getGuidanceHourOptions(guidanceType);
+  const previousAllowedHour = [...allowedHours].reverse().find(candidate => candidate <= hour);
+  if (previousAllowedHour !== undefined && date) {
+    return { date, hour: previousAllowedHour };
+  }
+
+  if (!date) return getDefaultJstSelection(guidanceType);
+
+  const selectedDate = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(selectedDate.getTime())) return getDefaultJstSelection(guidanceType);
+  selectedDate.setUTCDate(selectedDate.getUTCDate() - 1);
+
+  return {
+    date: `${selectedDate.getUTCFullYear()}-${(selectedDate.getUTCMonth() + 1).toString().padStart(2, '0')}-${selectedDate.getUTCDate().toString().padStart(2, '0')}`,
+    hour: allowedHours[allowedHours.length - 1],
+  };
+};
+
 export const buildIsoStringFromJst = (date: string, hour: number): string => {
   if (!date) return '';
   const jstDate = new Date(`${date}T${hour.toString().padStart(2, '0')}:00:00+09:00`);
