@@ -53,7 +53,6 @@ class SessionService:
         guidance_initial_time: str,
         calculation_time: str,
         guidance_type: str,
-        risk_rule: str,
         cache_key: Optional[str],
     ) -> Dict[str, Any]:
         now = datetime.now()
@@ -64,7 +63,6 @@ class SessionService:
             'swi_initial_time': swi_initial_time,
             'guidance_initial_time': guidance_initial_time,
             'guidance_type': guidance_type,
-            'risk_rule': risk_rule,
             'input_mode': '3hour',
             'adjustment_mode': 'ratio_3hour',
             'calculation_time': calculation_time,
@@ -88,7 +86,6 @@ class SessionService:
             'swi_initial_time': summary['swi_initial_time'],
             'guidance_initial_time': summary['guidance_initial_time'],
             'guidance_type': summary.get('guidance_type', 'msm'),
-            'risk_rule': summary.get('risk_rule', 'legacy'),
             'input_mode': '3hour',
             'adjustment_mode': 'ratio_3hour',
             'calculation_time': calculation_time,
@@ -135,7 +132,6 @@ class SessionService:
             "swi_initial_time": session_data['swi_initial_time'],
             "guidance_initial_time": session_data['guidance_initial_time'],
             "guidance_type": session_data.get('guidance_type', 'msm'),
-            "risk_rule": session_data.get('risk_rule', 'legacy'),
             "calculation_time": session_data.get('calculation_time'),
         }
         self._write_json_atomic(ref_path, payload)
@@ -191,7 +187,6 @@ class SessionService:
             ref_data['guidance_initial_time'],
             ref_data.get('calculation_time') or datetime.now().isoformat(),
             ref_data.get('guidance_type', 'msm'),
-            ref_data.get('risk_rule', 'legacy'),
             cache_key,
         )
 
@@ -233,7 +228,6 @@ class SessionService:
         guidance_initial_time: str,
         calculation_time: str,
         guidance_type: str = 'msm',
-        risk_rule: str = 'legacy',
         cache_key: Optional[str] = None
     ) -> str:
         """
@@ -255,7 +249,6 @@ class SessionService:
             guidance_initial_time,
             calculation_time,
             guidance_type,
-            risk_rule,
             cache_key,
         )
 
@@ -344,7 +337,6 @@ class SessionService:
                 'swi_initial_time': base_session['swi_initial_time'],
                 'guidance_initial_time': base_session['guidance_initial_time'],
                 'guidance_type': base_session.get('guidance_type', 'msm'),
-                'risk_rule': base_session.get('risk_rule', 'legacy'),
                 'input_mode': input_mode,
                 'adjustment_mode': adjustment_mode,
                 'adjustment_scope': adjustment_scope,
@@ -619,7 +611,6 @@ class SessionService:
             'swi_initial_time': fork_session['swi_initial_time'],
             'guidance_initial_time': fork_session['guidance_initial_time'],
             'guidance_type': fork_session.get('guidance_type', base_session.get('guidance_type', 'msm')),
-            'risk_rule': fork_session.get('risk_rule', base_session.get('risk_rule', 'legacy')),
             'input_mode': fork_session.get('input_mode', base_session.get('input_mode', '3hour')),
             'adjustment_scope': fork_session.get('adjustment_scope', 'municipality'),
             'adjustment_mode': fork_session.get('adjustment_mode', base_session.get('adjustment_mode', 'ratio_3hour')),
@@ -720,7 +711,6 @@ class SessionService:
             'swi_initial_time': session['swi_initial_time'],
             'guidance_initial_time': session['guidance_initial_time'],
             'guidance_type': session.get('guidance_type', 'msm'),
-            'risk_rule': session.get('risk_rule', 'legacy'),
             'input_mode': session.get('input_mode', '3hour'),
             'adjustment_mode': session.get('adjustment_mode', 'ratio_3hour'),
             'prefecture_count': len(session['prefectures']),

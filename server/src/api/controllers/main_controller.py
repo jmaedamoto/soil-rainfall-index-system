@@ -172,7 +172,6 @@ class MainController:
         swi_initial,
         guidance_initial,
         guidance_type: str,
-        risk_rule: str,
         region: str,
         swi_url: str,
         guidance_url: str,
@@ -184,7 +183,6 @@ class MainController:
             "swi_initial_time": swi_initial.isoformat() + 'Z',
             "guidance_initial_time": guidance_initial.isoformat() + 'Z',
             "guidance_type": guidance_type,
-            "risk_rule": risk_rule,
             "region": region,
             "available_prefectures": list(prefectures.keys()),
             "available_prefecture_details": self._build_available_prefecture_details(
@@ -197,7 +195,6 @@ class MainController:
                 "guidance_url": guidance_url,
                 "guidance_initial_time": guidance_initial.isoformat() + 'Z',
                 "guidance_type": guidance_type,
-                "risk_rule": risk_rule,
                 "region": region,
             }
         })
@@ -208,7 +205,6 @@ class MainController:
         swi_initial,
         guidance_initial,
         guidance_type: str,
-        risk_rule: str,
         region: str,
         cache_key: str,
         swi_url: str,
@@ -229,7 +225,6 @@ class MainController:
                 guidance_initial.isoformat(),
                 datetime.now().isoformat(),
                 guidance_type,
-                risk_rule,
                 cache_key,
             )
             return self._build_lightweight_session_response(
@@ -238,7 +233,6 @@ class MainController:
                 swi_initial,
                 guidance_initial,
                 guidance_type,
-                risk_rule,
                 region,
                 swi_url,
                 guidance_url,
@@ -246,14 +240,12 @@ class MainController:
 
         cached_result["status"] = "success"
         cached_result["guidance_type"] = guidance_type
-        cached_result["risk_rule"] = risk_rule
         cached_result["used_urls"] = {
             "swi_url": swi_url,
             "swi_initial_time": swi_initial.isoformat() + 'Z',
             "guidance_url": guidance_url,
             "guidance_initial_time": guidance_initial.isoformat() + 'Z',
             "guidance_type": guidance_type,
-            "risk_rule": risk_rule,
             "region": region,
         }
         return jsonify(cached_result)
@@ -264,7 +256,6 @@ class MainController:
         swi_initial,
         guidance_initial,
         guidance_type: str,
-        risk_rule: str,
         region: str,
         cache_key: str,
         swi_url: str,
@@ -282,7 +273,6 @@ class MainController:
                 "swi_initial_time": swi_initial.isoformat() + 'Z',
                 "guidance_initial_time": guidance_initial.isoformat() + 'Z',
                 "guidance_type": guidance_type,
-                "risk_rule": risk_rule,
                 "region": region,
                 "available_prefectures": summary.get("available_prefectures", []),
                 "available_prefecture_details": summary.get("available_prefecture_details", []),
@@ -293,7 +283,6 @@ class MainController:
                     "guidance_url": guidance_url,
                     "guidance_initial_time": guidance_initial.isoformat() + 'Z',
                     "guidance_type": guidance_type,
-                    "risk_rule": risk_rule,
                     "region": region,
                     "cache_key": cache_key,
                     "cache_response": "summary",
@@ -307,7 +296,6 @@ class MainController:
                 swi_initial,
                 guidance_initial,
                 guidance_type,
-                risk_rule,
                 region,
                 cache_key,
                 swi_url,
@@ -538,12 +526,9 @@ class MainController:
                 guidance_type = self.config_service.normalize_guidance_type(
                     data.get('guidance_type', 'msm')
                 )
-                risk_rule = self.main_service.calculation_service.normalize_risk_rule(
-                    data.get('risk_rule', 'legacy')
-                )
                 region = self._normalize_region(data.get('region', 'kinki'))
             except ValueError as e:
-                logger.warning(f"{trace_prefix} guidance_type/risk_rule 検証エラー: {e}")
+                logger.warning(f"{trace_prefix} guidance_type/region 検証エラー: {e}")
                 return jsonify({
                     "status": "error",
                     "message": str(e)
@@ -585,7 +570,7 @@ class MainController:
             logger.info(
                 f"{trace_prefix} 本番処理開始: SWI初期時刻={swi_initial}, "
                 f"ガイダンス初期時刻={guidance_initial}, guidance_type={guidance_type}, "
-                f"risk_rule={risk_rule}, region={region}"
+                f"region={region}"
             )
 
             # 設定ファイルからURL構築
@@ -597,7 +582,6 @@ class MainController:
                 swi_initial.isoformat(),
                 guidance_initial.isoformat(),
                 guidance_type,
-                risk_rule,
                 region,
             )
             logger.info(f"{trace_prefix} キャッシュキー算出: {cache_key}")
@@ -608,7 +592,6 @@ class MainController:
                 swi_initial.isoformat(),
                 guidance_initial.isoformat(),
                 guidance_type,
-                risk_rule,
             )
             if cached_summary:
                 self.cache_service.cleanup_completed_calculation_lock(cache_key)
@@ -622,7 +605,6 @@ class MainController:
                     swi_initial,
                     guidance_initial,
                     guidance_type,
-                    risk_rule,
                     region,
                     cache_key,
                     swi_url,
@@ -665,7 +647,6 @@ class MainController:
                         swi_initial.isoformat(),
                         guidance_initial.isoformat(),
                         guidance_type,
-                        risk_rule,
                     )
                     if cached_summary:
                         self.cache_service.cleanup_completed_calculation_lock(cache_key)
@@ -680,7 +661,6 @@ class MainController:
                             swi_initial,
                             guidance_initial,
                             guidance_type,
-                            risk_rule,
                             region,
                             cache_key,
                             swi_url,
@@ -713,7 +693,6 @@ class MainController:
                         swi_initial.isoformat(),
                         guidance_initial.isoformat(),
                         guidance_type,
-                        risk_rule,
                     )
                     if cached_summary:
                         self.cache_service.cleanup_completed_calculation_lock(cache_key)
@@ -728,7 +707,6 @@ class MainController:
                             swi_initial,
                             guidance_initial,
                             guidance_type,
-                            risk_rule,
                             region,
                             cache_key,
                             swi_url,
@@ -767,7 +745,6 @@ class MainController:
                     swi_url,
                     guidance_url,
                     guidance_type=guidance_type,
-                    risk_rule=risk_rule,
                     use_cache=False,
                     async_cache_save=False,
                     prefecture_codes=REGION_PREFECTURES[region],
@@ -785,7 +762,6 @@ class MainController:
                     swi_initial.isoformat(),
                     guidance_initial.isoformat(),
                     guidance_type,
-                    risk_rule,
                 )
                 cache_save_elapsed = time.perf_counter() - cache_save_started_at
                 if not cache_saved:
@@ -831,7 +807,6 @@ class MainController:
                         guidance_initial.isoformat(),
                         datetime.now().isoformat(),
                         guidance_type,
-                        risk_rule,
                         cache_key,
                     )
                     total_elapsed = time.perf_counter() - request_started_at
@@ -846,7 +821,6 @@ class MainController:
                         swi_initial,
                         guidance_initial,
                         guidance_type,
-                        risk_rule,
                         region,
                         swi_url,
                         guidance_url,
@@ -874,7 +848,6 @@ class MainController:
                     "region": region,
                 }
                 result["guidance_type"] = guidance_type
-                result["risk_rule"] = risk_rule
                 result["region"] = region
                 total_elapsed = time.perf_counter() - request_started_at
                 logger.info(
@@ -951,7 +924,6 @@ class MainController:
                     guidance_initial_time,
                     datetime.now().isoformat(),
                     'msm',
-                    'legacy'
                 )
 
                 # 利用可能な時刻を抽出
@@ -973,7 +945,6 @@ class MainController:
                     "swi_initial_time": swi_initial_time + 'Z' if not swi_initial_time.endswith('Z') else swi_initial_time,
                     "guidance_initial_time": guidance_initial_time + 'Z' if not guidance_initial_time.endswith('Z') else guidance_initial_time,
                     "guidance_type": "msm",
-                    "risk_rule": "legacy",
                     "available_prefectures": available_prefs,
                     "available_prefecture_details": self._build_available_prefecture_details(
                         result['prefectures']
@@ -985,7 +956,6 @@ class MainController:
                         "guidance_url": f"file://{guidance_file}",
                         "guidance_initial_time": guidance_initial_time,
                         "guidance_type": "msm",
-                        "risk_rule": "legacy"
                     }
                 })
 

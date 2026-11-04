@@ -1,4 +1,4 @@
-import type { Mesh, RiskRule } from './api';
+import type { Mesh } from './api';
 import type { TimeSeriesPoint, RiskTimePoint } from './api';
 import type { AdjustmentMode, InputMode, RainfallViewMode, ScopeRainfall } from '../features/rainfall-adjustment/types';
 import type { RegionCode } from '../features/production-session/regions';
@@ -11,7 +11,6 @@ export interface SessionInfo {
   swi_initial_time: string;
   guidance_initial_time: string;
   guidance_type?: 'msm' | 'gsm';
-  risk_rule?: RiskRule;
   input_mode?: InputMode;
   adjustment_mode?: AdjustmentMode;
   prefecture_count: number;
@@ -28,7 +27,6 @@ export interface LightweightCalculationResult {
   swi_initial_time: string;
   guidance_initial_time: string;
   guidance_type?: 'msm' | 'gsm';
-  risk_rule?: RiskRule;
   region?: RegionCode;
   available_prefectures: string[];
   available_prefecture_details?: Array<{
@@ -42,7 +40,6 @@ export interface LightweightCalculationResult {
     guidance_url: string;
     guidance_initial_time: string;
     guidance_type?: 'msm' | 'gsm';
-    risk_rule?: RiskRule;
     region?: RegionCode;
   };
 }
@@ -100,7 +97,6 @@ export interface RainfallDataResponse {
   area_rainfall_24hour?: Record<string, TimeSeriesPoint[]>;
   subdivision_rainfall_24hour?: Record<string, TimeSeriesPoint[]>;
   guidance_type?: 'msm' | 'gsm';
-  risk_rule?: RiskRule;
   input_mode?: InputMode;
   adjustment_mode?: AdjustmentMode;
 }
@@ -110,7 +106,6 @@ export interface RecalculateResponse {
   adjusted: boolean;
   ft: number;
   guidance_type?: 'msm' | 'gsm';
-  risk_rule?: RiskRule;
   mesh_risks: Record<string, number>;
   mesh_coords: Record<string, { lat: number; lon: number }>;
 }
@@ -139,5 +134,4 @@ export interface RecalculateRequest {
   guidance_initial: string;
   data_source: string;
   guidance_type?: 'msm' | 'gsm';
-  risk_rule?: RiskRule;
 }

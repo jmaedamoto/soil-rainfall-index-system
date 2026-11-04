@@ -122,7 +122,6 @@ class SessionAPIClient {
       area_rainfall_24hour: response.data.area_rainfall_24hour,
       subdivision_rainfall_24hour: response.data.subdivision_rainfall_24hour,
       guidance_type: response.data.guidance_type,
-      risk_rule: response.data.risk_rule,
       input_mode: response.data.input_mode,
       adjustment_mode: response.data.adjustment_mode
     };
@@ -179,7 +178,6 @@ class SessionAPIClient {
     guidanceInitial: string,
     dataSource: string,
     guidanceType?: RecalculateRequest['guidance_type'],
-    riskRule?: RecalculateRequest['risk_rule'],
     adjustmentScope?: RecalculateRequest['adjustment_scope']
   ): Promise<RecalculateResponse> {
     const response = await axios.post<{
@@ -188,7 +186,6 @@ class SessionAPIClient {
       adjusted: RecalculateResponse['adjusted'];
       ft: RecalculateResponse['ft'];
       guidance_type?: RecalculateResponse['guidance_type'];
-      risk_rule?: RecalculateResponse['risk_rule'];
       mesh_risks: RecalculateResponse['mesh_risks'];
       mesh_coords: RecalculateResponse['mesh_coords'];
     }>(
@@ -203,7 +200,6 @@ class SessionAPIClient {
         guidance_initial: guidanceInitial,
         data_source: dataSource,
         guidance_type: guidanceType,
-        risk_rule: riskRule
       },
       { timeout: 600000 }
     );
@@ -212,7 +208,6 @@ class SessionAPIClient {
       adjusted: response.data.adjusted,
       ft: response.data.ft,
       guidance_type: response.data.guidance_type,
-      risk_rule: response.data.risk_rule,
       mesh_risks: response.data.mesh_risks,
       mesh_coords: response.data.mesh_coords,
     };

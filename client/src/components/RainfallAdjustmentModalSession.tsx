@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { sessionApiClient } from '../services/sessionApi';
-import type { RiskRule, TimeSeriesPoint } from '../types/api';
+import type { TimeSeriesPoint } from '../types/api';
 import type { AdjustedRainfallPreviewResponse } from '../types/session';
 import AdjustedRainfallPreviewMap from './map/AdjustedRainfallPreviewMap';
 import type { AdjustmentMode, CellSelection, InputMode, RainfallViewMode, ScopeRainfall } from '../features/rainfall-adjustment/types';
@@ -24,17 +24,13 @@ interface RainfallAdjustmentModalSessionProps {
   swiInitial: string;
   guidanceInitial: string;
   guidanceType?: 'msm' | 'gsm';
-  riskRule?: RiskRule;
   prefectureDetails?: Array<{ code: string; name: string }>;
   dataSource: 'test' | 'production';
   onSessionRecalculated: (
     sessionId: string,
     meshRisks: Record<string, number>,
     meshCoords: Record<string, { lat: number; lon: number }>,
-    metadata?: {
-      guidanceType?: 'msm' | 'gsm';
-      riskRule?: RiskRule;
-    }
+    metadata?: { guidanceType?: 'msm' | 'gsm' }
   ) => void;
 }
 
@@ -97,7 +93,6 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
   swiInitial,
   guidanceInitial,
   guidanceType = 'msm',
-  riskRule,
   prefectureDetails = [],
   dataSource,
   onSessionRecalculated
@@ -603,7 +598,6 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
         guidanceInitial,
         dataSource,
         guidanceType,
-        riskRule,
         viewMode
       );
 
@@ -612,10 +606,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
         result.session_id,
         result.mesh_risks,
         result.mesh_coords,
-        {
-          guidanceType: result.guidance_type,
-          riskRule: result.risk_rule,
-        }
+        { guidanceType: result.guidance_type }
       );
       onClose();
     } catch (err) {

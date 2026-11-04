@@ -11,8 +11,6 @@ export interface RiskTimePoint {
   rainfall_to_level4_1h_mm?: number | null; // 直後1時間でレベル4到達に必要な追加雨量
 }
 
-export type RiskRule = 'legacy' | 'lead_time_to_level4';
-
 export interface Mesh {
   code: string;  // メッシュコード
   lat: number;   // 緯度
@@ -100,7 +98,6 @@ export interface SessionInfo {
   swi_initial_time: string;         // SWI初期時刻
   guidance_initial_time: string;    // ガイダンス初期時刻
   guidance_type?: 'msm' | 'gsm';
-  risk_rule?: RiskRule;
   prefecture_count: number;
   prefecture_codes: string[];
 }
@@ -111,7 +108,6 @@ export interface LightweightCalculationResult {
   swi_initial_time: string;         // SWI初期時刻（ISO8601）
   guidance_initial_time: string;    // ガイダンス初期時刻（ISO8601）
   guidance_type?: 'msm' | 'gsm';
-  risk_rule?: RiskRule;
   available_prefectures: string[];  // 利用可能な府県コード
   available_times: number[];        // 利用可能なFT値
   used_urls?: {                     // 使用したGRIB2 URL
@@ -120,7 +116,6 @@ export interface LightweightCalculationResult {
     guidance_url: string;
     guidance_initial_time: string;
     guidance_type?: 'msm' | 'gsm';
-    risk_rule?: RiskRule;
   };
 }
 

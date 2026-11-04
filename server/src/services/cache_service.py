@@ -3,7 +3,7 @@
 
 機能:
 - gzip圧縮によるJSON保存（209MB → 約20MB）
-- キャッシュキー生成（SWI初期時刻 + ガイダンス初期時刻 + ガイダンス種別 + 危険度ルール）
+- キャッシュキー生成（SWI初期時刻 + ガイダンス初期時刻 + ガイダンス種別）
 - 自動TTL管理（デフォルト7日）
 - 計算中ロック機能（重複計算防止）
 """
@@ -59,7 +59,6 @@ class CacheService:
         swi_initial: str,
         guidance_initial: str,
         guidance_type: str = "msm",
-        risk_rule: str = "legacy",
         region: Optional[str] = None,
     ) -> str:
         """
@@ -80,9 +79,7 @@ class CacheService:
         swi_key = swi_dt.strftime("%Y%m%d%H%M%S")
         guid_key = guid_dt.strftime("%Y%m%d%H%M%S")
 
-        cache_key = (
-            f"swi_{swi_key}_guid_{guidance_type.lower()}_{guid_key}_risk_{risk_rule.lower()}"
-        )
+        cache_key = f"swi_{swi_key}_guid_{guidance_type.lower()}_{guid_key}"
         if region:
             cache_key = f"{cache_key}_region_{region.lower()}"
         return cache_key
@@ -258,7 +255,6 @@ class CacheService:
         swi_initial: str,
         guidance_initial: str,
         guidance_type: str,
-        risk_rule: str,
     ) -> dict:
         prefectures = result.get("prefectures") or {}
         return {
@@ -266,7 +262,6 @@ class CacheService:
             "swi_initial_time": swi_initial,
             "guidance_initial_time": guidance_initial,
             "guidance_type": guidance_type,
-            "risk_rule": risk_rule,
             "available_prefectures": list(prefectures.keys()),
             "available_prefecture_details": self._build_available_prefecture_details(prefectures),
             "available_times": self._extract_available_times(prefectures),
@@ -472,7 +467,6 @@ class CacheService:
         swi_initial: str,
         guidance_initial: str,
         guidance_type: str = "msm",
-        risk_rule: str = "legacy",
         materialize_if_missing: bool = True,
     ) -> Optional[dict]:
         """軽量レスポンス用キャッシュサマリーを取得する"""
@@ -513,7 +507,6 @@ class CacheService:
                 swi_initial,
                 guidance_initial,
                 guidance_type,
-                risk_rule,
             )
             self._write_json_atomic(self._get_summary_path(cache_key), summary)
             logger.info(f"キャッシュサマリー作成完了: {cache_key}")
@@ -527,8 +520,7 @@ class CacheService:
         result: dict,
         swi_initial: str,
         guidance_initial: str,
-        guidance_type: str = "msm",
-        risk_rule: str = "legacy"
+        guidance_type: str = "msm"
     ) -> bool:
         """
         計算結果をキャッシュに保存
@@ -554,7 +546,6 @@ class CacheService:
                 swi_initial,
                 guidance_initial,
                 guidance_type,
-                risk_rule,
             )
             self._write_json_atomic(self._get_summary_path(cache_key), summary)
             self._store_memory_cached_result(cache_key, result)
@@ -588,7 +579,6 @@ class CacheService:
         swi_initial: str,
         guidance_initial: str,
         guidance_type: str = "msm",
-        risk_rule: str = "legacy",
         on_complete: Optional[Callable[[bool], None]] = None,
     ) -> None:
         """
@@ -605,7 +595,6 @@ class CacheService:
                 swi_initial,
                 guidance_initial,
                 guidance_type,
-                risk_rule,
             )
             if on_complete:
                 try:
