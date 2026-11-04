@@ -115,6 +115,20 @@ export interface RecalculateResponse {
   mesh_coords: Record<string, { lat: number; lon: number }>;
 }
 
+export interface AdjustedRainfallPreviewMesh {
+  lat: number;
+  lon: number;
+  rain_3hour: Array<number | null>;
+  rain_1hour_max: Array<number | null>;
+}
+
+export interface AdjustedRainfallPreviewResponse {
+  display_hours: 24 | 48 | 72;
+  times: number[];
+  meshes: Record<string, AdjustedRainfallPreviewMesh>;
+  mesh_count: number;
+}
+
 export interface RecalculateRequest {
   adjustment_scope?: RainfallViewMode;
   adjustments: Record<string, Array<{ ft: number; value: number }>>;

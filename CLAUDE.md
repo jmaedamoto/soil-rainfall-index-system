@@ -48,6 +48,7 @@ Excel VBAで運用されていた土壌雨量指数計算を、Python/Flask API 
 - `GET /session/<session_id>/prefecture/<prefecture_code>`
 - `GET /session/<session_id>/risk-at-time`
 - `GET /session/<session_id>/rainfall-data`
+- `POST /session/<session_id>/rainfall-preview`
 - `POST /session/<session_id>/recalculate`
 
 詳しい昇格ルールは `docs/staging-promotion-rules.md` を参照してください。

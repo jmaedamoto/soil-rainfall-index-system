@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { sessionApiClient } from '../services/sessionApi';
 import type { RiskRule, TimeSeriesPoint } from '../types/api';
+import type { AdjustedRainfallPreviewResponse } from '../types/session';
+import AdjustedRainfallPreviewMap from './map/AdjustedRainfallPreviewMap';
 import type { AdjustmentMode, CellSelection, InputMode, RainfallViewMode, ScopeRainfall } from '../features/rainfall-adjustment/types';
 import {
   buildRainfallAdjustments,
@@ -42,6 +44,27 @@ const TooltipHelp: React.FC<{ text: string }> = ({ text }) => (
     <span className="rainfall-tooltip-content" role="tooltip">{text}</span>
   </span>
 );
+
+const RAIN_PREVIEW_LEGEND = {
+  rain_3hour: [
+    { label: '0', color: '#fff7bc' },
+    { label: '1', color: '#fee391' },
+    { label: '5', color: '#fec44f' },
+    { label: '10', color: '#fe9929' },
+    { label: '20', color: '#ec7014' },
+    { label: '40', color: '#cc4c02' },
+    { label: '60+', color: '#990000' },
+  ],
+  rain_1hour_max: [
+    { label: '0', color: '#fff7bc' },
+    { label: '1', color: '#fee391' },
+    { label: '3', color: '#fec44f' },
+    { label: '5', color: '#fe9929' },
+    { label: '10', color: '#ec7014' },
+    { label: '20', color: '#cc4c02' },
+    { label: '30+', color: '#990000' },
+  ],
+} as const;
 
 const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionProps> = ({
   isOpen,
@@ -87,6 +110,14 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
   const [isSelecting, setIsSelecting] = useState(false);
   const [bulkEditValue, setBulkEditValue] = useState<string>('');
   const [showBulkEdit, setShowBulkEdit] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<AdjustedRainfallPreviewResponse | null>(null);
+  const [previewHours, setPreviewHours] = useState<24 | 48 | 72>(72);
+  const [previewFt, setPreviewFt] = useState(12);
+  const [previewMetric, setPreviewMetric] = useState<'rain_3hour' | 'rain_1hour_max'>('rain_3hour');
+  const [previewPlaying, setPreviewPlaying] = useState(false);
 
   // モーダルが開かれたときの初期化
   useEffect(() => {
@@ -512,16 +543,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
     setError(null);
 
     try {
-      const adjustments = inputMode === '3hour'
-        ? (
-          usesAreaMaxFill
-            ? cloneRainfallMap(showsAllPrefectures ? currentOriginalMap : originalRainfall)
-            : buildRainfallAdjustments(currentOriginalMap, currentAdjustedMap)
-        )
-        : {};
-      const aggregateAdjustments = inputMode === '24hour'
-        ? buildRainfallAdjustments(currentEditingOriginalMap, currentEditingAdjustedMap)
-        : {};
+      const { adjustments, aggregateAdjustments } = buildCurrentAdjustmentPayload();
 
       // 変更がない場合は何もせずに閉じる
       if (!usesAreaMaxFill && Object.keys(adjustments).length === 0 && Object.keys(aggregateAdjustments).length === 0) {
@@ -568,6 +590,96 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
     return countModifiedCells(currentEditingOriginalMap, currentEditingAdjustedMap);
   }, [currentEditingOriginalMap, currentEditingAdjustedMap]);
   const canRecalculate = Object.keys(currentEditingOriginalMap).length > 0 && !scopeErrors[viewMode] && (usesAreaMaxFill || totalModifiedCount > 0);
+
+  const visiblePreviewTimes = useMemo(
+    () => (previewData?.times ?? []).filter(ft => ft <= previewHours),
+    [previewData, previewHours]
+  );
+  const selectedPreviewIndex = Math.max(0, visiblePreviewTimes.indexOf(previewFt));
+  const previewValues = useMemo(() => {
+    if (!previewData) return {};
+    const values: Record<string, number | null> = {};
+    Object.entries(previewData.meshes).forEach(([meshCode, mesh]) => {
+      values[meshCode] = mesh[previewMetric][selectedPreviewIndex] ?? null;
+    });
+    return values;
+  }, [previewData, previewMetric, selectedPreviewIndex]);
+
+  const previewPeriodSummaries = useMemo(() => {
+    if (inputMode !== '24hour') return [];
+    return active24HourEnds.slice(0, previewHours / 24).map((endFt, index) => {
+      const values = Object.values(currentEditingAdjustedMap)
+        .map(timeline => timeline.find(point => point.ft === endFt)?.value)
+        .filter((value): value is number => value !== undefined && Number.isFinite(value));
+      const uniqueValues = [...new Set(values.map(value => Math.round(value)))].sort((a, b) => a - b);
+      const valueLabel = uniqueValues.length === 0
+        ? '未入力'
+        : uniqueValues.length === 1
+          ? `${uniqueValues[0]} mm`
+          : `${uniqueValues[0]}〜${uniqueValues[uniqueValues.length - 1]} mm`;
+      return {
+        label: ['R24', 'Next24', 'NextNext24'][index],
+        valueLabel,
+        regionCount: values.length,
+      };
+    });
+  }, [inputMode, active24HourEnds, previewHours, currentEditingAdjustedMap]);
+
+  const buildCurrentAdjustmentPayload = () => {
+    const adjustments = inputMode === '3hour'
+      ? (
+        usesAreaMaxFill
+          ? cloneRainfallMap(showsAllPrefectures ? currentOriginalMap : originalRainfall)
+          : buildRainfallAdjustments(currentOriginalMap, currentAdjustedMap)
+      )
+      : {};
+    const aggregateAdjustments = inputMode === '24hour'
+      ? buildRainfallAdjustments(currentEditingOriginalMap, currentEditingAdjustedMap)
+      : {};
+    return { adjustments, aggregateAdjustments };
+  };
+
+  const handleOpenPreview = async () => {
+    const { adjustments, aggregateAdjustments } = buildCurrentAdjustmentPayload();
+    setPreviewOpen(true);
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewPlaying(false);
+    try {
+      const result = await sessionApiClient.previewAdjustedRainfall(
+        sessionId,
+        adjustments,
+        aggregateAdjustments,
+        inputMode,
+        adjustmentMode,
+        viewMode,
+        72
+      );
+      setPreviewData(result);
+      const preferredFt = result.times.includes(12) ? 12 : result.times[0] ?? 0;
+      setPreviewFt(preferredFt);
+    } catch (err) {
+      setPreviewError(err instanceof Error ? err.message : '調整後雨量プレビューの取得に失敗しました');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!previewPlaying || visiblePreviewTimes.length < 2) return;
+    const intervalId = window.setInterval(() => {
+      setPreviewFt(currentFt => {
+        const currentIndex = visiblePreviewTimes.indexOf(currentFt);
+        return visiblePreviewTimes[(currentIndex + 1 + visiblePreviewTimes.length) % visiblePreviewTimes.length];
+      });
+    }, 900);
+    return () => window.clearInterval(intervalId);
+  }, [previewPlaying, visiblePreviewTimes]);
+
+  useEffect(() => {
+    if (visiblePreviewTimes.length === 0 || visiblePreviewTimes.includes(previewFt)) return;
+    setPreviewFt(visiblePreviewTimes[visiblePreviewTimes.length - 1]);
+  }, [visiblePreviewTimes, previewFt]);
 
 
   const modifiedCountInPrefecture = useMemo(() => {
@@ -1103,6 +1215,23 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                 キャンセル
               </button>
               <button
+                type="button"
+                onClick={handleOpenPreview}
+                disabled={previewLoading || Boolean(scopeErrors[viewMode])}
+                style={{
+                  padding: '10px 24px',
+                  backgroundColor: previewLoading || scopeErrors[viewMode] ? '#ccc' : '#00838f',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: previewLoading || scopeErrors[viewMode] ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                }}
+              >
+                {previewLoading ? 'プレビュー作成中...' : '調整後雨量をプレビュー'}
+              </button>
+              <button
                 onClick={handleRecalculate}
                 disabled={!canRecalculate}
                 style={{
@@ -1139,6 +1268,146 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
             <p style={{ fontSize: '12px', color: '#666' }}>
               調整対象: {totalModifiedCount}セル
             </p>
+          </div>
+        )}
+
+        {previewOpen && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 12000,
+            backgroundColor: 'rgba(15, 23, 42, 0.68)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '2vh 2vw',
+          }}>
+            <section style={{
+              width: '96vw',
+              height: '94vh',
+              backgroundColor: '#f8fafc',
+              borderRadius: '10px',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              boxShadow: '0 18px 60px rgba(0,0,0,0.28)',
+            }}>
+              <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: '1px solid #d8e1eb', background: 'white' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <h2 style={{ margin: 0, color: '#17365d' }}>調整後雨量のプレビュー</h2>
+                  <span style={{ padding: '4px 10px', borderRadius: '14px', background: '#fff1f2', color: '#b42318', fontSize: '12px', fontWeight: 700 }}>再計算前</span>
+                </div>
+                <button type="button" onClick={() => { setPreviewPlaying(false); setPreviewOpen(false); }} style={{ padding: '7px 14px', border: '1px solid #cbd5e1', borderRadius: '5px', background: 'white', cursor: 'pointer' }}>
+                  プレビューを閉じる
+                </button>
+              </header>
+
+              <div style={{ padding: '12px 18px 8px', background: 'white', borderBottom: '1px solid #d8e1eb' }}>
+                <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <strong style={{ marginRight: '4px' }}>表示する雨量</strong>
+                    {([
+                      ['rain_3hour', '3時間雨量'],
+                      ['rain_1hour_max', '3時間内の最大1時間雨量'],
+                    ] as const).map(([metric, label]) => (
+                      <button key={metric} type="button" onClick={() => setPreviewMetric(metric)} aria-pressed={previewMetric === metric} style={{ padding: '8px 12px', border: '1px solid #b8c7d8', borderRadius: '5px', background: previewMetric === metric ? '#1769aa' : 'white', color: previewMetric === metric ? 'white' : '#243b53', cursor: 'pointer' }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <strong style={{ marginRight: '4px' }}>表示範囲</strong>
+                    {([24, 48, 72] as const).map(hours => (
+                      <button key={hours} type="button" onClick={() => setPreviewHours(hours)} aria-pressed={previewHours === hours} style={{ padding: '8px 15px', border: '1px solid #b8c7d8', borderRadius: '5px', background: previewHours === hours ? '#1769aa' : 'white', color: previewHours === hours ? 'white' : '#243b53', cursor: 'pointer' }}>
+                        {hours}時間
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ marginLeft: 'auto', fontWeight: 700, color: '#17365d' }}>
+                    {(() => {
+                      const initial = new Date(guidanceInitial);
+                      if (Number.isNaN(initial.getTime()) || visiblePreviewTimes.length === 0) return `表示時刻 FT${previewFt}`;
+                      initial.setTime(initial.getTime() + previewFt * 60 * 60 * 1000);
+                      const date = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(initial);
+                      return `${date}（+${previewFt}時間）`;
+                    })()}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px' }}>
+                  <button type="button" onClick={() => setPreviewPlaying(value => !value)} disabled={visiblePreviewTimes.length < 2} aria-label={previewPlaying ? '停止' : '3時間ごとに再生'} style={{ width: '38px', height: '34px', border: '1px solid #7aa4d0', borderRadius: '18px', background: 'white', color: '#1769aa', fontSize: '16px', cursor: 'pointer' }}>
+                    {previewPlaying ? '■' : '▶'}
+                  </button>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.max(0, visiblePreviewTimes.length - 1)}
+                      step={1}
+                      value={selectedPreviewIndex}
+                      onChange={event => { setPreviewPlaying(false); setPreviewFt(visiblePreviewTimes[Number(event.target.value)] ?? previewFt); }}
+                      aria-label="予報時刻（3時間刻み）"
+                      disabled={visiblePreviewTimes.length === 0}
+                      style={{ width: '100%', accentColor: '#1769aa' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#475569', fontSize: '11px', marginTop: '1px' }}>
+                      {Array.from({ length: previewHours / 12 + 1 }, (_, index) => index * 12).map(ft => (
+                        <span key={ft}>+{String(ft).padStart(2, '0')}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '12px', color: '#475569', whiteSpace: 'nowrap' }}>3時間刻み</span>
+                </div>
+              </div>
+
+              <div style={{ flex: 1, minHeight: 0, display: 'flex', gap: '12px', padding: '12px' }}>
+                <div style={{ flex: 1, minWidth: 0, minHeight: 0, position: 'relative', background: '#eaf3f8', border: '1px solid #cbd5e1', borderRadius: '6px', overflow: 'hidden' }}>
+                  {previewLoading && <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'grid', placeItems: 'center', background: 'rgba(255,255,255,0.86)', color: '#17365d', fontWeight: 700 }}>調整後雨量を計算しています...</div>}
+                  {previewError && <div role="alert" style={{ position: 'absolute', top: 12, left: 12, right: 12, zIndex: 1100, padding: 12, color: '#b42318', background: '#fff1f2', borderRadius: 5 }}>プレビューを表示できません: {previewError}</div>}
+                  {!previewLoading && !previewData && !previewError && <div style={{ height: '100%', display: 'grid', placeItems: 'center', color: '#475569' }}>プレビューを読み込んでいます。</div>}
+                  {previewData && <AdjustedRainfallPreviewMap meshes={previewData.meshes} values={previewValues} metric={previewMetric} />}
+                  {previewData && (
+                    <div style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 1000, padding: '9px 12px', borderRadius: 5, background: 'rgba(255,255,255,0.96)', boxShadow: '0 1px 5px rgba(15,23,42,0.2)', fontSize: '11px' }}>
+                      <strong>{previewMetric === 'rain_3hour' ? '3時間雨量（mm）' : '3時間内の最大1時間雨量（mm）'}</strong>
+                      <div style={{ display: 'flex', marginTop: 5 }}>
+                        {RAIN_PREVIEW_LEGEND[previewMetric].map((item, index) => <span key={item.label} title={`${item.label} mm`} style={{ width: 31, height: 12, background: item.color, borderRight: index < 6 ? '1px solid white' : undefined }} />)}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 2 }}>
+                        {RAIN_PREVIEW_LEGEND[previewMetric].map(item => <span key={item.label}>{item.label}</span>)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <aside style={{ width: 'min(270px, 27vw)', flexShrink: 0, overflowY: 'auto', padding: '14px', background: 'white', border: '1px solid #d8e1eb', borderRadius: '6px' }}>
+                  <h3 style={{ margin: '0 0 14px', color: '#17365d' }}>調整内容</h3>
+                  <div style={{ fontSize: '13px', lineHeight: 1.8, color: '#334155' }}>
+                    <div><strong>入力単位:</strong> {inputMode === '24hour' ? '24時間合計' : '3時間ごと'}</div>
+                    <div><strong>調整方式:</strong> {getAdjustmentModeLabel(adjustmentMode)}</div>
+                    <div><strong>入力地域:</strong> {scopeLabels[viewMode]}</div>
+                    <div><strong>表示範囲:</strong> {previewHours}時間</div>
+                  </div>
+                  {inputMode === '24hour' ? (
+                    <div style={{ marginTop: 14 }}>
+                      <strong style={{ fontSize: '13px', color: '#17365d' }}>各24時間の入力値</strong>
+                      {previewPeriodSummaries.map(period => (
+                        <div key={period.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 6, padding: '9px 0', borderBottom: '1px solid #e2e8f0', fontSize: '13px' }}>
+                          <span>{period.label}</span>
+                          <span style={{ textAlign: 'right' }}>{period.valueLabel}<small style={{ display: 'block', color: '#64748b' }}>{period.regionCount}地域</small></span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 14, padding: 10, background: '#f1f5f9', borderRadius: 5, fontSize: '12px', color: '#475569' }}>
+                      3時間ごとの入力値を反映したメッシュ分布を表示しています。変更セル数: {totalModifiedCount}
+                    </div>
+                  )}
+                  <div style={{ marginTop: 14, padding: 10, background: '#eff6ff', borderRadius: 5, fontSize: '12px', color: '#334155' }}>
+                    雨量分布の確認用プレビューです。土壌雨量指数と危険度はまだ再計算していません。
+                  </div>
+                  {previewData && <div style={{ marginTop: 10, color: '#64748b', fontSize: '11px' }}>表示メッシュ: {previewData.mesh_count.toLocaleString()}件</div>}
+                </aside>
+              </div>
+            </section>
           </div>
         )}
 

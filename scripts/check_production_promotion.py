@@ -17,6 +17,7 @@ EXPECTED_ROUTES = {
     "/production-soil-rainfall-index-with-urls",
     "/session/<session_id>/prefecture/<prefecture_code>",
     "/session/<session_id>/rainfall-data",
+    "/session/<session_id>/rainfall-preview",
     "/session/<session_id>/recalculate",
     "/session/<session_id>/risk-at-time",
 }
