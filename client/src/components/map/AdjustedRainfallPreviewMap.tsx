@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import type { AdjustedRainfallPreviewMesh } from '../../types/session';
+import { getRainPreviewColor } from '../../features/rainfall-adjustment/previewPalette';
 import 'leaflet/dist/leaflet.css';
 import './LeafletIcons';
 
@@ -9,16 +10,6 @@ interface AdjustedRainfallPreviewMapProps {
   meshes: Record<string, AdjustedRainfallPreviewMesh>;
   values: Record<string, number | null>;
   metric: 'rain_3hour' | 'rain_1hour_max';
-}
-
-const RAIN_COLORS = ['#fff7bc', '#fee391', '#fec44f', '#fe9929', '#ec7014', '#cc4c02', '#990000'];
-
-function getRainColor(value: number, metric: AdjustedRainfallPreviewMapProps['metric']): string {
-  const limits = metric === 'rain_3hour'
-    ? [1, 5, 10, 20, 40, 60]
-    : [1, 3, 5, 10, 20, 30];
-  const colorIndex = limits.findIndex(limit => value < limit);
-  return RAIN_COLORS[colorIndex === -1 ? RAIN_COLORS.length - 1 : colorIndex];
 }
 
 const RainfallMeshLayer: React.FC<AdjustedRainfallPreviewMapProps> = ({ meshes, values, metric }) => {
@@ -48,7 +39,7 @@ const RainfallMeshLayer: React.FC<AdjustedRainfallPreviewMapProps> = ({ meshes, 
     Object.entries(meshes).forEach(([meshCode, mesh]) => {
       const value = values[meshCode];
       if (value === null || value === undefined || !Number.isFinite(value)) return;
-      const color = getRainColor(value, metric);
+      const color = getRainPreviewColor(value);
       const rectangle = L.rectangle(
         [
           [mesh.lat - latHalf, mesh.lon - lonHalf],
@@ -57,7 +48,7 @@ const RainfallMeshLayer: React.FC<AdjustedRainfallPreviewMapProps> = ({ meshes, 
         {
           color,
           fillColor: color,
-          fillOpacity: value <= 0 ? 0.12 : 0.76,
+          fillOpacity: value <= 0 ? 0 : 0.76,
           weight: 0,
           renderer: rendererRef.current ?? undefined,
         }

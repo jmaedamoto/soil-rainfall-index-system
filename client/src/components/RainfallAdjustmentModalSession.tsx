@@ -3,6 +3,7 @@ import { sessionApiClient } from '../services/sessionApi';
 import type { TimeSeriesPoint } from '../types/api';
 import type { AdjustedRainfallPreviewResponse } from '../types/session';
 import AdjustedRainfallPreviewMap from './map/AdjustedRainfallPreviewMap';
+import { RAIN_PREVIEW_LEGEND } from '../features/rainfall-adjustment/previewPalette';
 import type { AdjustmentMode, CellSelection, InputMode, RainfallViewMode, ScopeRainfall } from '../features/rainfall-adjustment/types';
 import {
   buildRainfallAdjustments,
@@ -31,27 +32,6 @@ interface RainfallAdjustmentModalSessionProps {
     metadata?: { guidanceType?: 'msm' | 'gsm' }
   ) => void;
 }
-
-const RAIN_PREVIEW_LEGEND = {
-  rain_3hour: [
-    { label: '0', color: '#fff7bc' },
-    { label: '1', color: '#fee391' },
-    { label: '5', color: '#fec44f' },
-    { label: '10', color: '#fe9929' },
-    { label: '20', color: '#ec7014' },
-    { label: '40', color: '#cc4c02' },
-    { label: '60+', color: '#990000' },
-  ],
-  rain_1hour_max: [
-    { label: '0', color: '#fff7bc' },
-    { label: '1', color: '#fee391' },
-    { label: '3', color: '#fec44f' },
-    { label: '5', color: '#fe9929' },
-    { label: '10', color: '#ec7014' },
-    { label: '20', color: '#cc4c02' },
-    { label: '30+', color: '#990000' },
-  ],
-} as const;
 
 const formatJstDateTime = (date: Date): string => new Intl.DateTimeFormat('ja-JP', {
   timeZone: 'Asia/Tokyo',
@@ -1396,10 +1376,10 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                     <div style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 1000, padding: '9px 12px', borderRadius: 5, background: 'rgba(255,255,255,0.96)', boxShadow: '0 1px 5px rgba(15,23,42,0.2)', fontSize: '11px' }}>
                       <strong>{previewMetric === 'rain_3hour' ? '3時間雨量（mm）' : '3時間内の最大1時間雨量（mm）'}</strong>
                       <div style={{ display: 'flex', marginTop: 5 }}>
-                        {RAIN_PREVIEW_LEGEND[previewMetric].map((item, index) => <span key={item.label} title={`${item.label} mm`} style={{ width: 31, height: 12, background: item.color, borderRight: index < 6 ? '1px solid white' : undefined }} />)}
+                        {RAIN_PREVIEW_LEGEND.map((item, index) => <span key={item.label} title={`${item.label} mm以上`} style={{ flex: 1, minWidth: 0, height: 12, background: item.color, borderRight: index < RAIN_PREVIEW_LEGEND.length - 1 ? '1px solid white' : undefined }} />)}
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 2 }}>
-                        {RAIN_PREVIEW_LEGEND[previewMetric].map(item => <span key={item.label}>{item.label}</span>)}
+                        {RAIN_PREVIEW_LEGEND.map(item => <span key={item.label}>{item.label}</span>)}
                       </div>
                     </div>
                   )}
