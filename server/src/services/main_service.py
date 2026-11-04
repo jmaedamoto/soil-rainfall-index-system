@@ -77,7 +77,6 @@ class MainService:
         swi_url: str,
         guidance_url: str,
         guidance_type: str = "msm",
-        risk_rule: str = "legacy",
         use_cache: bool = True,
         async_cache_save: bool = True,
         on_cache_saved: Optional[Callable[[bool], None]] = None,
@@ -108,12 +107,10 @@ class MainService:
 
             # キャッシュキー生成
             normalized_guidance_type = self.config_service.normalize_guidance_type(guidance_type)
-            normalized_risk_rule = self.calculation_service.normalize_risk_rule(risk_rule)
             cache_key = self.cache_service.generate_cache_key(
                 swi_initial_time.isoformat(),
                 guidance_initial_time.isoformat(),
                 normalized_guidance_type,
-                normalized_risk_rule,
             )
 
             # キャッシュチェック
@@ -135,7 +132,6 @@ class MainService:
                 swi_grib2,
                 guidance_grib2_filtered,
                 swi_initial_time,
-                normalized_risk_rule,
                 prefecture_codes,
             )
 
@@ -148,7 +144,6 @@ class MainService:
                         swi_initial_time.isoformat(),
                         guidance_initial_time.isoformat(),
                         normalized_guidance_type,
-                        normalized_risk_rule,
                         on_cache_saved,
                     )
                 else:
@@ -158,7 +153,6 @@ class MainService:
                         swi_initial_time.isoformat(),
                         guidance_initial_time.isoformat(),
                         normalized_guidance_type,
-                        normalized_risk_rule,
                     )
 
             return result
@@ -221,13 +215,12 @@ class MainService:
         swi_grib2: Dict[str, Any],
         guidance_grib2: Dict[str, Any],
         initial_time: datetime,
-        risk_rule: str = "legacy",
         prefecture_codes: Optional[Sequence[str]] = None,
     ) -> Tuple[Dict[str, Any], int]:
         """地域データ準備からレスポンス構築までの計算パイプライン"""
         prefectures = self._prepare_prefectures(prefecture_codes)
-        total_meshes = self._calculate_meshes(prefectures, swi_grib2, guidance_grib2, risk_rule)
-        self._aggregate_risk_timelines(prefectures, risk_rule)
+        total_meshes = self._calculate_meshes(prefectures, swi_grib2, guidance_grib2)
+        self._aggregate_risk_timelines(prefectures)
         result = ResponseBuilder.build_prefecture_response(prefectures, initial_time)
         return result, total_meshes
 
@@ -247,7 +240,6 @@ class MainService:
         prefectures,
         swi_grib2: Dict[str, Any],
         guidance_grib2: Dict[str, Any],
-        risk_rule: str = "legacy",
     ) -> int:
         """メッシュ単位の計算を実行する"""
         logger.info("メッシュ計算処理開始")
@@ -258,7 +250,7 @@ class MainService:
             for area in prefecture.areas:
                 for mesh in area.meshes:
                     self.calculation_service.process_mesh_calculations(
-                        mesh, swi_grib2, guidance_grib2, risk_rule=risk_rule
+                        mesh, swi_grib2, guidance_grib2
                     )
                     total_meshes += 1
 
@@ -267,16 +259,14 @@ class MainService:
         )
         return total_meshes
 
-    def _aggregate_risk_timelines(self, prefectures, risk_rule: str = "legacy") -> None:
+    def _aggregate_risk_timelines(self, prefectures) -> None:
         """エリア・市町村等をまとめた地域・府県単位の集約を実行する"""
         logger.info("リスクタイムライン計算開始")
         risk_start = time.time()
 
         for prefecture in prefectures:
             for area in prefecture.areas:
-                area.risk_timeline = self.calculation_service.calc_risk_timeline(
-                    area.meshes, risk_rule=risk_rule
-                )
+                area.risk_timeline = self.calculation_service.calc_risk_timeline(area.meshes)
 
             for subdivision in prefecture.secondary_subdivisions:
                 self.calculation_service.calc_secondary_subdivision_aggregates(subdivision)

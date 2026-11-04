@@ -33,9 +33,6 @@ def _build_controller(cache_save_result=True, session_service=None):
         }
     }
     controller.main_service = SimpleNamespace(
-        calculation_service=SimpleNamespace(
-            normalize_risk_rule=lambda value: value or "legacy"
-        ),
         data_service=SimpleNamespace(
             prepare_areas=Mock(return_value=[]),
         ),
@@ -62,7 +59,6 @@ def _request_payload():
         "swi_initial": "2026-05-20T00:00:00Z",
         "guidance_initial": "2026-05-20T00:00:00Z",
         "guidance_type": "msm",
-        "risk_rule": "legacy",
         "region": "kinki",
     }
 
@@ -81,7 +77,6 @@ def test_calculation_owner_saves_region_cache_before_returning_session():
         "swi://2026-05-20T00:00:00",
         "msm://2026-05-20T00:00:00",
         guidance_type="msm",
-        risk_rule="legacy",
         use_cache=False,
         async_cache_save=False,
         prefecture_codes=["shiga", "kyoto", "hyogo", "osaka", "nara", "wakayama"],
@@ -92,7 +87,6 @@ def test_calculation_owner_saves_region_cache_before_returning_session():
         "2026-05-20T00:00:00",
         "2026-05-20T00:00:00",
         "msm",
-        "legacy",
     )
     controller.cache_service.release_calculation_lock.assert_called_once_with("cache-key")
     controller.cache_service.release_calculation_slot.assert_called_once_with()

@@ -31,14 +31,6 @@ class CalculationService:
         self.aggregation_service = CalculationAggregationService()
 
     @staticmethod
-    def normalize_risk_rule(risk_rule: Optional[str]) -> str:
-        """危険度ルールを正規化する。"""
-        normalized = (risk_rule or "legacy").lower()
-        if normalized not in {"legacy", "lead_time_to_level4"}:
-            raise ValueError(f"Unsupported risk_rule: {risk_rule}")
-        return normalized
-
-    @staticmethod
     def _normalize_rainfall_index(rain_value: float) -> int:
         """1時間雨量から level4_curve 参照用インデックスを作る。"""
         try:
@@ -338,8 +330,7 @@ class CalculationService:
                          advisary_bound: int, warning_bound: int,
                          dosyakei_bound: int,
                          rain_hourly: Optional[List[GuidanceTimeSeries]] = None,
-                         level4_curve=None,
-                         risk_rule: str = "legacy") -> List[Risk]:
+                         level4_curve=None) -> List[Risk]:
         """
         1時間ごとの危険度を判定
 
@@ -354,7 +345,6 @@ class CalculationService:
         """
         try:
             risk_hourly = []
-            normalized_risk_rule = self.normalize_risk_rule(risk_rule)
             rain_by_ft = {
                 int(rain.ft): float(rain.value)
                 for rain in (rain_hourly or [])
@@ -381,22 +371,16 @@ class CalculationService:
 
                 risk_hourly.append(Risk(ft=swi_item.ft, value=risk))
 
-            return self.apply_risk_rule_to_hourly(risk_hourly, normalized_risk_rule)
+            return self.apply_current_risk_criteria(risk_hourly)
 
         except Exception as e:
             logger.error(f"Hourly risk calculation error: {e}")
             return []
 
-    def apply_risk_rule_to_hourly(
-        self,
-        risk_hourly: List[Risk],
-        risk_rule: str = "legacy"
-    ) -> List[Risk]:
-        """1時間危険度系列へ危険度ルールを適用する。"""
+    def apply_current_risk_criteria(self, risk_hourly: List[Risk]) -> List[Risk]:
+        """レベル4到達の先行時間を現行基準の危険度に反映する。"""
         try:
-            normalized_risk_rule = self.normalize_risk_rule(risk_rule)
-
-            if normalized_risk_rule == "legacy" or not risk_hourly:
+            if not risk_hourly:
                 return risk_hourly
 
             adjusted = [Risk(ft=risk.ft, value=risk.value) for risk in risk_hourly]
@@ -423,7 +407,7 @@ class CalculationService:
             return adjusted
 
         except Exception as e:
-            logger.error(f"Risk rule application error: {e}")
+            logger.error(f"Current risk criteria application error: {e}")
             return []
 
     def calc_3hour_max_risk_from_hourly(self, risk_hourly: List[Risk]) -> List[Risk]:
@@ -537,7 +521,7 @@ class CalculationService:
             logger.error(f"SWI calculation error for mesh {mesh.code}: {e}")
             return []
 
-    def calc_risk_timeline(self, meshes: List[Mesh], risk_rule: str = "legacy") -> List[Risk]:
+    def calc_risk_timeline(self, meshes: List[Mesh]) -> List[Risk]:
         """
         VBA Function calc_risk_timeline の完全再現
         リスクレベル計算
@@ -569,7 +553,6 @@ class CalculationService:
             logger.info(f"First mesh boundaries: advisory={getattr(first_mesh, 'advisary_bound', 'N/A')}, warning={getattr(first_mesh, 'warning_bound', 'N/A')}, dosyakei={getattr(first_mesh, 'dosyakei_bound', 'N/A')}")
             logger.info(f"First 3 SWI values: {[first_mesh.swi[i].value for i in range(min(3, timeline_length))]}")
 
-            normalized_risk_rule = self.normalize_risk_rule(risk_rule)
             risk_timeline = []
 
             for t in range(timeline_length):
@@ -815,7 +798,6 @@ class CalculationService:
         mesh: Mesh,
         swi_grib2: Dict[str, Any],
         guidance_grib2: Dict[str, Any],
-        risk_rule: str = "legacy"
     ) -> Mesh:
         """
         VBA calc_data の一部処理
@@ -873,7 +855,6 @@ class CalculationService:
                     mesh.dosyakei_bound,
                     rain_hourly=mesh.rain_1hour,
                     level4_curve=getattr(mesh, 'level4_curve', None),
-                    risk_rule=risk_rule,
                 )
 
                 # メッシュ50357712のデバッグログ（risk_hourly計算後）
@@ -893,7 +874,7 @@ class CalculationService:
             logger.error(f"Mesh calculations error: {e}")
             return mesh
 
-    def recalculate_swi_and_risk(self, mesh: Mesh, risk_rule: str = "legacy") -> Mesh:
+    def recalculate_swi_and_risk(self, mesh: Mesh) -> Mesh:
         """
         雨量データは既に調整済みという前提で、SWIと危険度のみ再計算
 
@@ -932,7 +913,6 @@ class CalculationService:
                     mesh.dosyakei_bound,
                     rain_hourly=mesh.rain_1hour,
                     level4_curve=getattr(mesh, 'level4_curve', None),
-                    risk_rule=risk_rule,
                 )
 
                 # 3時間ごとの最大危険度再計算
@@ -960,7 +940,7 @@ class CalculationService:
             logger.error(f"SWI recalculation error: {e}")
             return mesh
 
-    def process_area_calculations(self, areas: List[Area], risk_rule: str = "legacy") -> None:
+    def process_area_calculations(self, areas: List[Area]) -> None:
         """
         VBA calc_data の一部処理
         各エリアのリスク計算を実行
@@ -968,7 +948,7 @@ class CalculationService:
         try:
             for area in areas:
                 # VBA: prefectures(i).areas(j).risk_timeline = calc_risk_timeline(prefectures(i).areas(j).meshes)
-                area.risk_timeline = self.calc_risk_timeline(area.meshes, risk_rule=risk_rule)
+                area.risk_timeline = self.calc_risk_timeline(area.meshes)
 
         except Exception as e:
             logger.error(f"Area calculations error: {e}")

@@ -24,12 +24,7 @@ def _build_controller():
             f"{guidance_type}://{initial.isoformat()}"
         ),
     )
-    controller.main_service = SimpleNamespace(
-        calculation_service=SimpleNamespace(
-            normalize_risk_rule=lambda value: value or "legacy"
-        ),
-        main_process_from_separate_urls=Mock(),
-    )
+    controller.main_service = SimpleNamespace(main_process_from_separate_urls=Mock())
     controller.cache_service = SimpleNamespace(
         generate_cache_key=lambda *args: "cache-key",
         get_cached_result=Mock(return_value=None),
@@ -59,7 +54,6 @@ def test_lock_failure_waits_for_cache_instead_of_recomputing():
             "swi_initial": "2026-05-20T00:00:00Z",
             "guidance_initial": "2026-05-20T00:00:00Z",
             "guidance_type": "msm",
-            "risk_rule": "legacy",
         }
     ):
         response = controller.production_soil_rainfall_index_with_urls()
@@ -78,7 +72,6 @@ def test_lock_failure_returns_202_when_cache_never_materializes():
             "swi_initial": "2026-05-20T00:00:00Z",
             "guidance_initial": "2026-05-20T00:00:00Z",
             "guidance_type": "msm",
-            "risk_rule": "legacy",
         }
     ):
         response = controller.production_soil_rainfall_index_with_urls()
@@ -100,7 +93,6 @@ def test_busy_calculation_slot_releases_key_lock_and_returns_202():
             "swi_initial": "2026-05-20T00:00:00Z",
             "guidance_initial": "2026-05-20T00:00:00Z",
             "guidance_type": "msm",
-            "risk_rule": "legacy",
             "region": "shikoku",
         }
     ):

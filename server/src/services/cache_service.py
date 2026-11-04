@@ -3,7 +3,7 @@
 
 機能:
 - gzip圧縮によるJSON保存（209MB → 約20MB）
-- キャッシュキー生成（SWI初期時刻 + ガイダンス初期時刻 + ガイダンス種別 + 危険度ルール）
+- キャッシュキー生成（SWI初期時刻 + ガイダンス初期時刻 + ガイダンス種別）
 - 自動TTL管理（デフォルト7日）
 - 計算中ロック機能（重複計算防止）
 """
@@ -54,7 +54,6 @@ class CacheService:
         swi_initial: str,
         guidance_initial: str,
         guidance_type: str = "msm",
-        risk_rule: str = "legacy",
         region: Optional[str] = None,
     ) -> str:
         """
@@ -75,9 +74,7 @@ class CacheService:
         swi_key = swi_dt.strftime("%Y%m%d%H%M%S")
         guid_key = guid_dt.strftime("%Y%m%d%H%M%S")
 
-        cache_key = (
-            f"swi_{swi_key}_guid_{guidance_type.lower()}_{guid_key}_risk_{risk_rule.lower()}"
-        )
+        cache_key = f"swi_{swi_key}_guid_{guidance_type.lower()}_{guid_key}"
         if region:
             cache_key = f"{cache_key}_region_{region.lower()}"
         return cache_key
@@ -277,8 +274,7 @@ class CacheService:
         result: dict,
         swi_initial: str,
         guidance_initial: str,
-        guidance_type: str = "msm",
-        risk_rule: str = "legacy"
+        guidance_type: str = "msm"
     ) -> bool:
         """
         計算結果をキャッシュに保存
@@ -325,7 +321,6 @@ class CacheService:
         swi_initial: str,
         guidance_initial: str,
         guidance_type: str = "msm",
-        risk_rule: str = "legacy",
         on_complete: Optional[Callable[[bool], None]] = None,
     ) -> None:
         """
@@ -342,7 +337,6 @@ class CacheService:
                 swi_initial,
                 guidance_initial,
                 guidance_type,
-                risk_rule,
             )
             if on_complete:
                 try:
