@@ -66,6 +66,24 @@ const RAIN_PREVIEW_LEGEND = {
   ],
 } as const;
 
+const formatJstDateTime = (date: Date): string => new Intl.DateTimeFormat('ja-JP', {
+  timeZone: 'Asia/Tokyo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+}).format(date);
+
+const format24HourPeriod = (initialTime: string, endFt: number): string => {
+  const initial = new Date(initialTime);
+  if (Number.isNaN(initial.getTime())) return `時刻不明（FT${endFt - 24}～FT${endFt}）`;
+  const start = new Date(initial.getTime() + (endFt - 24) * 60 * 60 * 1000);
+  const end = new Date(initial.getTime() + endFt * 60 * 60 * 1000);
+  return `${formatJstDateTime(start)} ～ ${formatJstDateTime(end)}`;
+};
+
 const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionProps> = ({
   isOpen,
   onClose,
@@ -171,9 +189,10 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
   const available24HourEnds = useMemo(() => {
     const timelines = Object.values(currentOriginalMap);
     if (timelines.length === 0) return [];
-    return timelines[0]
-      .map(point => point.ft)
-      .filter(ft => ft >= 24 && ft % 3 === 0 && timelines.every(timeline => timeline.some(point => point.ft === ft)))
+    // 欠損がある地域に引きずられて、全地域共通のFTがR24だけになるのを避ける。
+    // 各行には存在するFTのセルだけを表示する。
+    return [...new Set(timelines.flatMap(timeline => timeline.map(point => point.ft)))]
+      .filter(ft => ft >= 24 && ft % 3 === 0)
       .sort((a, b) => a - b);
   }, [currentOriginalMap]);
 
@@ -320,12 +339,11 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
   // セルクリックハンドラ
   const handleCellMouseDown = (areaName: string, ft: number, e: React.MouseEvent) => {
-    // 数値欄の操作では選択用の preventDefault を行わず、入力欄のフォーカスを許可する。
-    // 対象セルも単一選択しておくことで、直接編集と既存の選択状態を同期する。
+    // 入力欄からドラッグを始めた場合も範囲選択できるよう、フォーカスを保ったまま選択を開始する。
     if (e.target instanceof HTMLInputElement) {
       setSelectedCells(new Set([getCellKey(areaName, ft)]));
       setSelectionStart({ areaName, ft });
-      setIsSelecting(false);
+      setIsSelecting(true);
       return;
     }
 
@@ -382,9 +400,10 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
     const firstTimeseries = areaNames.length > 0 ? currentData[areaNames[0]] : undefined;
     if (!firstTimeseries || firstTimeseries.length === 0) return;
 
-    const ftValues = firstTimeseries.map(p => p.ft);
+    const ftValues = inputMode === '24hour' ? active24HourEnds : firstTimeseries.map(p => p.ft);
     const startFtIndex = ftValues.indexOf(start.ft);
     const endFtIndex = ftValues.indexOf(end.ft);
+    if (startFtIndex === -1 || endFtIndex === -1) return;
 
     const minAreaIndex = Math.min(startAreaIndex, endAreaIndex);
     const maxAreaIndex = Math.max(startAreaIndex, endAreaIndex);
@@ -440,7 +459,8 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
 
   // 単一セルの値変更
   const handleRainfallChange = (areaName: string, ft: number, value: string) => {
-    if (usesAreaMaxFill) {
+    const key = getCellKey(areaName, ft);
+    if (usesAreaMaxFill || selectedCells.size !== 1 || !selectedCells.has(key)) {
       return;
     }
 
@@ -1086,13 +1106,13 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                               >
                                 {options.map(optionEnd => (
                                   <option key={optionEnd} value={optionEnd}>
-                                    初期時刻 + {optionEnd - 24}時間
+                                    {format24HourPeriod(guidanceInitial, optionEnd)}
                                   </option>
                                 ))}
                               </select>
                             </label>
                             <div style={{ marginTop: '4px', fontSize: '11px', fontWeight: 'normal' }}>
-                              初期+{endFt - 24}h ～ 初期+{endFt}h
+                              {format24HourPeriod(guidanceInitial, endFt)}
                             </div>
                           </th>
                         );
@@ -1129,7 +1149,11 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                         }}>
                           {viewMode === 'prefecture' ? areaName.split('_')[0] : viewMode === 'primary' ? areaName.replace('_', ' / ') : areaName.split('_')[1] || areaName}
                         </td>
-                        {timeseries.map(point => {
+                        {(inputMode === '24hour' ? active24HourEnds : timeseries.map(point => point.ft)).map(ft => {
+                          const point = timeseries.find(candidate => candidate.ft === ft);
+                          if (!point) {
+                            return <td key={ft} aria-label={`${areaName} FT${ft} 雨量データなし`} style={{ padding: '4px', border: '1px solid #eee', textAlign: 'center', color: '#999', backgroundColor: '#f5f5f5' }}>—</td>;
+                          }
                           const originalPoint = originalData[areaName]?.find(p => p.ft === point.ft);
                           const isModified = originalPoint && Math.abs(originalPoint.value - point.value) > 0.01;
                           const isSelected = isCellSelected(areaName, point.ft);
@@ -1160,6 +1184,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                                 aria-label={`${areaName} FT${point.ft} 雨量 (mm)`}
                                 onChange={(e) => handleRainfallChange(areaName, point.ft, e.target.value)}
                                 disabled={usesAreaMaxFill}
+                                readOnly={selectedCells.size !== 1 || !selectedCells.has(getCellKey(areaName, point.ft))}
                                 className="rainfall-input"
                                 style={{
                                   width: '100%',
