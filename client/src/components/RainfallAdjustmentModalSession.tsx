@@ -72,6 +72,12 @@ const format24HourPeriod = (initialTime: string, endFt: number): string => {
   return `${formatJstDateTime(start)} ～ ${formatJstDateTime(end)}`;
 };
 
+const formatForecastEnd = (initialTime: string, endFt: number): string => {
+  const initial = new Date(initialTime);
+  if (Number.isNaN(initial.getTime())) return `FT${endFt}`;
+  return `${formatJstDateTime(new Date(initial.getTime() + endFt * 60 * 60 * 1000))}（FT${endFt}）`;
+};
+
 const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionProps> = ({
   isOpen,
   onClose,
@@ -153,6 +159,19 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
     }
     return viewMode === 'municipality' ? originalRainfall : originalSubdivisionRainfall;
   }, [showsAllPrefectures, originalScopes, inputMode, viewMode, originalRainfall24Hour, originalSubdivisionRainfall24Hour, originalRainfall, originalSubdivisionRainfall]);
+
+  const currentForecastMap = useMemo(() => {
+    if (showsAllPrefectures) return originalScopes[viewMode]?.['3hour'] ?? {};
+    return viewMode === 'municipality' ? originalRainfall : originalSubdivisionRainfall;
+  }, [showsAllPrefectures, originalScopes, viewMode, originalRainfall, originalSubdivisionRainfall]);
+
+  const currentForecastMaxFt = useMemo(() => {
+    let maximum: number | null = null;
+    Object.values(currentForecastMap).forEach(timeline => timeline.forEach(point => {
+      if (maximum === null || point.ft > maximum) maximum = point.ft;
+    }));
+    return maximum;
+  }, [currentForecastMap]);
 
   const currentGroupedMap = useMemo(() => groupRainfallByPrefecture(currentAdjustedMap), [currentAdjustedMap]);
 
@@ -1001,8 +1020,33 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
             </div>
 
             {inputMode === '24hour' && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
-                <span>R24・Next24・NextNext24の始期を3時間刻みで選択できます。対象期間は重ならないように設定されます。</span>
+              <div style={{ marginBottom: '8px', fontSize: '12px' }}>
+                <div style={{ marginBottom: '5px' }}>R24・Next24・NextNext24の始期を3時間刻みで選択できます。対象期間は重ならないように設定されます。</div>
+                <div role="status" style={{ padding: '7px 9px', background: '#fff8e1', border: '1px solid #ffe082', borderRadius: '4px', color: '#5d4700' }}>
+                  <strong>現在の予想雨量：</strong>
+                  {currentForecastMaxFt === null
+                    ? '時刻情報を取得できません'
+                    : `${formatForecastEnd(guidanceInitial, currentForecastMaxFt)}まで`}
+                  {active24HourEnds.length > 0 && (
+                    <span style={{ marginLeft: '12px' }}>
+                      {!available24HourEnds.some(endFt => endFt >= active24HourEnds[0] + 24) && (
+                        <>Next24には{formatForecastEnd(guidanceInitial, active24HourEnds[0] + 24)}までの雨量が必要です。</>
+                      )}
+                      {available24HourEnds.some(endFt => endFt >= active24HourEnds[0] + 24)
+                        && active24HourEnds.length > 1
+                        && !available24HourEnds.some(endFt => endFt >= active24HourEnds[1] + 24) && (
+                          <>NextNext24には{formatForecastEnd(guidanceInitial, active24HourEnds[1] + 24)}までの雨量が必要です。</>
+                        )}
+                      {available24HourEnds.some(endFt => endFt >= active24HourEnds[0] + 24)
+                        && active24HourEnds.length > 1
+                        && available24HourEnds.some(endFt => endFt >= active24HourEnds[1] + 24)
+                        && active24HourEnds.length < 3 && (
+                          <>NextNext24の入力が可能です。</>
+                        )}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '5px' }}>
                 {(active24HourEnds.length >= 3 || available24HourEnds.some(endFt => endFt >= (active24HourEnds[active24HourEnds.length - 1] ?? 0) + 24)) && (
                   <button
                     type="button"
@@ -1012,6 +1056,7 @@ const RainfallAdjustmentModalSession: React.FC<RainfallAdjustmentModalSessionPro
                     {active24HourEnds.length >= 3 ? 'NextNext24を非表示' : `${active24HourEnds.length === 1 ? 'Next24' : 'NextNext24'}を追加`}
                   </button>
                 )}
+                </div>
               </div>
             )}
 
