@@ -2,6 +2,19 @@
 
 次回以降、このリポジトリで作業を始めるときに最初に貼るプロンプトです。
 
+## 最新状況（2026-11-04）
+
+雨量調整後プレビューの色分けをユーザー提供の参考画像に合わせ、stagingへ反映しました。
+
+- 3時間雨量と3時間内最大1時間雨量のプレビューに、1 / 2 / 4 / 8 / 12 / 16 / 24 / 32 / 40 / 48 / 56 / 64 / 80 mm の閾値を適用。
+- 雨量0は白（無色）として描画し、凡例にも0の白色を表示。
+- 色設定と凡例を `client/src/features/rainfall-adjustment/previewPalette.ts` に集約。
+- `scripts/check_production_promotion.py` はproduction profileの公開6ルートと禁止ファイルを確認して通過。
+- stagingのフロントproduction buildとTypeScript型チェックは通過（204 modules）。バンドルサイズ警告あり。
+- stagingサーバーへのデプロイと実機確認は未実施。
+
+## 2026-10-16時点の作業状況
+
 ```text
 /workspaces/soil-rainfall-index-system の作業を再開します。
 
