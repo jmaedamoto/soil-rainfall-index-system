@@ -19,6 +19,7 @@
   - `GET /session/<session_id>/prefecture/<prefecture_code>`
   - `GET /session/<session_id>/risk-at-time`
   - `GET /session/<session_id>/rainfall-data`
+  - `POST /session/<session_id>/rainfall-preview`
   - `POST /session/<session_id>/recalculate`
 - 本番クライアントから使われない route、テスト用 route、検証用 route は `staging` / `main` に持ち込まない
 - `test_*.py`、`server/tests/`、`.pytest_cache/`、`__pycache__/`、`*.pyc` は `staging` / `main` に持ち込まない

@@ -313,6 +313,75 @@ class RainfallAdjustmentService:
             strategy='fill_peak_mesh'
         )
 
+    def build_adjusted_mesh_rainfall_for_mode(
+        self,
+        prefectures_dict: Dict[str, Any],
+        adjustments: Dict[str, Dict[int, float]],
+        aggregate_adjustments: Dict[str, Dict[int, float]],
+        input_mode: str,
+        adjustment_mode: str,
+    ) -> Dict[str, List[Tuple[int, float]]]:
+        """Apply the same mesh-rainfall transformation used by recalculation.
+
+        This method deliberately stops before SWI/risk recalculation so the UI
+        can preview adjusted rainfall without creating a forked session.
+        """
+        if input_mode == '24hour':
+            builders = {
+                'fill_24hour_uniform': self.build_fill_24hour_uniform_from_session,
+                'ratio_24hour_uniform': self.build_ratio_24hour_uniform_from_session,
+                'fill_24hour_peak_mesh': self.build_fill_24hour_peak_mesh_from_session,
+                'ratio_24hour_peak_mesh': self.build_ratio_24hour_peak_mesh_from_session,
+            }
+            builder = builders.get(adjustment_mode)
+            if builder is None:
+                raise ValueError(f'Unsupported adjustment_mode: {adjustment_mode}')
+            return builder(prefectures_dict, aggregate_adjustments)
+
+        if input_mode != '3hour':
+            raise ValueError(f'Unsupported input_mode: {input_mode}')
+
+        if adjustment_mode == 'fill_3hour':
+            return self.build_filled_mesh_rainfall_from_session(prefectures_dict, adjustments)
+        if adjustment_mode == 'fill_3hour_area_max':
+            return self.build_area_max_filled_mesh_rainfall_from_session(prefectures_dict, adjustments)
+        if adjustment_mode == 'ratio_3hour':
+            ratios = self.calculate_mesh_ratios_from_session(prefectures_dict, adjustments)
+            return self.build_adjusted_mesh_rainfall_from_session(prefectures_dict, ratios)
+        raise ValueError(f'Unsupported adjustment_mode: {adjustment_mode}')
+
+    @staticmethod
+    def build_adjusted_max_1hour_timeline(
+        mesh_dict: Dict[str, Any],
+        adjusted_3hour_timeline: List[Tuple[int, float]],
+    ) -> List[Tuple[int, float]]:
+        """Match the 3-hour-to-maximum-1-hour scaling used by recalculation."""
+        original_3hour = {
+            int(point['ft']): float(point['value'])
+            for point in mesh_dict.get('rain_timeline', [])
+        }
+        original_max_1hour = {
+            int(point['ft']): float(point['value'])
+            for point in mesh_dict.get('rain_1hour_max_timeline', [])
+        }
+        result = []
+        for ft, adjusted_value in adjusted_3hour_timeline:
+            ft = int(ft)
+            adjusted_value = float(adjusted_value)
+            original_3h = original_3hour.get(ft, 0.0)
+            original_1h_max = original_max_1hour.get(ft, 0.0)
+            if adjusted_value <= 0:
+                adjusted_1h_max = 0.0
+            elif original_1h_max > 0 and original_3h > 0:
+                adjusted_1h_max = min(
+                    adjusted_value,
+                    original_1h_max * (adjusted_value / original_3h),
+                )
+            else:
+                adjusted_1h_max = adjusted_value / 3.0
+            result.append((ft, max(0.0, min(adjusted_value, adjusted_1h_max))))
+        return result
+
     def extract_area_rainfall_timeseries(
         self,
         prefectures: List[Prefecture],

@@ -125,6 +125,57 @@ def test_rainfall_api_returns_both_scopes_for_all_prefectures(prefectures):
     assert set(data['scope_rainfall']['primary']['24hour']) == {'滋賀県_北部', '滋賀県_南部', '京都府_北部'}
 
 
+def test_rainfall_preview_applies_adjustments_without_creating_fork(prefectures):
+    target_mesh = prefectures['shiga']['areas'][0]['meshes'][0]
+    target_mesh['rain_1hour_max_timeline'] = [
+        {'ft': ft, 'value': 4} for ft in range(3, 49, 3)
+    ]
+    controller = controller_for(prefectures)
+    with Flask(__name__).test_request_context(json={
+        'display_hours': 24,
+        'adjustments': {'滋賀県_長浜市': [{'ft': 3, 'value': 20}]},
+        'aggregate_adjustments': {},
+        'input_mode': '3hour',
+        'adjustment_mode': 'ratio_3hour',
+        'adjustment_scope': 'municipality',
+    }):
+        response = controller.preview_adjusted_rainfall('base')
+
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['display_hours'] == 24
+    assert data['times'] == list(range(3, 25, 3))
+    assert data['mesh_count'] == 4
+    mesh_data = data['meshes']['north1']
+    assert mesh_data['rain_3hour'][0] == 20
+    assert mesh_data['rain_1hour_max'][0] == 8
+    assert len(mesh_data['rain_3hour']) == 8
+    controller.session_service.create_fork_session.assert_not_called()
+
+
+def test_rainfall_preview_uses_24hour_adjustment_and_rejects_invalid_range(prefectures):
+    controller = controller_for(prefectures)
+    with Flask(__name__).test_request_context(json={
+        'display_hours': 72,
+        'adjustments': {},
+        'aggregate_adjustments': {'滋賀県_長浜市': [{'ft': 24, 'value': 160}]},
+        'input_mode': '24hour',
+        'adjustment_mode': 'fill_24hour_uniform',
+        'adjustment_scope': 'municipality',
+    }):
+        response = controller.preview_adjusted_rainfall('base')
+
+    assert response.status_code == 200
+    data = response.get_json()
+    mesh_data = data['meshes']['north1']
+    assert mesh_data['rain_3hour'][:8] == [20] * 8
+    assert mesh_data['rain_3hour'][8] == 10
+
+    with Flask(__name__).test_request_context(json={'display_hours': 36}):
+        _, invalid_status = controller.preview_adjusted_rainfall('base')
+    assert invalid_status == 400
+
+
 @pytest.mark.parametrize('scope,key', [('primary', '滋賀県_北部'), ('prefecture', '滋賀県_全域')])
 def test_recalculate_routes_scoped_meshes_and_preserves_scope(prefectures, scope, key):
     controller = controller_for(prefectures)

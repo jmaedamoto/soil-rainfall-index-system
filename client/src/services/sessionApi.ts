@@ -5,6 +5,7 @@ import type {
   RiskAtTimeResponse,
   MeshDetailResponse,
   RainfallDataResponse,
+  AdjustedRainfallPreviewResponse,
   RecalculateRequest,
   RecalculateResponse,
 } from '../types/session';
@@ -122,6 +123,44 @@ class SessionAPIClient {
       risk_rule: response.data.risk_rule,
       input_mode: response.data.input_mode,
       adjustment_mode: response.data.adjustment_mode
+    };
+  }
+
+  /**
+   * 雨量調整後のメッシュ雨量を取得する（SWI・危険度は再計算しない）
+   */
+  async previewAdjustedRainfall(
+    sessionId: string,
+    adjustments: RecalculateRequest['adjustments'],
+    aggregateAdjustments: RecalculateRequest['aggregate_adjustments'],
+    inputMode: RecalculateRequest['input_mode'],
+    adjustmentMode: RecalculateRequest['adjustment_mode'],
+    adjustmentScope: RecalculateRequest['adjustment_scope'],
+    displayHours: 24 | 48 | 72 = 72
+  ): Promise<AdjustedRainfallPreviewResponse> {
+    const response = await axios.post<{
+      status: string;
+      display_hours: 24 | 48 | 72;
+      times: number[];
+      meshes: AdjustedRainfallPreviewResponse['meshes'];
+      mesh_count: number;
+    }>(
+      `${this.apiBaseUrl}/session/${sessionId}/rainfall-preview`,
+      {
+        adjustments,
+        aggregate_adjustments: aggregateAdjustments,
+        input_mode: inputMode,
+        adjustment_mode: adjustmentMode,
+        adjustment_scope: adjustmentScope,
+        display_hours: displayHours,
+      },
+      { timeout: 120000 }
+    );
+    return {
+      display_hours: response.data.display_hours,
+      times: response.data.times,
+      meshes: response.data.meshes,
+      mesh_count: response.data.mesh_count,
     };
   }
 
