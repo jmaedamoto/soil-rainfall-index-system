@@ -294,14 +294,26 @@ class MainService:
         logger.info("メッシュ計算処理開始")
         calc_start = time.time()
         total_meshes = 0
+        phase_timings: Dict[str, Tuple[float, int]] = {}
 
         for prefecture in prefectures:
             for area in prefecture.areas:
                 for mesh in area.meshes:
                     self.calculation_service.process_mesh_calculations(
-                        mesh, swi_grib2, guidance_grib2
+                        mesh,
+                        swi_grib2,
+                        guidance_grib2,
+                        phase_timings=phase_timings,
                     )
                     total_meshes += 1
+
+        for phase_name, (duration_seconds, measured_mesh_count) in phase_timings.items():
+            record_stage(
+                f"initial_mesh_{phase_name}",
+                duration_seconds * 1000,
+                mesh_count=total_meshes,
+                measured_mesh_count=measured_mesh_count,
+            )
 
         logger.info(
             f"メッシュ計算完了: {time.time() - calc_start:.2f}秒 ({total_meshes}メッシュ)"
