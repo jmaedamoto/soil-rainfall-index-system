@@ -12,7 +12,6 @@
 
 import secrets
 import logging
-import copy
 import json
 import os
 import tempfile
@@ -414,66 +413,87 @@ class SessionService:
             affected_prefecture_count=len(affected_pref_codes),
         )
 
-        # Step 2: 影響を受ける府県のみdeepcopy、それ以外は参照
+        # Step 2: 変更対象だけをコピーし、変更しないデータはベースと共有する
         copy_started_at = perf_counter()
-        merged_prefectures = {}
-        for pref_code, prefecture in base_session['prefectures'].items():
-            if pref_code in affected_pref_codes:
-                # この府県は変更されるのでdeepcopy
-                merged_prefectures[pref_code] = copy.deepcopy(prefecture)
-            else:
-                # この府県は変更されないので参照（コピーしない）
-                merged_prefectures[pref_code] = prefecture
-        copy_time = perf_counter() - copy_started_at
-        logger.info(f"[Merge] Selective deepcopy: {copy_time:.3f}s")
-        record_stage(
-            "fork_merge_selective_deepcopy",
-            copy_time * 1000,
-            affected_prefecture_count=len(affected_pref_codes),
-        )
-
-        # 影響を受けたエリアを追跡（再集約の最適化用）
-        # キー: (pref_code, area_name), 値: area参照
+        merged_prefectures = dict(base_session['prefectures'])
         affected_areas: Dict[tuple, Any] = {}
 
-        # Step 3: 影響を受けた府県のメッシュのみ更新
-        update_started_at = perf_counter()
         for pref_code in affected_pref_codes:
-            prefecture = merged_prefectures[pref_code]
-            for area in prefecture.get('areas', []):
-                for mesh in area.get('meshes', []):
+            base_prefecture = base_session['prefectures'][pref_code]
+            prefecture = dict(base_prefecture)
+            copied_areas = []
+            affected_area_names = set()
+
+            for area in base_prefecture.get('areas', []):
+                meshes = area.get('meshes', [])
+                copied_meshes = []
+                area_changed = False
+                for mesh in meshes:
                     mesh_code = mesh.get('code')
-                    if mesh_code in recalculated_meshes:
-                        # 再計算済みデータで上書き
-                        recalc_data = recalculated_meshes[mesh_code]
-                        mesh['risk_3hour_max_timeline'] = recalc_data.get(
-                            'risk_3hour_max_timeline', mesh.get('risk_3hour_max_timeline', []))
-                        mesh['swi_timeline'] = recalc_data.get(
-                            'swi_timeline', mesh.get('swi_timeline', []))
-                        mesh['swi_hourly_timeline'] = recalc_data.get(
-                            'swi_hourly_timeline', mesh.get('swi_hourly_timeline', []))
-                        mesh['rain_timeline'] = recalc_data.get(
-                            'rain_timeline', mesh.get('rain_timeline', []))
-                        mesh['rain_1hour_timeline'] = recalc_data.get(
-                            'rain_1hour_timeline', mesh.get('rain_1hour_timeline', []))
-                        mesh['rain_1hour_max_timeline'] = recalc_data.get(
-                            'rain_1hour_max_timeline', mesh.get('rain_1hour_max_timeline', []))
-                        if 'risk_hourly_timeline' in recalc_data:
-                            mesh['risk_hourly_timeline'] = recalc_data['risk_hourly_timeline']
+                    if mesh_code not in recalculated_meshes:
+                        copied_meshes.append(mesh)
+                        continue
 
-                        # このエリアを影響リストに追加
-                        affected_areas[(pref_code, area.get('name'))] = area
+                    area_changed = True
+                    # Recalculated mesh dictionaries are the only mesh-level
+                    # objects changed by the merge. Timeline values are replaced,
+                    # so the existing timelines and static mesh data can be shared.
+                    updated_mesh = dict(mesh)
+                    recalc_data = recalculated_meshes[mesh_code]
+                    updated_mesh['risk_3hour_max_timeline'] = recalc_data.get(
+                        'risk_3hour_max_timeline', mesh.get('risk_3hour_max_timeline', []))
+                    updated_mesh['swi_timeline'] = recalc_data.get(
+                        'swi_timeline', mesh.get('swi_timeline', []))
+                    updated_mesh['swi_hourly_timeline'] = recalc_data.get(
+                        'swi_hourly_timeline', mesh.get('swi_hourly_timeline', []))
+                    updated_mesh['rain_timeline'] = recalc_data.get(
+                        'rain_timeline', mesh.get('rain_timeline', []))
+                    updated_mesh['rain_1hour_timeline'] = recalc_data.get(
+                        'rain_1hour_timeline', mesh.get('rain_1hour_timeline', []))
+                    updated_mesh['rain_1hour_max_timeline'] = recalc_data.get(
+                        'rain_1hour_max_timeline', mesh.get('rain_1hour_max_timeline', []))
+                    if 'risk_hourly_timeline' in recalc_data:
+                        updated_mesh['risk_hourly_timeline'] = recalc_data['risk_hourly_timeline']
+                    copied_meshes.append(updated_mesh)
 
-        update_time = perf_counter() - update_started_at
-        logger.info(f"[Merge] Mesh update: {update_time:.3f}s, updated areas: {len(affected_areas)}")
+                if not area_changed:
+                    copied_areas.append(area)
+                    continue
+
+                copied_area = dict(area)
+                copied_area['meshes'] = copied_meshes
+                copied_areas.append(copied_area)
+                area_name = area.get('name')
+                affected_area_names.add(area_name)
+                affected_areas[(pref_code, area_name)] = copied_area
+
+            prefecture['areas'] = copied_areas
+
+            # Aggregation below replaces risk_timeline values on affected
+            # subdivisions. Copy only those subdivision records and their list.
+            subdivisions = base_prefecture.get('secondary_subdivisions', [])
+            if affected_area_names and subdivisions:
+                copied_subdivisions = []
+                for subdivision in subdivisions:
+                    if set(subdivision.get('area_names', [])) & affected_area_names:
+                        copied_subdivisions.append(dict(subdivision))
+                    else:
+                        copied_subdivisions.append(subdivision)
+                prefecture['secondary_subdivisions'] = copied_subdivisions
+
+            merged_prefectures[pref_code] = prefecture
+
+        copy_time = perf_counter() - copy_started_at
+        logger.info(f"[Merge] Copy-on-write preparation: {copy_time:.3f}s")
         record_stage(
-            "fork_merge_mesh_update",
-            update_time * 1000,
-            updated_area_count=len(affected_areas),
+            "fork_merge_copy_on_write",
+            copy_time * 1000,
+            affected_prefecture_count=len(affected_pref_codes),
+            affected_area_count=len(affected_areas),
             recalculated_mesh_count=len(recalculated_mesh_codes),
         )
 
-        # メッシュ更新後、影響を受けたエリアのみリスクタイムラインを再集約
+        # Step 3: 影響を受けたエリアのみリスクタイムラインを再集約
         reagg_started_at = perf_counter()
         if affected_areas:
             # 影響を受けた府県を特定
