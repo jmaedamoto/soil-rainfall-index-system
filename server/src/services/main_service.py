@@ -14,6 +14,7 @@ from .data_service import DataService
 from .calculation_service import CalculationService
 from .cache_service import get_cache_service
 from .response_builder import ResponseBuilder
+from .performance_timing import record_stage
 from config.config_service import ConfigService
 
 
@@ -123,8 +124,14 @@ class MainService:
             logger.info(f"キャッシュミス: {cache_key} - 計算を実行")
 
             # SWI初期時刻以降のガイダンスデータのみを使用
+            filter_started_at = time.perf_counter()
             guidance_grib2_filtered = self._filter_guidance_data(
                 guidance_grib2, swi_initial_time, guidance_initial_time
+            )
+            record_stage(
+                "guidance_time_filter",
+                (time.perf_counter() - filter_started_at) * 1000,
+                guidance_item_count=len(guidance_grib2_filtered.get("data", [])),
             )
 
             # 計算処理実行
@@ -188,12 +195,27 @@ class MainService:
 
     def _parse_separate_grib2_from_urls(self, swi_url: str, guidance_url: str):
         """個別URLからGRIB2を取得して解析する"""
+        download_started_at = time.perf_counter()
         swi_data_bytes, guidance_data_bytes = self._load_grib2_bytes(
             swi_url, guidance_url
         )
+        record_stage(
+            "grib2_download",
+            (time.perf_counter() - download_started_at) * 1000,
+            swi_bytes=len(swi_data_bytes),
+            guidance_bytes=len(guidance_data_bytes),
+        )
+
+        parse_started_at = time.perf_counter()
         base_info, swi_grib2 = self.grib2_service.unpack_swi_grib2(swi_data_bytes)
         guidance_base_info, guidance_grib2 = self.grib2_service.unpack_guidance_grib2(
             guidance_data_bytes
+        )
+        record_stage(
+            "grib2_parse",
+            (time.perf_counter() - parse_started_at) * 1000,
+            swi_grid_points=len(swi_grib2.get("swi", [])),
+            guidance_data_items=len(guidance_grib2.get("data", [])),
         )
         return base_info, swi_grib2, guidance_base_info, guidance_grib2
 
@@ -218,10 +240,37 @@ class MainService:
         prefecture_codes: Optional[Sequence[str]] = None,
     ) -> Tuple[Dict[str, Any], int]:
         """地域データ準備からレスポンス構築までの計算パイプライン"""
+        stage_started_at = time.perf_counter()
         prefectures = self._prepare_prefectures(prefecture_codes)
+        record_stage(
+            "area_data_preparation",
+            (time.perf_counter() - stage_started_at) * 1000,
+            prefecture_count=len(prefectures),
+        )
+
+        stage_started_at = time.perf_counter()
         total_meshes = self._calculate_meshes(prefectures, swi_grib2, guidance_grib2)
+        record_stage(
+            "initial_mesh_calculation",
+            (time.perf_counter() - stage_started_at) * 1000,
+            mesh_count=total_meshes,
+        )
+
+        stage_started_at = time.perf_counter()
         self._aggregate_risk_timelines(prefectures)
+        record_stage(
+            "initial_risk_aggregation",
+            (time.perf_counter() - stage_started_at) * 1000,
+            prefecture_count=len(prefectures),
+        )
+
+        stage_started_at = time.perf_counter()
         result = ResponseBuilder.build_prefecture_response(prefectures, initial_time)
+        record_stage(
+            "initial_response_data_conversion",
+            (time.perf_counter() - stage_started_at) * 1000,
+            mesh_count=total_meshes,
+        )
         return result, total_meshes
 
     def _prepare_prefectures(

@@ -16,6 +16,7 @@ sys.path.append(project_root)
 
 from services.main_service import MainService
 from services.cache_service import get_cache_service
+from services.performance_timing import record_stage, session_reference
 from config.config_service import ConfigService
 from models import REGION_PREFECTURES
 
@@ -177,7 +178,8 @@ class MainController:
         guidance_url: str,
     ):
         """軽量セッションレスポンスを組み立てる"""
-        return jsonify({
+        response_started_at = time.perf_counter()
+        response = jsonify({
             "status": "success",
             "session_id": session_id,
             "swi_initial_time": swi_initial.isoformat() + 'Z',
@@ -198,6 +200,12 @@ class MainController:
                 "region": region,
             }
         })
+        record_stage(
+            "initial_session_response_assembly",
+            (time.perf_counter() - response_started_at) * 1000,
+            prefecture_count=len(prefectures),
+        )
+        return response
 
     def _build_cached_response(
         self,
@@ -219,6 +227,7 @@ class MainController:
         )
 
         if self.session_service:
+            session_started_at = time.perf_counter()
             session_id = self.session_service.create_session(
                 cached_result['prefectures'],
                 swi_initial.isoformat(),
@@ -226,6 +235,13 @@ class MainController:
                 datetime.now().isoformat(),
                 guidance_type,
                 cache_key,
+            )
+            record_stage(
+                "base_session_creation",
+                (time.perf_counter() - session_started_at) * 1000,
+                prefecture_count=len(cached_result.get("prefectures", {})),
+                cache_hit=True,
+                session_ref=session_reference(session_id),
             )
             return self._build_lightweight_session_response(
                 session_id,
@@ -587,11 +603,17 @@ class MainController:
             logger.info(f"{trace_prefix} キャッシュキー算出: {cache_key}")
 
             # 先に軽量キャッシュサマリーを確認し、ヒット時はGRIB2取得前に即返却する
+            cache_lookup_started_at = time.perf_counter()
             cached_summary = self.cache_service.get_cached_summary(
                 cache_key,
                 swi_initial.isoformat(),
                 guidance_initial.isoformat(),
                 guidance_type,
+            )
+            record_stage(
+                "initial_result_cache_lookup",
+                (time.perf_counter() - cache_lookup_started_at) * 1000,
+                cache_hit=bool(cached_summary),
             )
             if cached_summary:
                 self.cache_service.cleanup_completed_calculation_lock(cache_key)
@@ -641,7 +663,16 @@ class MainController:
                     cache_materializing,
                 )
 
-                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=2.0):
+                cache_ready = self.cache_service.wait_for_cache_materialization(
+                    cache_key,
+                    timeout_seconds=2.0,
+                )
+                record_stage(
+                    "initial_cache_materialization_wait",
+                    (time.perf_counter() - wait_started_at) * 1000,
+                    cache_ready=cache_ready,
+                )
+                if cache_ready:
                     cached_summary = self.cache_service.get_cached_summary(
                         cache_key,
                         swi_initial.isoformat(),
@@ -687,7 +718,16 @@ class MainController:
                 logger.info(
                     f"{trace_prefix} 別リクエストが計算を開始したため待機に切り替え: {cache_key}"
                 )
-                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=2.0):
+                cache_ready = self.cache_service.wait_for_cache_materialization(
+                    cache_key,
+                    timeout_seconds=2.0,
+                )
+                record_stage(
+                    "initial_calculation_lock_wait",
+                    (time.perf_counter() - wait_started_at) * 1000,
+                    cache_ready=cache_ready,
+                )
+                if cache_ready:
                     cached_summary = self.cache_service.get_cached_summary(
                         cache_key,
                         swi_initial.isoformat(),
@@ -750,6 +790,12 @@ class MainController:
                     prefecture_codes=REGION_PREFECTURES[region],
                 )
                 calculation_elapsed = time.perf_counter() - calculation_started_at
+                record_stage(
+                    "initial_main_service_total",
+                    calculation_elapsed * 1000,
+                    region=region,
+                    guidance_type=guidance_type,
+                )
                 logger.info(
                     f"{trace_prefix} 計算処理完了: {cache_key} "
                     f"(calculation_elapsed={calculation_elapsed:.2f}s)"
@@ -764,6 +810,11 @@ class MainController:
                     guidance_type,
                 )
                 cache_save_elapsed = time.perf_counter() - cache_save_started_at
+                record_stage(
+                    "initial_result_cache_save",
+                    cache_save_elapsed * 1000,
+                    cache_saved=bool(cache_saved),
+                )
                 if not cache_saved:
                     lock_released = self.cache_service.release_calculation_lock(cache_key)
                     slot_released = self.cache_service.release_calculation_slot()
@@ -801,6 +852,7 @@ class MainController:
                 # セッションサービスが有効な場合、セッション作成して軽量レスポンスを返す
                 if self.session_service:
                     # ベースセッション作成
+                    session_started_at = time.perf_counter()
                     session_id = self.session_service.create_session(
                         result['prefectures'],
                         swi_initial.isoformat(),
@@ -808,6 +860,13 @@ class MainController:
                         datetime.now().isoformat(),
                         guidance_type,
                         cache_key,
+                    )
+                    record_stage(
+                        "base_session_creation",
+                        (time.perf_counter() - session_started_at) * 1000,
+                        prefecture_count=len(result.get("prefectures", {})),
+                        cache_hit=False,
+                        session_ref=session_reference(session_id),
                     )
                     total_elapsed = time.perf_counter() - request_started_at
                     logger.info(

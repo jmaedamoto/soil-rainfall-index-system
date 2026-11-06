@@ -1,5 +1,6 @@
-"""Append timing events for rainfall preview and recalculation requests."""
+"""Append timing events for the rainfall adjustment workflow."""
 
+import hashlib
 import json
 import logging
 import os
@@ -14,9 +15,18 @@ from flask import Flask, g, request
 logger = logging.getLogger(__name__)
 
 _TIMED_ROUTE_SUFFIXES = (
+    "/production-soil-rainfall-index-with-urls",
+    "/session/<session_id>/rainfall-data",
     "/session/<session_id>/recalculate",
     "/session/<session_id>/rainfall-preview",
 )
+
+
+def session_reference(session_id: Optional[str]) -> Optional[str]:
+    """Return a stable, non-reversible reference for correlating one session's requests."""
+    if not session_id:
+        return None
+    return hashlib.sha256(session_id.encode("utf-8")).hexdigest()[:16]
 
 
 def _timing_file_path() -> Path:
@@ -85,8 +95,12 @@ def register_performance_timing_hooks(app: Flask) -> None:
             "started_at_utc": datetime.now(timezone.utc).isoformat(),
             "started_at_perf": perf_counter(),
         }
+        session_id = (request.view_args or {}).get("session_id")
+        session_ref = session_reference(session_id)
+        if session_ref:
+            record["session_ref"] = session_ref
         g.performance_timing_record = record
-        _append_event({
+        event = {
             "event": "request_started",
             "request_id": record["request_id"],
             "route": rule,
@@ -94,7 +108,10 @@ def register_performance_timing_hooks(app: Flask) -> None:
             "request_bytes": request.content_length,
             "process_id": os.getpid(),
             "timestamp_utc": record["started_at_utc"],
-        })
+        }
+        if session_ref:
+            event["session_ref"] = session_ref
+        _append_event(event)
 
     @app.after_request
     def _finish_performance_timing(response):
@@ -105,6 +122,7 @@ def register_performance_timing_hooks(app: Flask) -> None:
         _append_event({
             "event": "request_completed",
             "request_id": record["request_id"],
+            **({"session_ref": record["session_ref"]} if record.get("session_ref") else {}),
             "route": record["route"],
             "method": record["method"],
             "status_code": response.status_code,

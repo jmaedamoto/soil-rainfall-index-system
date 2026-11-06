@@ -20,7 +20,7 @@ from services.rainfall_adjustment_service import RainfallAdjustmentService
 from services.rainfall_scope_service import build_scope_prefectures, aggregate_three_hour
 from services.calculation_service_numpy import CalculationServiceNumpy
 from services.data_service import DataService
-from services.performance_timing import record_stage
+from services.performance_timing import record_stage, session_reference
 
 logger = logging.getLogger(__name__)
 
@@ -596,7 +596,13 @@ class SessionController:
             - 市町村等をまとめた地域別雨量タイムライン
         """
         try:
+            session_lookup_started_at = perf_counter()
             session = self.session_service.get_session(session_id)
+            record_stage(
+                'rainfall_data_session_lookup',
+                (perf_counter() - session_lookup_started_at) * 1000,
+                session_found=session is not None,
+            )
             if session is None:
                 return jsonify({
                     "status": "error",
@@ -610,9 +616,17 @@ class SessionController:
             subdivision_rainfall = {}
             area_orders = {}
             subdivision_orders = {}
+            aggregation_started_at = perf_counter()
             area_rainfall_24hour, subdivision_rainfall_24hour = \
                 self.rainfall_adjustment_service.aggregate_rainfall_24hour_from_session(prefectures)
+            record_stage(
+                'rainfall_data_24hour_aggregation',
+                (perf_counter() - aggregation_started_at) * 1000,
+                area_count=len(area_rainfall_24hour),
+                subdivision_count=len(subdivision_rainfall_24hour),
+            )
 
+            three_hour_started_at = perf_counter()
             for pref_code, prefecture in prefectures.items():
                 pref_name = prefecture["name"]
                 area_orders[pref_name] = []
@@ -676,8 +690,16 @@ class SessionController:
 
                         subdivision_rainfall[subdiv_key] = timeline
 
+            record_stage(
+                'rainfall_data_3hour_aggregation',
+                (perf_counter() - three_hour_started_at) * 1000,
+                area_count=len(area_rainfall),
+                subdivision_count=len(subdivision_rainfall),
+            )
+
             scope_rainfall = {}
             scope_errors = {}
+            scope_started_at = perf_counter()
             for scope in ('prefecture', 'primary'):
                 try:
                     scoped = build_scope_prefectures(prefectures, scope)
@@ -686,7 +708,15 @@ class SessionController:
                 except ValueError as error:
                     scope_errors[scope] = str(error)
 
-            return jsonify({
+            record_stage(
+                'rainfall_data_scope_aggregation',
+                (perf_counter() - scope_started_at) * 1000,
+                scope_count=len(scope_rainfall),
+                scope_error_count=len(scope_errors),
+            )
+
+            response_started_at = perf_counter()
+            response = jsonify({
                 "status": "success",
                 "scope_rainfall": scope_rainfall,
                 "scope_errors": scope_errors,
@@ -701,6 +731,13 @@ class SessionController:
                 "input_mode": session.get('input_mode', '3hour'),
                 "adjustment_mode": session.get('adjustment_mode', 'ratio_3hour')
             })
+            record_stage(
+                'rainfall_data_response_assembly',
+                (perf_counter() - response_started_at) * 1000,
+                area_count=len(area_rainfall),
+                subdivision_count=len(subdivision_rainfall),
+            )
+            return response
 
         except Exception as e:
             logger.error(f"Rainfall data error: {e}")
@@ -1205,6 +1242,7 @@ class SessionController:
                 'fork_creation_and_materialization',
                 (perf_counter() - fork_started_at) * 1000,
                 recalculated_mesh_count=len(recalculated_meshes),
+                new_session_ref=session_reference(fork_session_id),
             )
 
             if fork_session_id is None:
@@ -1218,7 +1256,13 @@ class SessionController:
 
             # 軽量レスポンス: 初期時刻（FT=0）のメッシュリスクと座標を返す
             # フォークセッションから取得（マージ済み）
+            fork_lookup_started_at = perf_counter()
             fork_session = self.session_service.get_session(fork_session_id)
+            record_stage(
+                'fork_result_session_lookup',
+                (perf_counter() - fork_lookup_started_at) * 1000,
+                session_found=fork_session is not None,
+            )
             merged_prefectures = fork_session['prefectures']
 
             response_assembly_started_at = perf_counter()
