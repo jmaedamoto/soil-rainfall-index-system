@@ -20,8 +20,10 @@ from typing import Dict, Optional, Any, List
 from datetime import datetime, timedelta
 from threading import Lock
 from pathlib import Path
+from time import perf_counter
 from models import Prefecture
 from services.cache_service import get_cache_service
+from services.performance_timing import record_stage
 
 logger = logging.getLogger(__name__)
 
@@ -378,8 +380,7 @@ class SessionService:
         Returns:
             マージされたセッションデータ
         """
-        import time
-        merge_start = time.time()
+        merge_started_at = perf_counter()
 
         base_session_id = fork_session.get('base_session_id')
         base_session = self.sessions.get(base_session_id)
@@ -394,6 +395,7 @@ class SessionService:
 
         # Step 1: 影響を受ける府県を特定（O(N)スキャンを避ける）
         # メッシュコードから府県を逆引きするインデックスを構築
+        index_started_at = perf_counter()
         mesh_to_pref = {}
         for pref_code, prefecture in base_session['prefectures'].items():
             for area in prefecture.get('areas', []):
@@ -403,11 +405,17 @@ class SessionService:
                         mesh_to_pref[mesh_code] = pref_code
 
         affected_pref_codes = set(mesh_to_pref.values())
-        index_time = time.time() - merge_start
+        index_time = perf_counter() - index_started_at
         logger.info(f"[Merge] Index build: {index_time:.3f}s, affected prefs: {affected_pref_codes}")
+        record_stage(
+            "fork_merge_index_build",
+            index_time * 1000,
+            recalculated_mesh_count=len(recalculated_mesh_codes),
+            affected_prefecture_count=len(affected_pref_codes),
+        )
 
         # Step 2: 影響を受ける府県のみdeepcopy、それ以外は参照
-        copy_start = time.time()
+        copy_started_at = perf_counter()
         merged_prefectures = {}
         for pref_code, prefecture in base_session['prefectures'].items():
             if pref_code in affected_pref_codes:
@@ -416,15 +424,20 @@ class SessionService:
             else:
                 # この府県は変更されないので参照（コピーしない）
                 merged_prefectures[pref_code] = prefecture
-        copy_time = time.time() - copy_start
+        copy_time = perf_counter() - copy_started_at
         logger.info(f"[Merge] Selective deepcopy: {copy_time:.3f}s")
+        record_stage(
+            "fork_merge_selective_deepcopy",
+            copy_time * 1000,
+            affected_prefecture_count=len(affected_pref_codes),
+        )
 
         # 影響を受けたエリアを追跡（再集約の最適化用）
         # キー: (pref_code, area_name), 値: area参照
         affected_areas: Dict[tuple, Any] = {}
 
         # Step 3: 影響を受けた府県のメッシュのみ更新
-        update_start = time.time()
+        update_started_at = perf_counter()
         for pref_code in affected_pref_codes:
             prefecture = merged_prefectures[pref_code]
             for area in prefecture.get('areas', []):
@@ -451,11 +464,17 @@ class SessionService:
                         # このエリアを影響リストに追加
                         affected_areas[(pref_code, area.get('name'))] = area
 
-        update_time = time.time() - update_start
+        update_time = perf_counter() - update_started_at
         logger.info(f"[Merge] Mesh update: {update_time:.3f}s, updated areas: {len(affected_areas)}")
+        record_stage(
+            "fork_merge_mesh_update",
+            update_time * 1000,
+            updated_area_count=len(affected_areas),
+            recalculated_mesh_count=len(recalculated_mesh_codes),
+        )
 
         # メッシュ更新後、影響を受けたエリアのみリスクタイムラインを再集約
-        reagg_start = time.time()
+        reagg_started_at = perf_counter()
         if affected_areas:
             # 影響を受けた府県を特定
             affected_prefs = set(pref_code for pref_code, _ in affected_areas.keys())
@@ -525,9 +544,20 @@ class SessionService:
                         for ft in sorted(ft_max_risk.keys())
                     ]
 
-        reagg_time = time.time() - reagg_start
-        total_time = time.time() - merge_start
+        reagg_time = perf_counter() - reagg_started_at
+        total_time = perf_counter() - merge_started_at
         logger.info(f"[Merge] Re-aggregation: {reagg_time:.3f}s, Total merge: {total_time:.3f}s")
+        record_stage(
+            "fork_merge_reaggregation",
+            reagg_time * 1000,
+            updated_area_count=len(affected_areas),
+        )
+        record_stage(
+            "fork_merge_total",
+            total_time * 1000,
+            recalculated_mesh_count=len(recalculated_mesh_codes),
+            affected_prefecture_count=len(affected_pref_codes),
+        )
 
         # マージ結果を返す
         return {
