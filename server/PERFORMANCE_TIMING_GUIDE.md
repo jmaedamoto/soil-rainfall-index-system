@@ -4,16 +4,18 @@
 
 ## 出力先
 
-既定の出力先は、サーバーのアプリケーションディレクトリにある次のファイルです。
+既定の出力先は、`CACHE_DIR`配下の次のファイルです。mod_wsgiの既定設定では`wsgi.py`が`CACHE_DIR=/var/cache/myapp/dosya`を設定します。
 
 ```text
-server/performance_timings.jsonl
+/var/cache/myapp/dosya/performance_timings.jsonl
 ```
 
-実機ではデプロイ先に応じて、絶対パスを環境変数 `SOIL_RAINFALL_TIMING_FILE` で指定できます。指定したファイルの親ディレクトリとファイルに、Flask/mod_wsgiの実行ユーザーが書き込める必要があります。
+`CACHE_DIR`が未設定の場合は開発用に`server/cache/performance_timings.jsonl`へ出力します。SELinuxを有効にした環境ではアプリ配置ディレクトリが読み取り専用の場合があるため、書き込み可能なキャッシュ領域に保存します。
+
+別の場所を使う場合は、絶対パスを環境変数 `SOIL_RAINFALL_TIMING_FILE` で指定できます。指定したファイルの親ディレクトリとファイルに、Flask/mod_wsgiの実行ユーザーが書き込める必要があります。
 
 ```bash
-export SOIL_RAINFALL_TIMING_FILE=/var/log/soil-rainfall/performance_timings.jsonl
+export SOIL_RAINFALL_TIMING_FILE=/var/cache/myapp/dosya/performance_timings.jsonl
 ```
 
 ## 記録されるAPIとイベント
@@ -37,10 +39,10 @@ Apacheなどの前段が先に504を返し、Flask側の処理がその後も続
 2. 雨量調整画面でプレビューまたは再計算を実行します。成功時だけでなく、504が発生した場合もファイルを採取してください。
 3. サーバーから `performance_timings.jsonl` だけをコピーし、このチャットに添付してください。
 
-既定パスを使う実機では、たとえば次のように採取します。
+mod_wsgi既定パスを使う実機では、たとえば次のように採取します。
 
 ```bash
-sudo cp /var/www/soil-rainfall/server/performance_timings.jsonl /tmp/performance_timings.jsonl
+sudo cp /var/cache/myapp/dosya/performance_timings.jsonl /tmp/performance_timings.jsonl
 ```
 
 環境変数で別の出力先を指定している場合は、そのファイルをコピーします。計測を始める前にファイルを退避または削除すれば、以前の実行と混ざらずに解析できます。

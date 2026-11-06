@@ -23,8 +23,12 @@ def _timing_file_path() -> Path:
     configured_path = os.environ.get("SOIL_RAINFALL_TIMING_FILE")
     if configured_path:
         return Path(configured_path).expanduser().resolve()
+
     server_dir = Path(__file__).resolve().parents[2]
-    return server_dir / "performance_timings.jsonl"
+    cache_dir = os.environ.get("CACHE_DIR")
+    if cache_dir:
+        return Path(cache_dir).expanduser().resolve() / "performance_timings.jsonl"
+    return server_dir / "cache" / "performance_timings.jsonl"
 
 
 def _append_event(event: Dict[str, Any]) -> None:
@@ -66,6 +70,7 @@ def record_stage(stage: str, duration_ms: float, **metadata: Any) -> None:
 
 def register_performance_timing_hooks(app: Flask) -> None:
     """Record start, stages, and completion for rainfall preview/recalculation APIs."""
+    logger.info("Rainfall performance timing file: %s", _timing_file_path())
 
     @app.before_request
     def _start_performance_timing() -> None:
