@@ -2,7 +2,7 @@
 キャッシュサービス - GRIB2計算結果の圧縮保存・取得
 
 機能:
-- gzip圧縮によるJSON保存（209MB → 約20MB）
+- gzip圧縮によるpickle保存（旧JSONキャッシュも読み込み可能）
 - キャッシュキー生成（SWI初期時刻 + ガイダンス初期時刻 + ガイダンス種別）
 - 自動TTL管理（デフォルト7日）
 - 計算中ロック機能（重複計算防止）
@@ -13,7 +13,7 @@ import json
 import logging
 import time
 import tempfile
-import io
+import pickle
 from threading import Lock, Thread
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -26,6 +26,10 @@ from time import perf_counter
 from .performance_timing import record_stage
 
 logger = logging.getLogger(__name__)
+
+_CACHE_FORMAT_MAGIC = b"SOIL-RAINFALL-CACHE-PICKLE\x01\n"
+_CACHE_SUFFIX = ".pickle.gz"
+_LEGACY_CACHE_SUFFIX = ".json.gz"
 
 
 class CacheService:
@@ -88,12 +92,23 @@ class CacheService:
         return cache_key
 
     def _get_cache_path(self, cache_key: str) -> Path:
-        """キャッシュファイルパス取得（.json.gz）"""
-        return self.cache_dir / f"{cache_key}.json.gz"
+        """新しいpickleキャッシュファイルパスを返す"""
+        return self.cache_dir / f"{cache_key}{_CACHE_SUFFIX}"
+
+    def _get_legacy_cache_path(self, cache_key: str) -> Path:
+        """後方互換用のJSONキャッシュファイルパスを返す"""
+        return self.cache_dir / f"{cache_key}{_LEGACY_CACHE_SUFFIX}"
+
+    def _get_existing_cache_path(self, cache_key: str) -> Optional[Path]:
+        """新形式を優先し、なければ旧JSONキャッシュを返す"""
+        for path in (self._get_cache_path(cache_key), self._get_legacy_cache_path(cache_key)):
+            if path.exists():
+                return path
+        return None
 
     def _get_cache_temp_glob(self, cache_key: str) -> str:
         """キャッシュ保存中の一時ファイルglob"""
-        return f"{cache_key}.json.gz.*.tmp"
+        return f"{cache_key}.*.gz.*.tmp"
 
     def _get_cache_temp_paths(self, cache_key: str) -> List[Path]:
         """キャッシュ保存中の一時ファイル一覧"""
@@ -112,8 +127,8 @@ class CacheService:
             return lock
 
     def _get_cache_signature(self, cache_key: str) -> Optional[dict]:
-        cache_path = self._get_cache_path(cache_key)
-        if not cache_path.exists():
+        cache_path = self._get_existing_cache_path(cache_key)
+        if cache_path is None:
             return None
         stat = cache_path.stat()
         return {
@@ -296,8 +311,8 @@ class CacheService:
             time.sleep(poll_interval)
         return self._get_summary_path(cache_key).exists()
 
-    def _write_gzip_json_atomic(self, path: Path, data: dict) -> None:
-        """gzip JSONを一時ファイル経由で原子的に保存する"""
+    def _write_gzip_pickle_atomic(self, path: Path, data: dict) -> None:
+        """gzip pickleを一時ファイル経由で原子的に保存する"""
         stage_started_at = perf_counter()
         fd, temp_path = tempfile.mkstemp(
             prefix=f"{path.name}.",
@@ -306,59 +321,18 @@ class CacheService:
         )
         try:
             with os.fdopen(fd, 'wb') as raw_file:
-                serialize_compress_started_at = perf_counter()
-                json_encode_seconds = 0.0
-                gzip_stream_write_seconds = 0.0
-                json_write_batch_count = 0
                 with gzip.GzipFile(
                     filename='',
                     mode='wb',
                     fileobj=raw_file,
                     compresslevel=6,
                 ) as gzip_file:
-                    with io.TextIOWrapper(gzip_file, encoding='utf-8') as text_file:
-                        encoder = json.JSONEncoder(ensure_ascii=False)
-                        encoded_chunks = encoder.iterencode(data)
-                        pending_chunks = []
-                        pending_chars = 0
-                        batch_started_at = perf_counter()
-                        for chunk in encoded_chunks:
-                            pending_chunks.append(chunk)
-                            pending_chars += len(chunk)
-                            if pending_chars >= 64 * 1024:
-                                json_encode_seconds += perf_counter() - batch_started_at
-                                write_started_at = perf_counter()
-                                text_file.write(''.join(pending_chunks))
-                                gzip_stream_write_seconds += perf_counter() - write_started_at
-                                json_write_batch_count += 1
-                                pending_chunks.clear()
-                                pending_chars = 0
-                                batch_started_at = perf_counter()
-
-                        json_encode_seconds += perf_counter() - batch_started_at
-                        if pending_chunks:
-                            write_started_at = perf_counter()
-                            text_file.write(''.join(pending_chunks))
-                            gzip_stream_write_seconds += perf_counter() - write_started_at
-                            json_write_batch_count += 1
-
-                        finalize_started_at = perf_counter()
-                        text_file.close()
-                        gzip_stream_write_seconds += perf_counter() - finalize_started_at
-
+                    gzip_file.write(_CACHE_FORMAT_MAGIC)
+                    serialize_compress_started_at = perf_counter()
+                    pickle.dump(data, gzip_file, protocol=pickle.HIGHEST_PROTOCOL)
                 record_stage(
-                    "cache_result_json_serialization",
-                    json_encode_seconds * 1000,
-                    write_batch_count=json_write_batch_count,
-                )
-                record_stage(
-                    "cache_result_gzip_compression_and_stream_write",
-                    gzip_stream_write_seconds * 1000,
-                )
-                record_stage(
-                    "cache_result_json_gzip_serialize_compress",
+                    "cache_result_pickle_serialize_and_gzip_compress",
                     (perf_counter() - serialize_compress_started_at) * 1000,
-                    write_batch_count=json_write_batch_count,
                 )
 
                 flush_sync_started_at = perf_counter()
@@ -391,6 +365,7 @@ class CacheService:
                 "cache_result_atomic_write_total",
                 (perf_counter() - stage_started_at) * 1000,
                 compressed_bytes=path.stat().st_size,
+                storage_format="pickle",
             )
         except Exception:
             if os.path.exists(temp_path):
@@ -407,7 +382,7 @@ class CacheService:
         Returns:
             存在する場合True
         """
-        return self._get_cache_path(cache_key).exists()
+        return self._get_existing_cache_path(cache_key) is not None
 
     def is_cache_write_in_progress(self, cache_key: str) -> bool:
         """キャッシュ保存用tmpファイルが存在するか確認"""
@@ -447,7 +422,7 @@ class CacheService:
 
     def is_cache_materializing(self, cache_key: str) -> bool:
         """キャッシュ本体はあるが保存用tmpがまだ残っている中間状態か確認"""
-        cache_exists = self._get_cache_path(cache_key).exists()
+        cache_exists = self._get_existing_cache_path(cache_key) is not None
         return cache_exists and self.is_cache_write_in_progress(cache_key)
 
     def wait_for_cache_materialization(
@@ -459,18 +434,19 @@ class CacheService:
         """
         保存中tmpの完了と本体gzの出現を短時間待機する
         """
-        cache_path = self._get_cache_path(cache_key)
         start_time = time.time()
 
         while time.time() - start_time < timeout_seconds:
+            cache_path = self._get_existing_cache_path(cache_key)
             if (
-                cache_path.exists()
+                cache_path is not None
                 and not self.is_cache_write_in_progress(cache_key)
             ):
                 return True
             time.sleep(poll_interval)
 
-        return cache_path.exists() and not self.is_cache_write_in_progress(cache_key)
+        cache_path = self._get_existing_cache_path(cache_key)
+        return cache_path is not None and not self.is_cache_write_in_progress(cache_key)
 
     def get_cached_result(self, cache_key: str) -> Optional[dict]:
         """
@@ -482,9 +458,9 @@ class CacheService:
         Returns:
             キャッシュされたデータ、存在しない場合None
         """
-        cache_path = self._get_cache_path(cache_key)
+        cache_path = self._get_existing_cache_path(cache_key)
 
-        if not cache_path.exists():
+        if cache_path is None:
             logger.info(f"キャッシュ未存在: {cache_key}")
             return None
 
@@ -509,18 +485,34 @@ class CacheService:
             return self._load_cached_result_from_disk(cache_key)
 
     def _load_cached_result_from_disk(self, cache_key: str) -> Optional[dict]:
-        cache_path = self._get_cache_path(cache_key)
+        cache_path = self._get_existing_cache_path(cache_key)
+        if cache_path is None:
+            return None
 
         try:
             logger.info(f"キャッシュ読み込み開始: {cache_key}")
-            start_time = datetime.now()
-
-            with gzip.open(cache_path, 'rt', encoding='utf-8') as f:
-                result = json.load(f)
+            read_started_at = perf_counter()
+            if cache_path.name.endswith(_CACHE_SUFFIX):
+                with gzip.open(cache_path, 'rb') as f:
+                    magic = f.read(len(_CACHE_FORMAT_MAGIC))
+                    if magic != _CACHE_FORMAT_MAGIC:
+                        raise ValueError("Unsupported cache format header")
+                    result = pickle.load(f)
+                record_stage(
+                    "cache_result_pickle_gzip_load",
+                    (perf_counter() - read_started_at) * 1000,
+                )
+            else:
+                with gzip.open(cache_path, 'rt', encoding='utf-8') as f:
+                    result = json.load(f)
+                record_stage(
+                    "cache_result_legacy_json_gzip_load",
+                    (perf_counter() - read_started_at) * 1000,
+                )
 
             self._store_memory_cached_result(cache_key, result)
 
-            elapsed = (datetime.now() - start_time).total_seconds()
+            elapsed = perf_counter() - read_started_at
             file_size_mb = cache_path.stat().st_size / (1024 * 1024)
             sample = self._extract_cache_sample(result)
 
@@ -612,7 +604,7 @@ class CacheService:
             legacy_meta_path = self._get_legacy_meta_path(cache_key)
 
             # データ保存（temp file + atomic rename）
-            self._write_gzip_json_atomic(cache_path, result)
+            self._write_gzip_pickle_atomic(cache_path, result)
             summary = self._build_cache_summary(
                 cache_key,
                 result,
@@ -686,8 +678,8 @@ class CacheService:
 
     def _build_metadata_from_gzip(self, cache_key: str) -> Optional[Dict]:
         """gzip ファイルから管理用メタデータを組み立てる"""
-        cache_path = self._get_cache_path(cache_key)
-        if not cache_path.exists():
+        cache_path = self._get_existing_cache_path(cache_key)
+        if cache_path is None or not cache_path.exists():
             return None
 
         try:
@@ -698,6 +690,7 @@ class CacheService:
                 "file_size_mb": round(cache_stat.st_size / (1024 * 1024), 2),
                 "compressed": True,
                 "compression_format": "gzip",
+                "storage_format": "pickle" if cache_path.name.endswith(_CACHE_SUFFIX) else "json",
             }
         except Exception as e:
             logger.error(f"gzipメタデータ生成エラー: {cache_key} - {e}")
@@ -717,8 +710,8 @@ class CacheService:
         Returns:
             有効期限内の場合True
         """
-        cache_path = self._get_cache_path(cache_key)
-        if not cache_path.exists():
+        cache_path = self._get_existing_cache_path(cache_key)
+        if cache_path is None or not cache_path.exists():
             return False
 
         created_at = datetime.fromtimestamp(cache_path.stat().st_mtime)
@@ -733,7 +726,7 @@ class CacheService:
         Args:
             cache_key: キャッシュキー
         """
-        cache_path = self._get_cache_path(cache_key)
+        cache_paths = (self._get_cache_path(cache_key), self._get_legacy_cache_path(cache_key))
         legacy_meta_path = self._get_legacy_meta_path(cache_key)
         summary_path = self._get_summary_path(cache_key)
         summary_lock_path = self._get_summary_lock_path(cache_key)
@@ -744,9 +737,10 @@ class CacheService:
                 self._memory_cache_order.remove(cache_key)
             self._memory_load_locks.pop(cache_key, None)
 
-        if cache_path.exists():
-            cache_path.unlink()
-            logger.info(f"キャッシュ削除: {cache_key}")
+        for cache_path in cache_paths:
+            if cache_path.exists():
+                cache_path.unlink()
+                logger.info(f"キャッシュ削除: {cache_key}")
 
         if legacy_meta_path.exists():
             legacy_meta_path.unlink()
@@ -764,8 +758,12 @@ class CacheService:
         """
         caches = []
 
-        for cache_path in self.cache_dir.glob("*.json.gz"):
-            cache_key = cache_path.name[:-8]
+        cache_keys = set()
+        for suffix in (_CACHE_SUFFIX, _LEGACY_CACHE_SUFFIX):
+            for cache_path in self.cache_dir.glob(f"*{suffix}"):
+                cache_keys.add(cache_path.name[:-len(suffix)])
+
+        for cache_key in cache_keys:
             metadata = self._build_metadata_from_gzip(cache_key)
             if metadata:
                 caches.append(metadata)
@@ -784,14 +782,18 @@ class CacheService:
         """
         deleted_count = 0
 
-        for cache_path in self.cache_dir.glob("*.json.gz"):
-            cache_key = cache_path.name[:-8]
+        cache_keys = set()
+        for suffix in (_CACHE_SUFFIX, _LEGACY_CACHE_SUFFIX):
+            for cache_path in self.cache_dir.glob(f"*{suffix}"):
+                cache_keys.add(cache_path.name[:-len(suffix)])
+
+        for cache_key in cache_keys:
             try:
                 if not self._is_cache_valid(cache_key):
                     self.invalidate_cache(cache_key)
                     deleted_count += 1
             except Exception as e:
-                logger.error(f"期限切れチェックエラー: {cache_path} - {e}")
+                logger.error(f"期限切れチェックエラー: {cache_key} - {e}")
 
         if deleted_count > 0:
             logger.info(f"期限切れキャッシュ削除完了: {deleted_count}件")
