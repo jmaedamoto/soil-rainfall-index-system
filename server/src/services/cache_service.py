@@ -309,7 +309,7 @@ class CacheService:
                 serialize_compress_started_at = perf_counter()
                 json_encode_seconds = 0.0
                 gzip_stream_write_seconds = 0.0
-                json_chunk_count = 0
+                json_write_batch_count = 0
                 with gzip.GzipFile(
                     filename='',
                     mode='wb',
@@ -319,19 +319,28 @@ class CacheService:
                     with io.TextIOWrapper(gzip_file, encoding='utf-8') as text_file:
                         encoder = json.JSONEncoder(ensure_ascii=False)
                         encoded_chunks = encoder.iterencode(data)
-                        while True:
-                            encode_started_at = perf_counter()
-                            try:
-                                chunk = next(encoded_chunks)
-                            except StopIteration:
-                                json_encode_seconds += perf_counter() - encode_started_at
-                                break
-                            json_encode_seconds += perf_counter() - encode_started_at
+                        pending_chunks = []
+                        pending_chars = 0
+                        batch_started_at = perf_counter()
+                        for chunk in encoded_chunks:
+                            pending_chunks.append(chunk)
+                            pending_chars += len(chunk)
+                            if pending_chars >= 64 * 1024:
+                                json_encode_seconds += perf_counter() - batch_started_at
+                                write_started_at = perf_counter()
+                                text_file.write(''.join(pending_chunks))
+                                gzip_stream_write_seconds += perf_counter() - write_started_at
+                                json_write_batch_count += 1
+                                pending_chunks.clear()
+                                pending_chars = 0
+                                batch_started_at = perf_counter()
 
+                        json_encode_seconds += perf_counter() - batch_started_at
+                        if pending_chunks:
                             write_started_at = perf_counter()
-                            text_file.write(chunk)
+                            text_file.write(''.join(pending_chunks))
                             gzip_stream_write_seconds += perf_counter() - write_started_at
-                            json_chunk_count += 1
+                            json_write_batch_count += 1
 
                         finalize_started_at = perf_counter()
                         text_file.close()
@@ -340,7 +349,7 @@ class CacheService:
                 record_stage(
                     "cache_result_json_serialization",
                     json_encode_seconds * 1000,
-                    chunk_count=json_chunk_count,
+                    write_batch_count=json_write_batch_count,
                 )
                 record_stage(
                     "cache_result_gzip_compression_and_stream_write",
@@ -349,7 +358,7 @@ class CacheService:
                 record_stage(
                     "cache_result_json_gzip_serialize_compress",
                     (perf_counter() - serialize_compress_started_at) * 1000,
-                    json_chunk_count=json_chunk_count,
+                    write_batch_count=json_write_batch_count,
                 )
 
                 flush_sync_started_at = perf_counter()
