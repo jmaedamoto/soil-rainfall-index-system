@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timedelta
 import math
 import numpy as np
+from time import perf_counter
 
 from models import (
     BaseInfo, SwiTimeSeries, GuidanceTimeSeries, Risk,
@@ -793,18 +794,35 @@ class CalculationService:
 
         return int(np.argmax(candidate_matches))
 
+    @staticmethod
+    def _record_mesh_phase_timing(
+        phase_timings: Optional[Dict[str, Tuple[float, int]]],
+        phase_name: str,
+        started_at: Optional[float],
+    ) -> None:
+        if phase_timings is None or started_at is None:
+            return
+        elapsed = perf_counter() - started_at
+        total, count = phase_timings.get(phase_name, (0.0, 0))
+        phase_timings[phase_name] = (total + elapsed, count + 1)
+
     def process_mesh_calculations(
         self,
         mesh: Mesh,
         swi_grib2: Dict[str, Any],
         guidance_grib2: Dict[str, Any],
+        phase_timings: Optional[Dict[str, Tuple[float, int]]] = None,
     ) -> Mesh:
         """
         VBA calc_data の一部処理
         単一メッシュの計算を実行（全雨量・SWI・危険度）
+
+        phase_timings が渡された場合、処理段階ごとの累積秒数と計測回数を記録する。
         """
+
         try:
             # 3時間ごとのSWI計算
+            phase_started_at = perf_counter() if phase_timings is not None else None
             mesh.swi = self.calc_swi_timelapse(mesh, swi_grib2, guidance_grib2)
 
             # 3時間内の最大1時間雨量の計算
@@ -812,11 +830,19 @@ class CalculationService:
 
             # 3時間雨量の計算
             mesh.rain_3hour = self.calc_rain_timelapse(mesh, guidance_grib2, data_key='data_3h')
+            self._record_mesh_phase_timing(
+                phase_timings, 'input_timeline_preparation', phase_started_at
+            )
 
             # 1時間ごとの雨量を推定
+            phase_started_at = perf_counter() if phase_timings is not None else None
             mesh.rain_1hour = self.calc_hourly_rain(mesh.rain_3hour, mesh.rain_1hour_max)
+            self._record_mesh_phase_timing(
+                phase_timings, 'hourly_rain_distribution', phase_started_at
+            )
 
             # 初期タンク値を取得（GRIB2データから）
+            phase_started_at = perf_counter() if phase_timings is not None else None
             swi_index = self.get_data_num(mesh.lat, mesh.lon, swi_grib2['base_info'])
             python_swi_index = swi_index - 1
 
@@ -828,6 +854,9 @@ class CalculationService:
                 initial_first_tunk = swi_grib2['first_tunk'][python_swi_index] / 10
                 initial_second_tunk = swi_grib2['second_tunk'][python_swi_index] / 10
                 initial_third_tunk = initial_swi - initial_first_tunk - initial_second_tunk
+                self._record_mesh_phase_timing(
+                    phase_timings, 'initial_state_lookup', phase_started_at
+                )
 
                 # メッシュ50357712のデバッグログ（計算前）
                 if mesh.code == '50357712':
@@ -835,6 +864,7 @@ class CalculationService:
                     logger.info(f"[DEBUG] Mesh {mesh.code} initial_swi: {initial_swi}, advisary: {mesh.advisary_bound}")
 
                 # 1時間ごとのSWI計算
+                phase_started_at = perf_counter() if phase_timings is not None else None
                 mesh.swi_hourly = self.calc_swi_hourly(
                     initial_swi,
                     initial_first_tunk,
@@ -842,12 +872,16 @@ class CalculationService:
                     initial_third_tunk,
                     mesh.rain_1hour
                 )
+                self._record_mesh_phase_timing(
+                    phase_timings, 'hourly_swi_calculation', phase_started_at
+                )
 
                 # メッシュ50357712のデバッグログ（SWI計算後）
                 if mesh.code == '50357712':
                     logger.info(f"[DEBUG] Mesh {mesh.code} swi_hourly: {[(s.ft, round(s.value, 1)) for s in mesh.swi_hourly[:6]]}")
 
                 # 1時間ごとの危険度計算
+                phase_started_at = perf_counter() if phase_timings is not None else None
                 mesh.risk_hourly = self.calc_hourly_risk(
                     mesh.swi_hourly,
                     mesh.advisary_bound,
@@ -856,13 +890,20 @@ class CalculationService:
                     rain_hourly=mesh.rain_1hour,
                     level4_curve=getattr(mesh, 'level4_curve', None),
                 )
+                self._record_mesh_phase_timing(
+                    phase_timings, 'hourly_risk_calculation', phase_started_at
+                )
 
                 # メッシュ50357712のデバッグログ（risk_hourly計算後）
                 if mesh.code == '50357712':
                     logger.info(f"[DEBUG] Mesh {mesh.code} risk_hourly: {[(r.ft, r.value) for r in mesh.risk_hourly[:9]]}")
 
                 # 3時間ごとの最大危険度計算（1時間雨量ベース）
+                phase_started_at = perf_counter() if phase_timings is not None else None
                 mesh.risk_3hour_max = self.calc_3hour_max_risk_from_hourly(mesh.risk_hourly)
+                self._record_mesh_phase_timing(
+                    phase_timings, 'three_hour_risk_calculation', phase_started_at
+                )
 
                 # メッシュ50357712のデバッグログ（risk_3hour_max計算後）
                 if mesh.code == '50357712':
