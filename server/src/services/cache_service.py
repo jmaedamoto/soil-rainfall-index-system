@@ -21,6 +21,9 @@ from typing import Optional, Dict, List, Callable
 import os
 import socket
 import uuid
+from time import perf_counter
+
+from .performance_timing import record_stage
 
 logger = logging.getLogger(__name__)
 
@@ -295,6 +298,7 @@ class CacheService:
 
     def _write_gzip_json_atomic(self, path: Path, data: dict) -> None:
         """gzip JSONを一時ファイル経由で原子的に保存する"""
+        stage_started_at = perf_counter()
         fd, temp_path = tempfile.mkstemp(
             prefix=f"{path.name}.",
             suffix=".tmp",
@@ -302,6 +306,10 @@ class CacheService:
         )
         try:
             with os.fdopen(fd, 'wb') as raw_file:
+                serialize_compress_started_at = perf_counter()
+                json_encode_seconds = 0.0
+                gzip_stream_write_seconds = 0.0
+                json_chunk_count = 0
                 with gzip.GzipFile(
                     filename='',
                     mode='wb',
@@ -309,16 +317,72 @@ class CacheService:
                     compresslevel=6,
                 ) as gzip_file:
                     with io.TextIOWrapper(gzip_file, encoding='utf-8') as text_file:
-                        json.dump(data, text_file, ensure_ascii=False)
-                        text_file.flush()
+                        encoder = json.JSONEncoder(ensure_ascii=False)
+                        encoded_chunks = encoder.iterencode(data)
+                        while True:
+                            encode_started_at = perf_counter()
+                            try:
+                                chunk = next(encoded_chunks)
+                            except StopIteration:
+                                json_encode_seconds += perf_counter() - encode_started_at
+                                break
+                            json_encode_seconds += perf_counter() - encode_started_at
+
+                            write_started_at = perf_counter()
+                            text_file.write(chunk)
+                            gzip_stream_write_seconds += perf_counter() - write_started_at
+                            json_chunk_count += 1
+
+                        finalize_started_at = perf_counter()
+                        text_file.close()
+                        gzip_stream_write_seconds += perf_counter() - finalize_started_at
+
+                record_stage(
+                    "cache_result_json_serialization",
+                    json_encode_seconds * 1000,
+                    chunk_count=json_chunk_count,
+                )
+                record_stage(
+                    "cache_result_gzip_compression_and_stream_write",
+                    gzip_stream_write_seconds * 1000,
+                )
+                record_stage(
+                    "cache_result_json_gzip_serialize_compress",
+                    (perf_counter() - serialize_compress_started_at) * 1000,
+                    json_chunk_count=json_chunk_count,
+                )
+
+                flush_sync_started_at = perf_counter()
                 raw_file.flush()
                 os.fsync(raw_file.fileno())
+                record_stage(
+                    "cache_result_file_flush_fsync",
+                    (perf_counter() - flush_sync_started_at) * 1000,
+                )
+
+            replace_started_at = perf_counter()
             os.replace(temp_path, path)
+            record_stage(
+                "cache_result_atomic_replace",
+                (perf_counter() - replace_started_at) * 1000,
+            )
+
+            directory_sync_started_at = perf_counter()
             dir_fd = os.open(path.parent, os.O_RDONLY)
             try:
                 os.fsync(dir_fd)
             finally:
                 os.close(dir_fd)
+            record_stage(
+                "cache_result_directory_fsync",
+                (perf_counter() - directory_sync_started_at) * 1000,
+                compressed_bytes=path.stat().st_size,
+            )
+            record_stage(
+                "cache_result_atomic_write_total",
+                (perf_counter() - stage_started_at) * 1000,
+                compressed_bytes=path.stat().st_size,
+            )
         except Exception:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)

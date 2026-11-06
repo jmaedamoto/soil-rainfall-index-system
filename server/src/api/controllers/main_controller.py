@@ -508,6 +508,7 @@ class MainController:
         """
         try:
             request_started_at = time.perf_counter()
+            request_parse_started_at = request_started_at
             trace_context = self._build_request_trace_context()
             trace_prefix = self._trace_prefix(trace_context)
             logger.info(f"{trace_prefix} 本番処理リクエスト受信")
@@ -583,6 +584,11 @@ class MainController:
                     "message": str(e)
                 }), 400
 
+            record_stage(
+                "initial_request_parse_and_validation",
+                (time.perf_counter() - request_parse_started_at) * 1000,
+            )
+
             logger.info(
                 f"{trace_prefix} 本番処理開始: SWI初期時刻={swi_initial}, "
                 f"ガイダンス初期時刻={guidance_initial}, guidance_type={guidance_type}, "
@@ -590,6 +596,7 @@ class MainController:
             )
 
             # 設定ファイルからURL構築
+            request_setup_started_at = time.perf_counter()
             swi_url = self.config_service.build_swi_url(swi_initial)
             guidance_url = self.config_service.build_guidance_url(guidance_initial, guidance_type)
 
@@ -601,6 +608,10 @@ class MainController:
                 region,
             )
             logger.info(f"{trace_prefix} キャッシュキー算出: {cache_key}")
+            record_stage(
+                "initial_url_and_cache_key_preparation",
+                (time.perf_counter() - request_setup_started_at) * 1000,
+            )
 
             # 先に軽量キャッシュサマリーを確認し、ヒット時はGRIB2取得前に即返却する
             cache_lookup_started_at = time.perf_counter()
@@ -633,7 +644,14 @@ class MainController:
                     guidance_url,
                 )
 
-            if self.cache_service.exists(cache_key):
+            cache_state_started_at = time.perf_counter()
+            cache_exists = self.cache_service.exists(cache_key)
+            if cache_exists:
+                record_stage(
+                    "initial_cache_state_inspection",
+                    (time.perf_counter() - cache_state_started_at) * 1000,
+                    cache_exists=True,
+                )
                 return self._calculation_pending_response(
                     "キャッシュサマリーを作成中です。自動的に再確認します。"
                 )
@@ -652,6 +670,15 @@ class MainController:
 
             cache_write_in_progress = self.cache_service.is_cache_write_in_progress(cache_key)
             cache_materializing = self.cache_service.is_cache_materializing(cache_key)
+            record_stage(
+                "initial_cache_state_inspection",
+                (time.perf_counter() - cache_state_started_at) * 1000,
+                cache_exists=False,
+                cache_write_in_progress=cache_write_in_progress,
+                cache_materializing=cache_materializing,
+                calculation_in_progress=calculation_in_progress,
+                stale_tmp_deleted=stale_tmp_deleted,
+            )
             if cache_write_in_progress or cache_materializing or calculation_in_progress:
                 wait_started_at = time.perf_counter()
                 logger.info(
@@ -712,7 +739,13 @@ class MainController:
             # ========================================
 
             # 計算ロック取得を試みる
+            lock_started_at = time.perf_counter()
             lock_acquired = self.cache_service.acquire_calculation_lock(cache_key)
+            record_stage(
+                "initial_calculation_lock_acquisition",
+                (time.perf_counter() - lock_started_at) * 1000,
+                lock_acquired=lock_acquired,
+            )
             if not lock_acquired:
                 wait_started_at = time.perf_counter()
                 logger.info(
@@ -762,7 +795,13 @@ class MainController:
                     "同一条件の計算が進行中です。自動的に再確認します。"
                 )
 
+            slot_started_at = time.perf_counter()
             calculation_slot_acquired = self.cache_service.acquire_calculation_slot(cache_key)
+            record_stage(
+                "initial_calculation_slot_acquisition",
+                (time.perf_counter() - slot_started_at) * 1000,
+                slot_acquired=calculation_slot_acquired,
+            )
             if not calculation_slot_acquired:
                 lock_released = self.cache_service.release_calculation_lock(cache_key)
                 lock_acquired = not lock_released
@@ -814,6 +853,7 @@ class MainController:
                     "initial_result_cache_save",
                     cache_save_elapsed * 1000,
                     cache_saved=bool(cache_saved),
+                    prefecture_count=len(result.get("prefectures", {})),
                 )
                 if not cache_saved:
                     lock_released = self.cache_service.release_calculation_lock(cache_key)
