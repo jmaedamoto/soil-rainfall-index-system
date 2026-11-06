@@ -28,6 +28,7 @@ from api.routes.session_routes import (
 )
 from api.controllers.session_controller import SessionController
 from config.config_service import ConfigService
+from services.performance_timing import register_performance_timing_hooks
 
 # ============================================================
 # API設定（エンドポイントプレフィックスの一元管理）
@@ -87,6 +88,7 @@ def create_app(data_dir: str = "data"):
     """Flaskアプリケーション作成ファクトリー"""
     app = Flask(__name__)
     CORS(app)
+    register_performance_timing_hooks(app)
     config_service = ConfigService()
     route_profile = config_service.get_api_route_profile()
 

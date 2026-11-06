@@ -71,3 +71,4 @@ server/optimized_grib2_test.json
 server/cache/*.json.gz
 server/cache/*.meta.json
 !server/cache/.gitkeep
+server/performance_timings.jsonl

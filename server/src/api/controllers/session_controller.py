@@ -9,6 +9,7 @@ import os
 import sys
 from typing import Any, Dict, List
 import numpy as np
+from time import perf_counter
 
 # プロジェクトルートをパスに追加
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -19,6 +20,7 @@ from services.rainfall_adjustment_service import RainfallAdjustmentService
 from services.rainfall_scope_service import build_scope_prefectures, aggregate_three_hour
 from services.calculation_service_numpy import CalculationServiceNumpy
 from services.data_service import DataService
+from services.performance_timing import record_stage
 
 logger = logging.getLogger(__name__)
 
@@ -812,6 +814,7 @@ class SessionController:
                         area_key = f"{mapping['prefecture_name']}_{area_name}"
                         destination.setdefault(area_key, values)
 
+            adjustment_started_at = perf_counter()
             adjusted_by_mesh = self.rainfall_adjustment_service.build_adjusted_mesh_rainfall_for_mode(
                 calculation_prefectures,
                 expanded_adjustments,
@@ -819,10 +822,18 @@ class SessionController:
                 input_mode,
                 adjustment_mode,
             )
+            record_stage(
+                'rainfall_adjustment_transform',
+                (perf_counter() - adjustment_started_at) * 1000,
+                adjusted_mesh_count=len(adjusted_by_mesh),
+                input_mode=input_mode,
+                adjustment_scope=adjustment_scope,
+            )
 
             mesh_rows = []
             all_times = set()
             mesh_count = 0
+            response_assembly_started_at = perf_counter()
             for prefecture in prefectures.values():
                 for area in prefecture.get('areas', []):
                     for mesh in area.get('meshes', []):
@@ -863,13 +874,20 @@ class SessionController:
                     'rain_1hour_max': [adjusted_max_1hour.get(ft) for ft in times],
                 }
 
-            return jsonify({
+            response = jsonify({
                 'status': 'success',
                 'display_hours': display_hours,
                 'times': times,
                 'meshes': response_meshes,
                 'mesh_count': mesh_count,
             })
+            record_stage(
+                'preview_response_assembly',
+                (perf_counter() - response_assembly_started_at) * 1000,
+                mesh_count=mesh_count,
+                time_count=len(times),
+            )
+            return response
         except Exception as error:
             logger.error('Session rainfall preview error: %s', error, exc_info=True)
             return jsonify({
@@ -1074,12 +1092,20 @@ class SessionController:
                             expanded_aggregate_adjustments[area_key] = subdiv_rain
                             logger.info(f"市町村等をまとめた地域 {subdiv_key} → 市町村 {area_key} に24時間調整を展開")
 
+            adjustment_started_at = perf_counter()
             adjusted_mesh_rainfall = self.rainfall_adjustment_service.build_adjusted_mesh_rainfall_for_mode(
                 calculation_prefectures,
                 expanded_adjustments,
                 expanded_aggregate_adjustments,
                 input_mode,
                 adjustment_mode,
+            )
+            record_stage(
+                'rainfall_adjustment_transform',
+                (perf_counter() - adjustment_started_at) * 1000,
+                adjusted_mesh_count=len(adjusted_mesh_rainfall),
+                input_mode=input_mode,
+                adjustment_scope=adjustment_scope,
             )
 
             # Step 1: 調整対象メッシュのデータを収集
@@ -1132,6 +1158,11 @@ class SessionController:
 
             collect_time = time.time() - collect_start
             logger.info(f"データ収集: {adjusted_mesh_count}メッシュ, {collect_time:.3f}秒")
+            record_stage(
+                'recalculation_input_collection',
+                collect_time * 1000,
+                adjusted_mesh_count=adjusted_mesh_count,
+            )
 
             # Step 2: NumPy一括計算
             calc_start = time.time()
@@ -1154,8 +1185,14 @@ class SessionController:
 
             calc_time = time.time() - calc_start
             logger.info(f"NumPy一括計算: {adjusted_mesh_count}メッシュ, {calc_time:.3f}秒")
+            record_stage(
+                'numpy_recalculation',
+                calc_time * 1000,
+                adjusted_mesh_count=adjusted_mesh_count,
+            )
 
             # フォークセッションを作成
+            fork_started_at = perf_counter()
             fork_session_id = self.session_service.create_fork_session(
                 base_session_id=base_session_id,
                 adjustments=aggregate_adjustments_raw if input_mode == '24hour' else adjustments_raw,
@@ -1163,6 +1200,11 @@ class SessionController:
                 input_mode=input_mode,
                 adjustment_mode=adjustment_mode,
                 adjustment_scope=adjustment_scope
+            )
+            record_stage(
+                'fork_creation_and_materialization',
+                (perf_counter() - fork_started_at) * 1000,
+                recalculated_mesh_count=len(recalculated_meshes),
             )
 
             if fork_session_id is None:
@@ -1179,6 +1221,7 @@ class SessionController:
             fork_session = self.session_service.get_session(fork_session_id)
             merged_prefectures = fork_session['prefectures']
 
+            response_assembly_started_at = perf_counter()
             mesh_risks = {}
             mesh_coords = {}
             for pref_code, pref_dict in merged_prefectures.items():
@@ -1197,7 +1240,7 @@ class SessionController:
                             "lon": mesh_dict["lon"]
                         }
 
-            return jsonify({
+            response = jsonify({
                 "status": "success",
                 "session_id": fork_session_id,  # 新しいフォークセッションID
                 "base_session_id": base_session_id,
@@ -1209,6 +1252,12 @@ class SessionController:
                 "mesh_coords": mesh_coords,
                 "recalculated_meshes": adjusted_mesh_count
             })
+            record_stage(
+                'recalculation_response_assembly',
+                (perf_counter() - response_assembly_started_at) * 1000,
+                mesh_count=len(mesh_risks),
+            )
+            return response
 
         except Exception as e:
             logger.error(f"Session recalculation error: {e}", exc_info=True)
