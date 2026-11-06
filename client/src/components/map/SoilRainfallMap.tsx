@@ -356,6 +356,22 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
 
       </MapContainer>
 
+      <div style={{
+        position: 'absolute',
+        bottom: '10px',
+        left: '10px',
+        zIndex: 1000,
+        padding: '7px 10px',
+        borderRadius: '5px',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        boxShadow: '0 1px 4px rgba(0, 0, 0, 0.2)',
+        fontSize: '12px',
+        color: '#333',
+        pointerEvents: 'none',
+      }}>
+        地図をクリックすると格子番号を表示します
+      </div>
+
       {/* レイヤー切り替えコントロール */}
       <div style={{
         position: 'absolute',
