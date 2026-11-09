@@ -434,6 +434,94 @@ class SessionController:
                 "timestamp": datetime.now().isoformat()
             }), 500
 
+    def get_mesh_snake_line(self, session_id: str, mesh_code: str):
+        """スネークライン表示に必要な1格子分の時系列と基準値を返す。"""
+        try:
+            trace_prefix = self._trace_prefix(session_id)
+            session = self.session_service.get_session(session_id)
+            if session is None:
+                return jsonify({
+                    "status": "error",
+                    "error": "Session not found or expired",
+                    "session_id": session_id,
+                }), 404
+
+            target_mesh = None
+            for prefecture in session.get("prefectures", {}).values():
+                for area in prefecture.get("areas", []):
+                    for mesh in area.get("meshes", []):
+                        if str(mesh.get("code")) == str(mesh_code):
+                            target_mesh = mesh
+                            break
+                    if target_mesh is not None:
+                        break
+                if target_mesh is not None:
+                    break
+
+            if target_mesh is None:
+                return jsonify({
+                    "status": "error",
+                    "error": "Mesh not found",
+                    "mesh_code": mesh_code,
+                }), 404
+
+            # 旧セッションキャッシュには閾値がない場合があるため、静的格子データから補完する。
+            static_info = self.data_service.get_mesh_static_info_by_mesh_code(mesh_code)
+            advisory_bound = target_mesh.get("_advisary_bound")
+            if advisory_bound is None:
+                advisory_bound = target_mesh.get("advisory_bound")
+            level4_curve = target_mesh.get("_level4_curve")
+            dosyakei_bound = target_mesh.get("_dosyakei_bound")
+            static_info = None
+            if advisory_bound is None or dosyakei_bound is None:
+                static_info = self.data_service.get_mesh_static_info_by_mesh_code(mesh_code)
+            if advisory_bound is None and static_info is not None:
+                advisory_bound = static_info.get("advisary_bound")
+            if dosyakei_bound is None and static_info is not None:
+                dosyakei_bound = static_info.get("dosyakei_bound")
+            if level4_curve is None and static_info is not None:
+                curve = static_info.get("level4_curve")
+                if curve is not None:
+                    level4_curve = curve.tolist() if hasattr(curve, "tolist") else list(curve)
+            if level4_curve is not None:
+                level4_curve = [int(value) for value in level4_curve]
+
+            if advisory_bound is None:
+                return jsonify({
+                    "status": "error",
+                    "error": "Rainfall advisory threshold is unavailable for this mesh",
+                    "mesh_code": mesh_code,
+                }), 503
+
+            swi_hourly = target_mesh.get("swi_hourly_timeline", [])
+            rain_hourly = target_mesh.get("rain_1hour_timeline", [])
+            if not swi_hourly or not rain_hourly:
+                return jsonify({
+                    "status": "error",
+                    "error": "Hourly rainfall or soil-water-index timeline is unavailable",
+                    "mesh_code": mesh_code,
+                }), 503
+
+            return jsonify({
+                "status": "success",
+                "mesh_code": str(target_mesh.get("code", mesh_code)),
+                "lat": float(target_mesh["lat"]),
+                "lon": float(target_mesh["lon"]),
+                "advisory_bound": int(advisory_bound),
+                "dosyakei_bound": int(dosyakei_bound) if dosyakei_bound is not None else None,
+                "level4_curve": level4_curve,
+                "swi_hourly_timeline": swi_hourly,
+                "rain_1hour_timeline": rain_hourly,
+            })
+
+        except Exception as e:
+            logger.exception("%s スネークラインデータ取得失敗: mesh=%s", self._trace_prefix(session_id), mesh_code)
+            return jsonify({
+                "status": "error",
+                "error": str(e),
+                "mesh_code": mesh_code,
+            }), 500
+
     def get_mesh_detail(self, session_id: str, mesh_code: str):
         """
         メッシュ詳細データ取得

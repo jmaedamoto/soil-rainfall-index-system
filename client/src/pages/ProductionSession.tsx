@@ -384,6 +384,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
               <SoilRainfallMap
                 meshRisks={meshRisksAtTime}
                 meshCoords={meshCoords}
+                sessionId={sessionId ?? undefined}
                 selectedTime={selectedTime}
                 selectedPrefecture={selectedPrefecture}
                 swiInitialTime={sessionInfo.swi_initial_time}

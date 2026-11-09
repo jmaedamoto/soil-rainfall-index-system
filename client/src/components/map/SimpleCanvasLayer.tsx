@@ -10,6 +10,7 @@ interface SimpleCanvasLayerProps {
   selectedTime: number;
   meshIntervals: { latInterval: number; lonInterval: number };
   onMeshClick?: (mesh: Mesh) => void;
+  onMeshSelect?: (mesh: { code: string; lat: number; lon: number }) => void;
 }
 
 const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
@@ -18,7 +19,8 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
   meshCoords,
   selectedTime,
   meshIntervals,
-  onMeshClick
+  onMeshClick,
+  onMeshSelect
 }) => {
   const map = useMap();
   const layerRef = useRef<L.Renderer | null>(null);
@@ -26,11 +28,11 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
   const drawFunctionRef = useRef<(() => void) | null>(null);
 
   // 最新の値を参照するためのref
-  const propsRef = useRef({ meshes, meshRisks, meshCoords, selectedTime, meshIntervals });
+  const propsRef = useRef({ meshes, meshRisks, meshCoords, selectedTime, meshIntervals, onMeshSelect });
 
   // propsRefを常に最新の値で更新
   useEffect(() => {
-    propsRef.current = { meshes, meshRisks, meshCoords, selectedTime, meshIntervals };
+    propsRef.current = { meshes, meshRisks, meshCoords, selectedTime, meshIntervals, onMeshSelect };
   });
 
   useEffect(() => {
@@ -145,7 +147,8 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
       const {
         meshes: currentMeshes,
         meshCoords: currentMeshCoords,
-        meshIntervals: currentMeshIntervals
+        meshIntervals: currentMeshIntervals,
+        onMeshSelect: currentOnMeshSelect,
       } = propsRef.current;
 
       const candidates = currentMeshCoords
@@ -178,6 +181,12 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
 
       if (nearest === null) {
         map.closePopup();
+        return;
+      }
+
+      if (currentOnMeshSelect) {
+        map.closePopup();
+        currentOnMeshSelect({ code: nearest.code, lat: nearest.lat, lon: nearest.lon });
         return;
       }
 
@@ -230,7 +239,7 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
       map.off('moveend', handleViewChange);
       map.off('click', handleMapClick);
     };
-  }, [map, onMeshClick]);
+  }, [map, onMeshClick, onMeshSelect]);
 
   // データ更新時の再描画
   useEffect(() => {

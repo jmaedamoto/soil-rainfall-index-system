@@ -86,6 +86,19 @@ export interface MeshDetailResponse {
   error?: string;
 }
 
+export interface SnakeLineResponse {
+  status: 'success' | 'error';
+  mesh_code: string;
+  lat: number;
+  lon: number;
+  advisory_bound: number;
+  dosyakei_bound: number | null;
+  level4_curve: number[] | null;
+  swi_hourly_timeline: TimeSeriesPoint[];
+  rain_1hour_timeline: TimeSeriesPoint[];
+  error?: string;
+}
+
 export interface RainfallDataResponse {
   adjustment_scope?: RainfallViewMode;
   scope_rainfall?: ScopeRainfall;
