@@ -343,6 +343,7 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
           meshes={meshes}
           meshRisks={meshRisks}
           meshCoords={meshCoords}
+          selectedMeshCode={selectedMesh?.code}
           selectedTime={selectedTime}
           meshIntervals={meshIntervals}
           onMeshClick={onMeshClick}
