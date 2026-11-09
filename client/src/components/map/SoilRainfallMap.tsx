@@ -409,7 +409,7 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
             top: '54px',
             right: '62px',
             zIndex: 1200,
-            width: 'min(620px, calc(100% - 78px))',
+            width: 'min(310px, calc(100% - 78px))',
             padding: '14px 16px 10px',
             borderRadius: '8px',
             backgroundColor: 'rgba(255, 255, 255, 0.98)',
