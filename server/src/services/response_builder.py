@@ -94,7 +94,7 @@ class ResponseBuilder:
             ),
         }
 
-        # 二次細分データ
+        # 市町村等をまとめた地域データ
         for subdivision in prefecture.secondary_subdivisions:
             subdivision_meshes = [
                 ResponseBuilder._build_mesh_dict(mesh)

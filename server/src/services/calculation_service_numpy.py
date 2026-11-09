@@ -21,13 +21,6 @@ class CalculationServiceNumpy:
     A1, A2, A3, A4 = 0.1, 0.15, 0.05, 0.01
     B1, B2, B3 = 0.12, 0.05, 0.01
 
-    @staticmethod
-    def normalize_risk_rule(risk_rule: Optional[str]) -> str:
-        normalized = (risk_rule or "legacy").lower()
-        if normalized not in {"legacy", "lead_time_to_level4"}:
-            raise ValueError(f"Unsupported risk_rule: {risk_rule}")
-        return normalized
-
     def calc_tank_model_vectorized(
         self,
         s1: np.ndarray,
@@ -111,10 +104,8 @@ class CalculationServiceNumpy:
         swi_hourly: np.ndarray,
         rain_hourly: np.ndarray,
         advisory_bounds: np.ndarray,
-        warning_bounds: np.ndarray,
         dosyakei_bounds: np.ndarray,
         level4_curves: Optional[np.ndarray] = None,
-        risk_rule: str = "legacy"
     ) -> np.ndarray:
         """
         全メッシュの危険度をベクトル化計算
@@ -123,18 +114,14 @@ class CalculationServiceNumpy:
             swi_hourly: SWI時系列 (n_times, n_meshes)
             rain_hourly: 1時間雨量時系列 (n_times-1, n_meshes)
             advisory_bounds: 注意報基準値 (n_meshes,)
-            warning_bounds: 警報基準値 (n_meshes,)
             dosyakei_bounds: 土砂災害基準値 (n_meshes,)
 
         Returns:
             risk_hourly: リスク時系列 (n_times, n_meshes)
         """
         _, n_meshes = swi_hourly.shape
-        normalized_risk_rule = self.normalize_risk_rule(risk_rule)
-
         # 閾値を整数にキャスト（元のコードと同じ処理）
         advisory = np.floor(advisory_bounds).astype(np.int32).reshape(1, -1)
-        warning = np.floor(warning_bounds).astype(np.int32).reshape(1, -1)
         dosyakei = np.floor(dosyakei_bounds).astype(np.int32).reshape(1, -1)
         level4_thresholds, level4_valid = self.build_level4_thresholds_vectorized(
             rain_hourly,
@@ -145,14 +132,13 @@ class CalculationServiceNumpy:
         # ベクトル化された条件判定（高い閾値から判定）
         conditions = [
             level4_valid & (swi_hourly >= level4_thresholds),  # レベル4
-            swi_hourly >= warning,    # レベル3
             swi_hourly >= advisory,   # レベル2
         ]
-        choices = [4, 3, 2]
+        choices = [4, 2]
 
         risk = np.select(conditions, choices, default=0).astype(np.int32)
 
-        return self.apply_risk_rule_vectorized(risk, normalized_risk_rule)
+        return self.apply_current_risk_criteria_vectorized(risk)
 
     def build_level4_thresholds_vectorized(
         self,
@@ -192,13 +178,8 @@ class CalculationServiceNumpy:
         valid = np.where(has_curve, curve_thresholds < 999, fallback_thresholds < 999)
         return thresholds, valid
 
-    def apply_risk_rule_vectorized(
-        self,
-        risk_hourly: np.ndarray,
-        risk_rule: str = "legacy"
-    ) -> np.ndarray:
-        normalized_risk_rule = self.normalize_risk_rule(risk_rule)
-        if normalized_risk_rule == "legacy" or risk_hourly.size == 0:
+    def apply_current_risk_criteria_vectorized(self, risk_hourly: np.ndarray) -> np.ndarray:
+        if risk_hourly.size == 0:
             return risk_hourly
 
         adjusted = risk_hourly.copy()
@@ -323,7 +304,6 @@ class CalculationServiceNumpy:
                 - initial_s2: 初期第2タンク (n_meshes,)
                 - initial_s3: 初期第3タンク (n_meshes,)
                 - advisory_bounds: 注意報基準値 (n_meshes,)
-                - warning_bounds: 警報基準値 (n_meshes,)
                 - dosyakei_bounds: 土砂災害基準値 (n_meshes,)
             guidance_rain_3h: 3時間雨量予測 (n_periods, n_meshes)
             guidance_rain_1h_max: 最大1時間雨量予測 (n_periods, n_meshes)
@@ -354,7 +334,6 @@ class CalculationServiceNumpy:
             swi_hourly,
             rain_1hour,
             mesh_data['advisory_bounds'],
-            mesh_data['warning_bounds'],
             mesh_data['dosyakei_bounds'],
             mesh_data.get('level4_curves'),
         )
@@ -369,11 +348,7 @@ class CalculationServiceNumpy:
             'risk_3hour': risk_3hour
         }
 
-    def recalculate_meshes_vectorized(
-        self,
-        mesh_data_list: list,
-        risk_rule: str = "legacy"
-    ) -> dict:
+    def recalculate_meshes_vectorized(self, mesh_data_list: list) -> dict:
         """
         複数メッシュの雨量調整後の再計算を一括実行
 
@@ -383,7 +358,6 @@ class CalculationServiceNumpy:
                     'mesh_code': str,
                     'initial_swi': float,
                     'advisory_bound': int,
-                    'warning_bound': int,
                     'dosyakei_bound': int,
                     'rain_3hour': list of (ft, value)
                 }
@@ -409,7 +383,6 @@ class CalculationServiceNumpy:
         initial_s3 = initial_swi * 0.3
 
         advisory_bounds = np.array([m['advisory_bound'] for m in mesh_data_list])
-        warning_bounds = np.array([m['warning_bound'] for m in mesh_data_list])
         dosyakei_bounds = np.array([m['dosyakei_bound'] for m in mesh_data_list])
         level4_curves = np.full((n_meshes, 151), -1, dtype=np.int32)
         for i, mesh in enumerate(mesh_data_list):
@@ -464,10 +437,8 @@ class CalculationServiceNumpy:
             swi_hourly,
             rain_1hour,
             advisory_bounds,
-            warning_bounds,
             dosyakei_bounds,
             level4_curves=level4_curves,
-            risk_rule=risk_rule,
         )
 
         # 3時間最大リスク計算

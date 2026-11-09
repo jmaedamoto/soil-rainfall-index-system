@@ -12,7 +12,6 @@
 
 import secrets
 import logging
-import copy
 import json
 import os
 import tempfile
@@ -20,8 +19,10 @@ from typing import Dict, Optional, Any, List
 from datetime import datetime, timedelta
 from threading import Lock
 from pathlib import Path
+from time import perf_counter
 from models import Prefecture
 from services.cache_service import get_cache_service
+from services.performance_timing import record_stage
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,6 @@ class SessionService:
         guidance_initial_time: str,
         calculation_time: str,
         guidance_type: str,
-        risk_rule: str,
         cache_key: Optional[str],
     ) -> Dict[str, Any]:
         now = datetime.now()
@@ -64,7 +64,6 @@ class SessionService:
             'swi_initial_time': swi_initial_time,
             'guidance_initial_time': guidance_initial_time,
             'guidance_type': guidance_type,
-            'risk_rule': risk_rule,
             'input_mode': '3hour',
             'adjustment_mode': 'ratio_3hour',
             'calculation_time': calculation_time,
@@ -88,7 +87,6 @@ class SessionService:
             'swi_initial_time': summary['swi_initial_time'],
             'guidance_initial_time': summary['guidance_initial_time'],
             'guidance_type': summary.get('guidance_type', 'msm'),
-            'risk_rule': summary.get('risk_rule', 'legacy'),
             'input_mode': '3hour',
             'adjustment_mode': 'ratio_3hour',
             'calculation_time': calculation_time,
@@ -135,7 +133,6 @@ class SessionService:
             "swi_initial_time": session_data['swi_initial_time'],
             "guidance_initial_time": session_data['guidance_initial_time'],
             "guidance_type": session_data.get('guidance_type', 'msm'),
-            "risk_rule": session_data.get('risk_rule', 'legacy'),
             "calculation_time": session_data.get('calculation_time'),
         }
         self._write_json_atomic(ref_path, payload)
@@ -191,7 +188,6 @@ class SessionService:
             ref_data['guidance_initial_time'],
             ref_data.get('calculation_time') or datetime.now().isoformat(),
             ref_data.get('guidance_type', 'msm'),
-            ref_data.get('risk_rule', 'legacy'),
             cache_key,
         )
 
@@ -233,7 +229,6 @@ class SessionService:
         guidance_initial_time: str,
         calculation_time: str,
         guidance_type: str = 'msm',
-        risk_rule: str = 'legacy',
         cache_key: Optional[str] = None
     ) -> str:
         """
@@ -255,7 +250,6 @@ class SessionService:
             guidance_initial_time,
             calculation_time,
             guidance_type,
-            risk_rule,
             cache_key,
         )
 
@@ -300,7 +294,8 @@ class SessionService:
         adjustments: Dict[str, List[Dict]],
         recalculated_meshes: Dict[str, Dict],
         input_mode: str = '3hour',
-        adjustment_mode: str = 'ratio_3hour'
+        adjustment_mode: str = 'ratio_3hour',
+        adjustment_scope: str = 'municipality'
     ) -> Optional[str]:
         """
         フォークセッションを作成（編集用）
@@ -343,9 +338,9 @@ class SessionService:
                 'swi_initial_time': base_session['swi_initial_time'],
                 'guidance_initial_time': base_session['guidance_initial_time'],
                 'guidance_type': base_session.get('guidance_type', 'msm'),
-                'risk_rule': base_session.get('risk_rule', 'legacy'),
                 'input_mode': input_mode,
                 'adjustment_mode': adjustment_mode,
+                'adjustment_scope': adjustment_scope,
                 'created_at': now,
                 'expires_at': expires_at,
                 'last_accessed': now
@@ -458,8 +453,7 @@ class SessionService:
         Returns:
             マージされたセッションデータ
         """
-        import time
-        merge_start = time.time()
+        merge_started_at = perf_counter()
 
         base_session_id = fork_session.get('base_session_id')
         base_session = self.sessions.get(base_session_id)
@@ -474,6 +468,7 @@ class SessionService:
 
         # Step 1: 影響を受ける府県を特定（O(N)スキャンを避ける）
         # メッシュコードから府県を逆引きするインデックスを構築
+        index_started_at = perf_counter()
         mesh_to_pref = {}
         for pref_code, prefecture in base_session['prefectures'].items():
             for area in prefecture.get('areas', []):
@@ -483,59 +478,97 @@ class SessionService:
                         mesh_to_pref[mesh_code] = pref_code
 
         affected_pref_codes = set(mesh_to_pref.values())
-        index_time = time.time() - merge_start
+        index_time = perf_counter() - index_started_at
         logger.info(f"[Merge] Index build: {index_time:.3f}s, affected prefs: {affected_pref_codes}")
+        record_stage(
+            "fork_merge_index_build",
+            index_time * 1000,
+            recalculated_mesh_count=len(recalculated_mesh_codes),
+            affected_prefecture_count=len(affected_pref_codes),
+        )
 
-        # Step 2: 影響を受ける府県のみdeepcopy、それ以外は参照
-        copy_start = time.time()
-        merged_prefectures = {}
-        for pref_code, prefecture in base_session['prefectures'].items():
-            if pref_code in affected_pref_codes:
-                # この府県は変更されるのでdeepcopy
-                merged_prefectures[pref_code] = copy.deepcopy(prefecture)
-            else:
-                # この府県は変更されないので参照（コピーしない）
-                merged_prefectures[pref_code] = prefecture
-        copy_time = time.time() - copy_start
-        logger.info(f"[Merge] Selective deepcopy: {copy_time:.3f}s")
-
-        # 影響を受けたエリアを追跡（再集約の最適化用）
-        # キー: (pref_code, area_name), 値: area参照
+        # Step 2: 変更対象だけをコピーし、変更しないデータはベースと共有する
+        copy_started_at = perf_counter()
+        merged_prefectures = dict(base_session['prefectures'])
         affected_areas: Dict[tuple, Any] = {}
 
-        # Step 3: 影響を受けた府県のメッシュのみ更新
-        update_start = time.time()
         for pref_code in affected_pref_codes:
-            prefecture = merged_prefectures[pref_code]
-            for area in prefecture.get('areas', []):
-                for mesh in area.get('meshes', []):
+            base_prefecture = base_session['prefectures'][pref_code]
+            prefecture = dict(base_prefecture)
+            copied_areas = []
+            affected_area_names = set()
+
+            for area in base_prefecture.get('areas', []):
+                meshes = area.get('meshes', [])
+                copied_meshes = []
+                area_changed = False
+                for mesh in meshes:
                     mesh_code = mesh.get('code')
-                    if mesh_code in recalculated_meshes:
-                        # 再計算済みデータで上書き
-                        recalc_data = recalculated_meshes[mesh_code]
-                        mesh['risk_3hour_max_timeline'] = recalc_data.get(
-                            'risk_3hour_max_timeline', mesh.get('risk_3hour_max_timeline', []))
-                        mesh['swi_timeline'] = recalc_data.get(
-                            'swi_timeline', mesh.get('swi_timeline', []))
-                        mesh['swi_hourly_timeline'] = recalc_data.get(
-                            'swi_hourly_timeline', mesh.get('swi_hourly_timeline', []))
-                        mesh['rain_timeline'] = recalc_data.get(
-                            'rain_timeline', mesh.get('rain_timeline', []))
-                        mesh['rain_1hour_timeline'] = recalc_data.get(
-                            'rain_1hour_timeline', mesh.get('rain_1hour_timeline', []))
-                        mesh['rain_1hour_max_timeline'] = recalc_data.get(
-                            'rain_1hour_max_timeline', mesh.get('rain_1hour_max_timeline', []))
-                        if 'risk_hourly_timeline' in recalc_data:
-                            mesh['risk_hourly_timeline'] = recalc_data['risk_hourly_timeline']
+                    if mesh_code not in recalculated_meshes:
+                        copied_meshes.append(mesh)
+                        continue
 
-                        # このエリアを影響リストに追加
-                        affected_areas[(pref_code, area.get('name'))] = area
+                    area_changed = True
+                    # Recalculated mesh dictionaries are the only mesh-level
+                    # objects changed by the merge. Timeline values are replaced,
+                    # so the existing timelines and static mesh data can be shared.
+                    updated_mesh = dict(mesh)
+                    recalc_data = recalculated_meshes[mesh_code]
+                    updated_mesh['risk_3hour_max_timeline'] = recalc_data.get(
+                        'risk_3hour_max_timeline', mesh.get('risk_3hour_max_timeline', []))
+                    updated_mesh['swi_timeline'] = recalc_data.get(
+                        'swi_timeline', mesh.get('swi_timeline', []))
+                    updated_mesh['swi_hourly_timeline'] = recalc_data.get(
+                        'swi_hourly_timeline', mesh.get('swi_hourly_timeline', []))
+                    updated_mesh['rain_timeline'] = recalc_data.get(
+                        'rain_timeline', mesh.get('rain_timeline', []))
+                    updated_mesh['rain_1hour_timeline'] = recalc_data.get(
+                        'rain_1hour_timeline', mesh.get('rain_1hour_timeline', []))
+                    updated_mesh['rain_1hour_max_timeline'] = recalc_data.get(
+                        'rain_1hour_max_timeline', mesh.get('rain_1hour_max_timeline', []))
+                    if 'risk_hourly_timeline' in recalc_data:
+                        updated_mesh['risk_hourly_timeline'] = recalc_data['risk_hourly_timeline']
+                    copied_meshes.append(updated_mesh)
 
-        update_time = time.time() - update_start
-        logger.info(f"[Merge] Mesh update: {update_time:.3f}s, updated areas: {len(affected_areas)}")
+                if not area_changed:
+                    copied_areas.append(area)
+                    continue
 
-        # メッシュ更新後、影響を受けたエリアのみリスクタイムラインを再集約
-        reagg_start = time.time()
+                copied_area = dict(area)
+                copied_area['meshes'] = copied_meshes
+                copied_areas.append(copied_area)
+                area_name = area.get('name')
+                affected_area_names.add(area_name)
+                affected_areas[(pref_code, area_name)] = copied_area
+
+            prefecture['areas'] = copied_areas
+
+            # Aggregation below replaces risk_timeline values on affected
+            # subdivisions. Copy only those subdivision records and their list.
+            subdivisions = base_prefecture.get('secondary_subdivisions', [])
+            if affected_area_names and subdivisions:
+                copied_subdivisions = []
+                for subdivision in subdivisions:
+                    if set(subdivision.get('area_names', [])) & affected_area_names:
+                        copied_subdivisions.append(dict(subdivision))
+                    else:
+                        copied_subdivisions.append(subdivision)
+                prefecture['secondary_subdivisions'] = copied_subdivisions
+
+            merged_prefectures[pref_code] = prefecture
+
+        copy_time = perf_counter() - copy_started_at
+        logger.info(f"[Merge] Copy-on-write preparation: {copy_time:.3f}s")
+        record_stage(
+            "fork_merge_copy_on_write",
+            copy_time * 1000,
+            affected_prefecture_count=len(affected_pref_codes),
+            affected_area_count=len(affected_areas),
+            recalculated_mesh_count=len(recalculated_mesh_codes),
+        )
+
+        # Step 3: 影響を受けたエリアのみリスクタイムラインを再集約
+        reagg_started_at = perf_counter()
         if affected_areas:
             # 影響を受けた府県を特定
             affected_prefs = set(pref_code for pref_code, _ in affected_areas.keys())
@@ -560,7 +593,7 @@ class SessionService:
                         for ft in sorted(ft_max_risk.keys())
                     ]
 
-            # 影響を受けた府県のみ二次細分・府県タイムラインを再集約
+            # 影響を受けた府県のみ市町村等をまとめた地域・府県タイムラインを再集約
             for pref_code in affected_prefs:
                 prefecture = merged_prefectures[pref_code]
 
@@ -570,10 +603,10 @@ class SessionService:
                     if pc == pref_code
                 )
 
-                # 二次細分別リスクタイムライン再集約（影響を受けたエリアを含む二次細分のみ）
+                # 市町村等をまとめた地域別リスクタイムライン再集約（影響を受けたエリアを含む市町村等をまとめた地域のみ）
                 for subdiv in prefecture.get('secondary_subdivisions', []):
                     subdiv_area_names = set(subdiv.get('area_names', []))
-                    # この二次細分が影響を受けたエリアを含むかチェック
+                    # この市町村等をまとめた地域が影響を受けたエリアを含むかチェック
                     if subdiv_area_names & affected_area_names:
                         ft_max_risk = {}
                         for area_name in subdiv.get('area_names', []):
@@ -605,9 +638,20 @@ class SessionService:
                         for ft in sorted(ft_max_risk.keys())
                     ]
 
-        reagg_time = time.time() - reagg_start
-        total_time = time.time() - merge_start
+        reagg_time = perf_counter() - reagg_started_at
+        total_time = perf_counter() - merge_started_at
         logger.info(f"[Merge] Re-aggregation: {reagg_time:.3f}s, Total merge: {total_time:.3f}s")
+        record_stage(
+            "fork_merge_reaggregation",
+            reagg_time * 1000,
+            updated_area_count=len(affected_areas),
+        )
+        record_stage(
+            "fork_merge_total",
+            total_time * 1000,
+            recalculated_mesh_count=len(recalculated_mesh_codes),
+            affected_prefecture_count=len(affected_pref_codes),
+        )
 
         # マージ結果を返す
         return {
@@ -617,8 +661,8 @@ class SessionService:
             'swi_initial_time': fork_session['swi_initial_time'],
             'guidance_initial_time': fork_session['guidance_initial_time'],
             'guidance_type': fork_session.get('guidance_type', base_session.get('guidance_type', 'msm')),
-            'risk_rule': fork_session.get('risk_rule', base_session.get('risk_rule', 'legacy')),
             'input_mode': fork_session.get('input_mode', base_session.get('input_mode', '3hour')),
+            'adjustment_scope': fork_session.get('adjustment_scope', 'municipality'),
             'adjustment_mode': fork_session.get('adjustment_mode', base_session.get('adjustment_mode', 'ratio_3hour')),
             'created_at': fork_session['created_at'],
             'expires_at': fork_session['expires_at'],
@@ -717,7 +761,6 @@ class SessionService:
             'swi_initial_time': session['swi_initial_time'],
             'guidance_initial_time': session['guidance_initial_time'],
             'guidance_type': session.get('guidance_type', 'msm'),
-            'risk_rule': session.get('risk_rule', 'legacy'),
             'input_mode': session.get('input_mode', '3hour'),
             'adjustment_mode': session.get('adjustment_mode', 'ratio_3hour'),
             'prefecture_count': len(session['prefectures']),

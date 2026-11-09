@@ -1,0 +1,2500 @@
+{
+  "schema_version": 1,
+  "source": {
+    "url": "https://www.jma.go.jp/jma/kishou/know/yougo_hp/shichoson_ichiran.html",
+    "effective_date": "2026-05-29",
+    "html_sha256": "fc0b420ea7bdac5c60ff971f276b76b1c9eca6f44c1727a56d4b9db891725e07"
+  },
+  "forecast_districts": {
+    "soya": {
+      "name": "宗谷地方",
+      "primary_subdivisions": [
+        {
+          "name": "宗谷地方",
+          "municipality_groups": [
+            {
+              "name": "宗谷北部",
+              "source_name": "宗谷北部"
+            },
+            {
+              "name": "宗谷南部",
+              "source_name": "宗谷南部"
+            },
+            {
+              "name": "利尻・礼文",
+              "source_name": "利尻・礼文"
+            }
+          ]
+        }
+      ]
+    },
+    "kamikawa": {
+      "name": "上川・留萌地方",
+      "primary_subdivisions": [
+        {
+          "name": "上川地方",
+          "municipality_groups": [
+            {
+              "name": "上川北部",
+              "source_name": "上川北部"
+            },
+            {
+              "name": "上川中部",
+              "source_name": "上川中部"
+            },
+            {
+              "name": "上川南部",
+              "source_name": "上川南部"
+            }
+          ]
+        },
+        {
+          "name": "留萌地方",
+          "municipality_groups": [
+            {
+              "name": "留萌北部",
+              "source_name": "留萌北部"
+            },
+            {
+              "name": "留萌中部",
+              "source_name": "留萌中部"
+            },
+            {
+              "name": "留萌南部",
+              "source_name": "留萌南部"
+            }
+          ]
+        }
+      ]
+    },
+    "abashiri": {
+      "name": "網走・北見・紋別地方",
+      "primary_subdivisions": [
+        {
+          "name": "網走地方",
+          "municipality_groups": [
+            {
+              "name": "網走東部",
+              "source_name": "網走東部"
+            },
+            {
+              "name": "網走西部",
+              "source_name": "網走西部"
+            },
+            {
+              "name": "網走南部",
+              "source_name": "網走南部"
+            }
+          ]
+        },
+        {
+          "name": "北見地方",
+          "municipality_groups": [
+            {
+              "name": "北見地方",
+              "source_name": "（北見地方）"
+            }
+          ]
+        },
+        {
+          "name": "紋別地方",
+          "municipality_groups": [
+            {
+              "name": "紋別北部",
+              "source_name": "紋別北部"
+            },
+            {
+              "name": "紋別南部",
+              "source_name": "紋別南部"
+            }
+          ]
+        }
+      ]
+    },
+    "kushiro": {
+      "name": "釧路・根室・十勝地方",
+      "primary_subdivisions": [
+        {
+          "name": "釧路地方",
+          "municipality_groups": [
+            {
+              "name": "釧路北部",
+              "source_name": "釧路北部"
+            },
+            {
+              "name": "釧路中部",
+              "source_name": "釧路中部"
+            },
+            {
+              "name": "釧路南東部",
+              "source_name": "釧路南東部"
+            },
+            {
+              "name": "釧路南西部",
+              "source_name": "釧路南西部"
+            }
+          ]
+        },
+        {
+          "name": "根室地方",
+          "municipality_groups": [
+            {
+              "name": "根室北部",
+              "source_name": "根室北部"
+            },
+            {
+              "name": "根室中部",
+              "source_name": "根室中部"
+            },
+            {
+              "name": "根室南部",
+              "source_name": "根室南部"
+            }
+          ]
+        },
+        {
+          "name": "十勝地方",
+          "municipality_groups": [
+            {
+              "name": "十勝北部",
+              "source_name": "十勝北部"
+            },
+            {
+              "name": "十勝中部",
+              "source_name": "十勝中部"
+            },
+            {
+              "name": "十勝南部",
+              "source_name": "十勝南部"
+            }
+          ]
+        }
+      ]
+    },
+    "iburi": {
+      "name": "胆振・日高地方",
+      "primary_subdivisions": [
+        {
+          "name": "胆振地方",
+          "municipality_groups": [
+            {
+              "name": "胆振西部",
+              "source_name": "胆振西部"
+            },
+            {
+              "name": "胆振中部",
+              "source_name": "胆振中部"
+            },
+            {
+              "name": "胆振東部",
+              "source_name": "胆振東部"
+            }
+          ]
+        },
+        {
+          "name": "日高地方",
+          "municipality_groups": [
+            {
+              "name": "日高西部",
+              "source_name": "日高西部"
+            },
+            {
+              "name": "日高中部",
+              "source_name": "日高中部"
+            },
+            {
+              "name": "日高東部",
+              "source_name": "日高東部"
+            }
+          ]
+        }
+      ]
+    },
+    "ishikari": {
+      "name": "石狩・空知・後志地方",
+      "primary_subdivisions": [
+        {
+          "name": "石狩地方",
+          "municipality_groups": [
+            {
+              "name": "石狩北部",
+              "source_name": "石狩北部"
+            },
+            {
+              "name": "石狩中部",
+              "source_name": "石狩中部"
+            },
+            {
+              "name": "石狩南部",
+              "source_name": "石狩南部"
+            }
+          ]
+        },
+        {
+          "name": "空知地方",
+          "municipality_groups": [
+            {
+              "name": "北空知",
+              "source_name": "北空知"
+            },
+            {
+              "name": "中空知",
+              "source_name": "中空知"
+            },
+            {
+              "name": "南空知",
+              "source_name": "南空知"
+            }
+          ]
+        },
+        {
+          "name": "後志地方",
+          "municipality_groups": [
+            {
+              "name": "後志北部",
+              "source_name": "後志北部"
+            },
+            {
+              "name": "羊蹄山麓",
+              "source_name": "羊蹄山麓"
+            },
+            {
+              "name": "後志西部",
+              "source_name": "後志西部"
+            }
+          ]
+        }
+      ]
+    },
+    "oshima": {
+      "name": "渡島・檜山地方",
+      "primary_subdivisions": [
+        {
+          "name": "渡島地方",
+          "municipality_groups": [
+            {
+              "name": "渡島北部",
+              "source_name": "渡島北部"
+            },
+            {
+              "name": "渡島東部",
+              "source_name": "渡島東部"
+            },
+            {
+              "name": "渡島西部",
+              "source_name": "渡島西部"
+            }
+          ]
+        },
+        {
+          "name": "檜山地方",
+          "municipality_groups": [
+            {
+              "name": "檜山北部",
+              "source_name": "檜山北部"
+            },
+            {
+              "name": "檜山南部",
+              "source_name": "檜山南部"
+            },
+            {
+              "name": "檜山奥尻島",
+              "source_name": "檜山奥尻島"
+            }
+          ]
+        }
+      ]
+    },
+    "aomori": {
+      "name": "青森県",
+      "primary_subdivisions": [
+        {
+          "name": "津軽",
+          "municipality_groups": [
+            {
+              "name": "東青津軽",
+              "source_name": "東青津軽"
+            },
+            {
+              "name": "北五津軽",
+              "source_name": "北五津軽"
+            },
+            {
+              "name": "西津軽",
+              "source_name": "西津軽"
+            },
+            {
+              "name": "中南津軽",
+              "source_name": "中南津軽"
+            }
+          ]
+        },
+        {
+          "name": "下北",
+          "municipality_groups": [
+            {
+              "name": "下北",
+              "source_name": "（下北）"
+            }
+          ]
+        },
+        {
+          "name": "三八上北",
+          "municipality_groups": [
+            {
+              "name": "三八",
+              "source_name": "三八"
+            },
+            {
+              "name": "上北",
+              "source_name": "上北"
+            }
+          ]
+        }
+      ]
+    },
+    "iwate": {
+      "name": "岩手県",
+      "primary_subdivisions": [
+        {
+          "name": "内陸",
+          "municipality_groups": [
+            {
+              "name": "二戸地域",
+              "source_name": "二戸地域"
+            },
+            {
+              "name": "盛岡地域",
+              "source_name": "盛岡地域"
+            },
+            {
+              "name": "花北地域",
+              "source_name": "花北地域"
+            },
+            {
+              "name": "遠野地域",
+              "source_name": "遠野地域"
+            },
+            {
+              "name": "奥州金ケ崎地域",
+              "source_name": "奥州金ケ崎地域"
+            },
+            {
+              "name": "両磐地域",
+              "source_name": "両磐地域"
+            }
+          ]
+        },
+        {
+          "name": "沿岸北部",
+          "municipality_groups": [
+            {
+              "name": "久慈地域",
+              "source_name": "久慈地域"
+            },
+            {
+              "name": "宮古地域",
+              "source_name": "宮古地域"
+            }
+          ]
+        },
+        {
+          "name": "沿岸南部",
+          "municipality_groups": [
+            {
+              "name": "釜石地域",
+              "source_name": "釜石地域"
+            },
+            {
+              "name": "大船渡地域",
+              "source_name": "大船渡地域"
+            }
+          ]
+        }
+      ]
+    },
+    "miyagi": {
+      "name": "宮城県",
+      "primary_subdivisions": [
+        {
+          "name": "東部",
+          "municipality_groups": [
+            {
+              "name": "気仙沼地域",
+              "source_name": "気仙沼地域"
+            },
+            {
+              "name": "石巻地域",
+              "source_name": "石巻地域"
+            },
+            {
+              "name": "登米・東部栗原",
+              "source_name": "登米・東部栗原"
+            },
+            {
+              "name": "東部大崎",
+              "source_name": "東部大崎"
+            },
+            {
+              "name": "東部仙台",
+              "source_name": "東部仙台"
+            },
+            {
+              "name": "東部仙南",
+              "source_name": "東部仙南"
+            }
+          ]
+        },
+        {
+          "name": "西部",
+          "municipality_groups": [
+            {
+              "name": "西部栗原",
+              "source_name": "西部栗原"
+            },
+            {
+              "name": "西部大崎",
+              "source_name": "西部大崎"
+            },
+            {
+              "name": "西部仙台",
+              "source_name": "西部仙台"
+            },
+            {
+              "name": "西部仙南",
+              "source_name": "西部仙南"
+            }
+          ]
+        }
+      ]
+    },
+    "akita": {
+      "name": "秋田県",
+      "primary_subdivisions": [
+        {
+          "name": "沿岸",
+          "municipality_groups": [
+            {
+              "name": "能代山本地域",
+              "source_name": "能代山本地域"
+            },
+            {
+              "name": "秋田中央地域",
+              "source_name": "秋田中央地域"
+            },
+            {
+              "name": "本荘由利地域",
+              "source_name": "本荘由利地域"
+            }
+          ]
+        },
+        {
+          "name": "内陸",
+          "municipality_groups": [
+            {
+              "name": "北秋鹿角地域",
+              "source_name": "北秋鹿角地域"
+            },
+            {
+              "name": "仙北平鹿地域",
+              "source_name": "仙北平鹿地域"
+            },
+            {
+              "name": "湯沢雄勝地域",
+              "source_name": "湯沢雄勝地域"
+            }
+          ]
+        }
+      ]
+    },
+    "yamagata": {
+      "name": "山形県",
+      "primary_subdivisions": [
+        {
+          "name": "村山",
+          "municipality_groups": [
+            {
+              "name": "北村山",
+              "source_name": "北村山"
+            },
+            {
+              "name": "西村山",
+              "source_name": "西村山"
+            },
+            {
+              "name": "東南村山",
+              "source_name": "東南村山"
+            }
+          ]
+        },
+        {
+          "name": "置賜",
+          "municipality_groups": [
+            {
+              "name": "東南置賜",
+              "source_name": "東南置賜"
+            },
+            {
+              "name": "西置賜",
+              "source_name": "西置賜"
+            }
+          ]
+        },
+        {
+          "name": "庄内",
+          "municipality_groups": [
+            {
+              "name": "庄内北部",
+              "source_name": "庄内北部"
+            },
+            {
+              "name": "庄内南部",
+              "source_name": "庄内南部"
+            }
+          ]
+        },
+        {
+          "name": "最上",
+          "municipality_groups": [
+            {
+              "name": "最上",
+              "source_name": "（最上）"
+            }
+          ]
+        }
+      ]
+    },
+    "fukushima": {
+      "name": "福島県",
+      "primary_subdivisions": [
+        {
+          "name": "中通り",
+          "municipality_groups": [
+            {
+              "name": "中通り北部",
+              "source_name": "中通り北部"
+            },
+            {
+              "name": "中通り中部",
+              "source_name": "中通り中部"
+            },
+            {
+              "name": "中通り南部",
+              "source_name": "中通り南部"
+            }
+          ]
+        },
+        {
+          "name": "浜通り",
+          "municipality_groups": [
+            {
+              "name": "浜通り北部",
+              "source_name": "浜通り北部"
+            },
+            {
+              "name": "浜通り中部",
+              "source_name": "浜通り中部"
+            },
+            {
+              "name": "浜通り南部",
+              "source_name": "浜通り南部"
+            }
+          ]
+        },
+        {
+          "name": "会津",
+          "municipality_groups": [
+            {
+              "name": "会津北部",
+              "source_name": "会津北部"
+            },
+            {
+              "name": "会津中部",
+              "source_name": "会津中部"
+            },
+            {
+              "name": "会津南部",
+              "source_name": "会津南部"
+            }
+          ]
+        }
+      ]
+    },
+    "ibaragi": {
+      "name": "茨城県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "県北地域",
+              "source_name": "県北地域"
+            },
+            {
+              "name": "県央地域",
+              "source_name": "県央地域"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "鹿行地域",
+              "source_name": "鹿行地域"
+            },
+            {
+              "name": "県南地域",
+              "source_name": "県南地域"
+            },
+            {
+              "name": "県西地域",
+              "source_name": "県西地域"
+            }
+          ]
+        }
+      ]
+    },
+    "tochigi": {
+      "name": "栃木県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "那須地域",
+              "source_name": "那須地域"
+            },
+            {
+              "name": "日光市",
+              "source_name": "日光市"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "南東部",
+              "source_name": "南東部"
+            },
+            {
+              "name": "県央部",
+              "source_name": "県央部"
+            },
+            {
+              "name": "南西部",
+              "source_name": "南西部"
+            }
+          ]
+        }
+      ]
+    },
+    "gunma": {
+      "name": "群馬県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "利根・沼田地域",
+              "source_name": "利根・沼田地域"
+            },
+            {
+              "name": "吾妻地域",
+              "source_name": "吾妻地域"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "前橋・桐生地域",
+              "source_name": "前橋・桐生地域"
+            },
+            {
+              "name": "伊勢崎・太田地域",
+              "source_name": "伊勢崎・太田地域"
+            },
+            {
+              "name": "高崎・藤岡地域",
+              "source_name": "高崎・藤岡地域"
+            }
+          ]
+        }
+      ]
+    },
+    "saitama": {
+      "name": "埼玉県",
+      "primary_subdivisions": [
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "南東部",
+              "source_name": "南東部"
+            },
+            {
+              "name": "南中部",
+              "source_name": "南中部"
+            },
+            {
+              "name": "南西部",
+              "source_name": "南西部"
+            }
+          ]
+        },
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "北東部",
+              "source_name": "北東部"
+            },
+            {
+              "name": "北西部",
+              "source_name": "北西部"
+            }
+          ]
+        },
+        {
+          "name": "秩父地方",
+          "municipality_groups": [
+            {
+              "name": "秩父地方",
+              "source_name": "（秩父地方）"
+            }
+          ]
+        }
+      ]
+    },
+    "chiba": {
+      "name": "千葉県",
+      "primary_subdivisions": [
+        {
+          "name": "北東部",
+          "municipality_groups": [
+            {
+              "name": "香取・海匝",
+              "source_name": "香取・海匝"
+            },
+            {
+              "name": "山武・長生",
+              "source_name": "山武・長生"
+            }
+          ]
+        },
+        {
+          "name": "北西部",
+          "municipality_groups": [
+            {
+              "name": "印旛",
+              "source_name": "印旛"
+            },
+            {
+              "name": "東葛飾",
+              "source_name": "東葛飾"
+            },
+            {
+              "name": "千葉中央",
+              "source_name": "千葉中央"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "君津",
+              "source_name": "君津"
+            },
+            {
+              "name": "夷隅・安房",
+              "source_name": "夷隅・安房"
+            }
+          ]
+        }
+      ]
+    },
+    "tokyo": {
+      "name": "東京都",
+      "primary_subdivisions": [
+        {
+          "name": "東京地方",
+          "municipality_groups": [
+            {
+              "name": "23区東部",
+              "source_name": "23区東部"
+            },
+            {
+              "name": "23区西部",
+              "source_name": "23区西部"
+            },
+            {
+              "name": "多摩北部",
+              "source_name": "多摩北部"
+            },
+            {
+              "name": "多摩西部",
+              "source_name": "多摩西部"
+            },
+            {
+              "name": "多摩南部",
+              "source_name": "多摩南部"
+            }
+          ]
+        },
+        {
+          "name": "伊豆諸島北部",
+          "municipality_groups": [
+            {
+              "name": "大島",
+              "source_name": "大島"
+            },
+            {
+              "name": "新島",
+              "source_name": "新島"
+            }
+          ]
+        },
+        {
+          "name": "伊豆諸島南部",
+          "municipality_groups": [
+            {
+              "name": "三宅島",
+              "source_name": "三宅島"
+            },
+            {
+              "name": "八丈島",
+              "source_name": "八丈島"
+            }
+          ]
+        },
+        {
+          "name": "小笠原諸島",
+          "municipality_groups": [
+            {
+              "name": "小笠原諸島",
+              "source_name": "（小笠原諸島）"
+            }
+          ]
+        }
+      ]
+    },
+    "kanagawa": {
+      "name": "神奈川県",
+      "primary_subdivisions": [
+        {
+          "name": "東部",
+          "municipality_groups": [
+            {
+              "name": "横浜・川崎",
+              "source_name": "横浜・川崎"
+            },
+            {
+              "name": "湘南",
+              "source_name": "湘南"
+            },
+            {
+              "name": "三浦半島",
+              "source_name": "三浦半島"
+            }
+          ]
+        },
+        {
+          "name": "西部",
+          "municipality_groups": [
+            {
+              "name": "相模原",
+              "source_name": "相模原"
+            },
+            {
+              "name": "県央",
+              "source_name": "県央"
+            },
+            {
+              "name": "足柄上",
+              "source_name": "足柄上"
+            },
+            {
+              "name": "西湘",
+              "source_name": "西湘"
+            }
+          ]
+        }
+      ]
+    },
+    "niigata": {
+      "name": "新潟県",
+      "primary_subdivisions": [
+        {
+          "name": "上越",
+          "municipality_groups": [
+            {
+              "name": "上越市",
+              "source_name": "上越市"
+            },
+            {
+              "name": "糸魚川市",
+              "source_name": "糸魚川市"
+            },
+            {
+              "name": "妙高市",
+              "source_name": "妙高市"
+            }
+          ]
+        },
+        {
+          "name": "中越",
+          "municipality_groups": [
+            {
+              "name": "三条地域",
+              "source_name": "三条地域"
+            },
+            {
+              "name": "魚沼市",
+              "source_name": "魚沼市"
+            },
+            {
+              "name": "長岡地域",
+              "source_name": "長岡地域"
+            },
+            {
+              "name": "柏崎地域",
+              "source_name": "柏崎地域"
+            },
+            {
+              "name": "南魚沼地域",
+              "source_name": "南魚沼地域"
+            },
+            {
+              "name": "十日町地域",
+              "source_name": "十日町地域"
+            }
+          ]
+        },
+        {
+          "name": "下越",
+          "municipality_groups": [
+            {
+              "name": "岩船地域",
+              "source_name": "岩船地域"
+            },
+            {
+              "name": "新発田地域",
+              "source_name": "新発田地域"
+            },
+            {
+              "name": "新潟地域",
+              "source_name": "新潟地域"
+            },
+            {
+              "name": "五泉地域",
+              "source_name": "五泉地域"
+            }
+          ]
+        },
+        {
+          "name": "佐渡",
+          "municipality_groups": [
+            {
+              "name": "佐渡",
+              "source_name": "（佐渡）"
+            }
+          ]
+        }
+      ]
+    },
+    "toyama": {
+      "name": "富山県",
+      "primary_subdivisions": [
+        {
+          "name": "東部",
+          "municipality_groups": [
+            {
+              "name": "東部北",
+              "source_name": "東部北"
+            },
+            {
+              "name": "東部南",
+              "source_name": "東部南"
+            }
+          ]
+        },
+        {
+          "name": "西部",
+          "municipality_groups": [
+            {
+              "name": "西部北",
+              "source_name": "西部北"
+            },
+            {
+              "name": "西部南",
+              "source_name": "西部南"
+            }
+          ]
+        }
+      ]
+    },
+    "ishikawa": {
+      "name": "石川県",
+      "primary_subdivisions": [
+        {
+          "name": "能登",
+          "municipality_groups": [
+            {
+              "name": "能登北部",
+              "source_name": "能登北部"
+            },
+            {
+              "name": "能登南部",
+              "source_name": "能登南部"
+            }
+          ]
+        },
+        {
+          "name": "加賀",
+          "municipality_groups": [
+            {
+              "name": "加賀北部",
+              "source_name": "加賀北部"
+            },
+            {
+              "name": "加賀南部",
+              "source_name": "加賀南部"
+            }
+          ]
+        }
+      ]
+    },
+    "fukui": {
+      "name": "福井県",
+      "primary_subdivisions": [
+        {
+          "name": "嶺北",
+          "municipality_groups": [
+            {
+              "name": "奥越",
+              "source_name": "奥越"
+            },
+            {
+              "name": "嶺北北部",
+              "source_name": "嶺北北部"
+            },
+            {
+              "name": "嶺北南部",
+              "source_name": "嶺北南部"
+            }
+          ]
+        },
+        {
+          "name": "嶺南",
+          "municipality_groups": [
+            {
+              "name": "嶺南東部",
+              "source_name": "嶺南東部"
+            },
+            {
+              "name": "嶺南西部",
+              "source_name": "嶺南西部"
+            }
+          ]
+        }
+      ]
+    },
+    "yamanashi": {
+      "name": "山梨県",
+      "primary_subdivisions": [
+        {
+          "name": "東部・富士五湖",
+          "municipality_groups": [
+            {
+              "name": "東部",
+              "source_name": "東部"
+            },
+            {
+              "name": "富士五湖",
+              "source_name": "富士五湖"
+            }
+          ]
+        },
+        {
+          "name": "中・西部",
+          "municipality_groups": [
+            {
+              "name": "中北地域",
+              "source_name": "中北地域"
+            },
+            {
+              "name": "峡東地域",
+              "source_name": "峡東地域"
+            },
+            {
+              "name": "峡南地域",
+              "source_name": "峡南地域"
+            }
+          ]
+        }
+      ]
+    },
+    "nagano": {
+      "name": "長野県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "中野飯山地域",
+              "source_name": "中野飯山地域"
+            },
+            {
+              "name": "長野地域",
+              "source_name": "長野地域"
+            },
+            {
+              "name": "大北地域",
+              "source_name": "大北地域"
+            }
+          ]
+        },
+        {
+          "name": "中部",
+          "municipality_groups": [
+            {
+              "name": "上田地域",
+              "source_name": "上田地域"
+            },
+            {
+              "name": "佐久地域",
+              "source_name": "佐久地域"
+            },
+            {
+              "name": "松本地域",
+              "source_name": "松本地域"
+            },
+            {
+              "name": "乗鞍上高地地域",
+              "source_name": "乗鞍上高地地域"
+            },
+            {
+              "name": "諏訪地域",
+              "source_name": "諏訪地域"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "上伊那地域",
+              "source_name": "上伊那地域"
+            },
+            {
+              "name": "木曽地域",
+              "source_name": "木曽地域"
+            },
+            {
+              "name": "下伊那地域",
+              "source_name": "下伊那地域"
+            }
+          ]
+        }
+      ]
+    },
+    "gifu": {
+      "name": "岐阜県",
+      "primary_subdivisions": [
+        {
+          "name": "飛騨地方",
+          "municipality_groups": [
+            {
+              "name": "飛騨北部",
+              "source_name": "飛騨北部"
+            },
+            {
+              "name": "飛騨南部",
+              "source_name": "飛騨南部"
+            }
+          ]
+        },
+        {
+          "name": "美濃地方",
+          "municipality_groups": [
+            {
+              "name": "岐阜・西濃",
+              "source_name": "岐阜・西濃"
+            },
+            {
+              "name": "中濃",
+              "source_name": "中濃"
+            },
+            {
+              "name": "東濃",
+              "source_name": "東濃"
+            }
+          ]
+        }
+      ]
+    },
+    "shizuoka": {
+      "name": "静岡県",
+      "primary_subdivisions": [
+        {
+          "name": "伊豆",
+          "municipality_groups": [
+            {
+              "name": "伊豆北",
+              "source_name": "伊豆北"
+            },
+            {
+              "name": "伊豆南",
+              "source_name": "伊豆南"
+            }
+          ]
+        },
+        {
+          "name": "東部",
+          "municipality_groups": [
+            {
+              "name": "富士山南東",
+              "source_name": "富士山南東"
+            },
+            {
+              "name": "富士山南西",
+              "source_name": "富士山南西"
+            }
+          ]
+        },
+        {
+          "name": "中部",
+          "municipality_groups": [
+            {
+              "name": "中部北",
+              "source_name": "中部北"
+            },
+            {
+              "name": "中部南",
+              "source_name": "中部南"
+            }
+          ]
+        },
+        {
+          "name": "西部",
+          "municipality_groups": [
+            {
+              "name": "遠州北",
+              "source_name": "遠州北"
+            },
+            {
+              "name": "遠州南",
+              "source_name": "遠州南"
+            }
+          ]
+        }
+      ]
+    },
+    "aichi": {
+      "name": "愛知県",
+      "primary_subdivisions": [
+        {
+          "name": "東部",
+          "municipality_groups": [
+            {
+              "name": "東三河北部",
+              "source_name": "東三河北部"
+            },
+            {
+              "name": "東三河南部",
+              "source_name": "東三河南部"
+            },
+            {
+              "name": "西三河北東部",
+              "source_name": "西三河北東部"
+            }
+          ]
+        },
+        {
+          "name": "西部",
+          "municipality_groups": [
+            {
+              "name": "西三河北西部",
+              "source_name": "西三河北西部"
+            },
+            {
+              "name": "西三河南部",
+              "source_name": "西三河南部"
+            },
+            {
+              "name": "尾張東部",
+              "source_name": "尾張東部"
+            },
+            {
+              "name": "尾張西部",
+              "source_name": "尾張西部"
+            },
+            {
+              "name": "知多地域",
+              "source_name": "知多地域"
+            }
+          ]
+        }
+      ]
+    },
+    "mie": {
+      "name": "三重県",
+      "primary_subdivisions": [
+        {
+          "name": "北中部",
+          "municipality_groups": [
+            {
+              "name": "北部",
+              "source_name": "北部"
+            },
+            {
+              "name": "中部",
+              "source_name": "中部"
+            },
+            {
+              "name": "伊賀",
+              "source_name": "伊賀"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "伊勢志摩",
+              "source_name": "伊勢志摩"
+            },
+            {
+              "name": "紀勢・東紀州",
+              "source_name": "紀勢・東紀州"
+            }
+          ]
+        }
+      ]
+    },
+    "shiga": {
+      "name": "滋賀県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "湖北",
+              "source_name": "湖北"
+            },
+            {
+              "name": "湖東",
+              "source_name": "湖東"
+            },
+            {
+              "name": "近江西部",
+              "source_name": "近江西部"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "東近江",
+              "source_name": "東近江"
+            },
+            {
+              "name": "近江南部",
+              "source_name": "近江南部"
+            },
+            {
+              "name": "甲賀",
+              "source_name": "甲賀"
+            }
+          ]
+        }
+      ]
+    },
+    "kyoto": {
+      "name": "京都府",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "丹後",
+              "source_name": "丹後"
+            },
+            {
+              "name": "舞鶴・綾部",
+              "source_name": "舞鶴・綾部"
+            },
+            {
+              "name": "福知山",
+              "source_name": "福知山"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "南丹・京丹波",
+              "source_name": "南丹・京丹波"
+            },
+            {
+              "name": "京都・亀岡",
+              "source_name": "京都・亀岡"
+            },
+            {
+              "name": "山城中部",
+              "source_name": "山城中部"
+            },
+            {
+              "name": "山城南部",
+              "source_name": "山城南部"
+            }
+          ]
+        }
+      ]
+    },
+    "osaka": {
+      "name": "大阪府",
+      "primary_subdivisions": [
+        {
+          "name": "大阪府",
+          "municipality_groups": [
+            {
+              "name": "北大阪",
+              "source_name": "北大阪"
+            },
+            {
+              "name": "東部大阪",
+              "source_name": "東部大阪"
+            },
+            {
+              "name": "大阪市",
+              "source_name": "大阪市"
+            },
+            {
+              "name": "南河内",
+              "source_name": "南河内"
+            },
+            {
+              "name": "泉州",
+              "source_name": "泉州"
+            }
+          ]
+        }
+      ]
+    },
+    "hyogo": {
+      "name": "兵庫県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "但馬北部",
+              "source_name": "但馬北部"
+            },
+            {
+              "name": "但馬南部",
+              "source_name": "但馬南部"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "北播丹波",
+              "source_name": "北播丹波"
+            },
+            {
+              "name": "播磨北西部",
+              "source_name": "播磨北西部"
+            },
+            {
+              "name": "阪神",
+              "source_name": "阪神"
+            },
+            {
+              "name": "播磨南東部",
+              "source_name": "播磨南東部"
+            },
+            {
+              "name": "播磨南西部",
+              "source_name": "播磨南西部"
+            },
+            {
+              "name": "淡路島",
+              "source_name": "淡路島"
+            }
+          ]
+        }
+      ]
+    },
+    "nara": {
+      "name": "奈良県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "北東部",
+              "source_name": "北東部"
+            },
+            {
+              "name": "北西部",
+              "source_name": "北西部"
+            },
+            {
+              "name": "五條・北部吉野",
+              "source_name": "五條・北部吉野"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "南東部",
+              "source_name": "南東部"
+            },
+            {
+              "name": "南西部",
+              "source_name": "南西部"
+            }
+          ]
+        }
+      ]
+    },
+    "wakayama": {
+      "name": "和歌山県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "紀北",
+              "source_name": "紀北"
+            },
+            {
+              "name": "紀中",
+              "source_name": "紀中"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "新宮・東牟婁",
+              "source_name": "新宮・東牟婁"
+            },
+            {
+              "name": "田辺・西牟婁",
+              "source_name": "田辺・西牟婁"
+            }
+          ]
+        }
+      ]
+    },
+    "tottori": {
+      "name": "鳥取県",
+      "primary_subdivisions": [
+        {
+          "name": "東部",
+          "municipality_groups": [
+            {
+              "name": "鳥取地区",
+              "source_name": "鳥取地区"
+            },
+            {
+              "name": "八頭地区",
+              "source_name": "八頭地区"
+            }
+          ]
+        },
+        {
+          "name": "中・西部",
+          "municipality_groups": [
+            {
+              "name": "倉吉地区",
+              "source_name": "倉吉地区"
+            },
+            {
+              "name": "米子地区",
+              "source_name": "米子地区"
+            },
+            {
+              "name": "日野地区",
+              "source_name": "日野地区"
+            }
+          ]
+        }
+      ]
+    },
+    "shimane": {
+      "name": "島根県",
+      "primary_subdivisions": [
+        {
+          "name": "東部",
+          "municipality_groups": [
+            {
+              "name": "松江地区",
+              "source_name": "松江地区"
+            },
+            {
+              "name": "出雲地区",
+              "source_name": "出雲地区"
+            },
+            {
+              "name": "雲南地区",
+              "source_name": "雲南地区"
+            }
+          ]
+        },
+        {
+          "name": "西部",
+          "municipality_groups": [
+            {
+              "name": "大田邑智地区",
+              "source_name": "大田邑智地区"
+            },
+            {
+              "name": "浜田地区",
+              "source_name": "浜田地区"
+            },
+            {
+              "name": "益田地区",
+              "source_name": "益田地区"
+            }
+          ]
+        },
+        {
+          "name": "隠岐",
+          "municipality_groups": [
+            {
+              "name": "隠岐",
+              "source_name": "（隠岐）"
+            }
+          ]
+        }
+      ]
+    },
+    "okayama": {
+      "name": "岡山県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "勝英地域",
+              "source_name": "勝英地域"
+            },
+            {
+              "name": "津山地域",
+              "source_name": "津山地域"
+            },
+            {
+              "name": "真庭地域",
+              "source_name": "真庭地域"
+            },
+            {
+              "name": "新見地域",
+              "source_name": "新見地域"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "東備地域",
+              "source_name": "東備地域"
+            },
+            {
+              "name": "岡山地域",
+              "source_name": "岡山地域"
+            },
+            {
+              "name": "高梁地域",
+              "source_name": "高梁地域"
+            },
+            {
+              "name": "倉敷地域",
+              "source_name": "倉敷地域"
+            },
+            {
+              "name": "井笠地域",
+              "source_name": "井笠地域"
+            }
+          ]
+        }
+      ]
+    },
+    "hiroshima": {
+      "name": "広島県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "備北",
+              "source_name": "備北"
+            },
+            {
+              "name": "芸北",
+              "source_name": "芸北"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "福山・尾三",
+              "source_name": "福山・尾三"
+            },
+            {
+              "name": "東広島・竹原",
+              "source_name": "東広島・竹原"
+            },
+            {
+              "name": "広島・呉",
+              "source_name": "広島・呉"
+            }
+          ]
+        }
+      ]
+    },
+    "yamaguchi": {
+      "name": "山口県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "萩・美祢",
+              "source_name": "萩・美祢"
+            },
+            {
+              "name": "長門",
+              "source_name": "長門"
+            }
+          ]
+        },
+        {
+          "name": "東部",
+          "municipality_groups": [
+            {
+              "name": "岩国",
+              "source_name": "岩国"
+            },
+            {
+              "name": "柳井・光",
+              "source_name": "柳井・光"
+            }
+          ]
+        },
+        {
+          "name": "中部",
+          "municipality_groups": [
+            {
+              "name": "周南・下松",
+              "source_name": "周南・下松"
+            },
+            {
+              "name": "山口・防府",
+              "source_name": "山口・防府"
+            }
+          ]
+        },
+        {
+          "name": "西部",
+          "municipality_groups": [
+            {
+              "name": "下関",
+              "source_name": "下関"
+            },
+            {
+              "name": "宇部・山陽小野田",
+              "source_name": "宇部・山陽小野田"
+            }
+          ]
+        }
+      ]
+    },
+    "tokushima": {
+      "name": "徳島県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "徳島・鳴門",
+              "source_name": "徳島・鳴門"
+            },
+            {
+              "name": "美馬北部・阿北",
+              "source_name": "美馬北部・阿北"
+            },
+            {
+              "name": "美馬南部・神山",
+              "source_name": "美馬南部・神山"
+            },
+            {
+              "name": "三好",
+              "source_name": "三好"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "阿南",
+              "source_name": "阿南"
+            },
+            {
+              "name": "那賀・勝浦",
+              "source_name": "那賀・勝浦"
+            },
+            {
+              "name": "海部",
+              "source_name": "海部"
+            }
+          ]
+        }
+      ]
+    },
+    "kagawa": {
+      "name": "香川県",
+      "primary_subdivisions": [
+        {
+          "name": "香川県",
+          "municipality_groups": [
+            {
+              "name": "小豆",
+              "source_name": "小豆"
+            },
+            {
+              "name": "東讃",
+              "source_name": "東讃"
+            },
+            {
+              "name": "高松地域",
+              "source_name": "高松地域"
+            },
+            {
+              "name": "中讃",
+              "source_name": "中讃"
+            },
+            {
+              "name": "西讃",
+              "source_name": "西讃"
+            }
+          ]
+        }
+      ]
+    },
+    "ehime": {
+      "name": "愛媛県",
+      "primary_subdivisions": [
+        {
+          "name": "東予",
+          "municipality_groups": [
+            {
+              "name": "東予東部",
+              "source_name": "東予東部"
+            },
+            {
+              "name": "東予西部",
+              "source_name": "東予西部"
+            }
+          ]
+        },
+        {
+          "name": "中予",
+          "municipality_groups": [
+            {
+              "name": "中予",
+              "source_name": "（中予）"
+            }
+          ]
+        },
+        {
+          "name": "南予",
+          "municipality_groups": [
+            {
+              "name": "南予北部",
+              "source_name": "南予北部"
+            },
+            {
+              "name": "南予南部",
+              "source_name": "南予南部"
+            }
+          ]
+        }
+      ]
+    },
+    "kochi": {
+      "name": "高知県",
+      "primary_subdivisions": [
+        {
+          "name": "東部",
+          "municipality_groups": [
+            {
+              "name": "室戸",
+              "source_name": "室戸"
+            },
+            {
+              "name": "安芸",
+              "source_name": "安芸"
+            }
+          ]
+        },
+        {
+          "name": "中部",
+          "municipality_groups": [
+            {
+              "name": "高知中央",
+              "source_name": "高知中央"
+            },
+            {
+              "name": "嶺北",
+              "source_name": "嶺北"
+            },
+            {
+              "name": "高吾北",
+              "source_name": "高吾北"
+            }
+          ]
+        },
+        {
+          "name": "西部",
+          "municipality_groups": [
+            {
+              "name": "高幡",
+              "source_name": "高幡"
+            },
+            {
+              "name": "幡多",
+              "source_name": "幡多"
+            }
+          ]
+        }
+      ]
+    },
+    "fukuoka": {
+      "name": "福岡県",
+      "primary_subdivisions": [
+        {
+          "name": "福岡地方",
+          "municipality_groups": [
+            {
+              "name": "福岡地方",
+              "source_name": "（福岡地方）"
+            }
+          ]
+        },
+        {
+          "name": "北九州地方",
+          "municipality_groups": [
+            {
+              "name": "北九州・遠賀地区",
+              "source_name": "北九州・遠賀地区"
+            },
+            {
+              "name": "京築",
+              "source_name": "京築"
+            }
+          ]
+        },
+        {
+          "name": "筑豊地方",
+          "municipality_groups": [
+            {
+              "name": "筑豊地方",
+              "source_name": "（筑豊地方）"
+            }
+          ]
+        },
+        {
+          "name": "筑後地方",
+          "municipality_groups": [
+            {
+              "name": "筑後北部",
+              "source_name": "筑後北部"
+            },
+            {
+              "name": "筑後南部",
+              "source_name": "筑後南部"
+            }
+          ]
+        }
+      ]
+    },
+    "saga": {
+      "name": "佐賀県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "唐津地区",
+              "source_name": "唐津地区"
+            },
+            {
+              "name": "伊万里地区",
+              "source_name": "伊万里地区"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "鳥栖地区",
+              "source_name": "鳥栖地区"
+            },
+            {
+              "name": "佐賀多久地区",
+              "source_name": "佐賀多久地区"
+            },
+            {
+              "name": "武雄地区",
+              "source_name": "武雄地区"
+            },
+            {
+              "name": "鹿島地区",
+              "source_name": "鹿島地区"
+            }
+          ]
+        }
+      ]
+    },
+    "nagasaki": {
+      "name": "長崎県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "平戸・松浦地区",
+              "source_name": "平戸・松浦地区"
+            },
+            {
+              "name": "佐世保・東彼地区",
+              "source_name": "佐世保・東彼地区"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "島原半島",
+              "source_name": "島原半島"
+            },
+            {
+              "name": "諫早・大村地区",
+              "source_name": "諫早・大村地区"
+            },
+            {
+              "name": "長崎地区",
+              "source_name": "長崎地区"
+            },
+            {
+              "name": "西彼杵半島",
+              "source_name": "西彼杵半島"
+            }
+          ]
+        },
+        {
+          "name": "壱岐・対馬",
+          "municipality_groups": [
+            {
+              "name": "上対馬",
+              "source_name": "上対馬"
+            },
+            {
+              "name": "下対馬",
+              "source_name": "下対馬"
+            },
+            {
+              "name": "壱岐",
+              "source_name": "壱岐"
+            }
+          ]
+        },
+        {
+          "name": "五島",
+          "municipality_groups": [
+            {
+              "name": "上五島",
+              "source_name": "上五島"
+            },
+            {
+              "name": "下五島",
+              "source_name": "下五島"
+            }
+          ]
+        }
+      ]
+    },
+    "kumamoto": {
+      "name": "熊本県",
+      "primary_subdivisions": [
+        {
+          "name": "熊本地方",
+          "municipality_groups": [
+            {
+              "name": "山鹿菊池",
+              "source_name": "山鹿菊池"
+            },
+            {
+              "name": "荒尾玉名",
+              "source_name": "荒尾玉名"
+            },
+            {
+              "name": "熊本市",
+              "source_name": "熊本市"
+            },
+            {
+              "name": "上益城",
+              "source_name": "上益城"
+            },
+            {
+              "name": "宇城八代",
+              "source_name": "宇城八代"
+            }
+          ]
+        },
+        {
+          "name": "阿蘇地方",
+          "municipality_groups": [
+            {
+              "name": "阿蘇地方",
+              "source_name": "（阿蘇地方）"
+            }
+          ]
+        },
+        {
+          "name": "天草・芦北地方",
+          "municipality_groups": [
+            {
+              "name": "天草地方",
+              "source_name": "天草地方"
+            },
+            {
+              "name": "芦北地方",
+              "source_name": "芦北地方"
+            }
+          ]
+        },
+        {
+          "name": "球磨地方",
+          "municipality_groups": [
+            {
+              "name": "球磨地方",
+              "source_name": "（球磨地方）"
+            }
+          ]
+        }
+      ]
+    },
+    "oita": {
+      "name": "大分県",
+      "primary_subdivisions": [
+        {
+          "name": "北部",
+          "municipality_groups": [
+            {
+              "name": "北部",
+              "source_name": "（北部）"
+            }
+          ]
+        },
+        {
+          "name": "中部",
+          "municipality_groups": [
+            {
+              "name": "中部",
+              "source_name": "（中部）"
+            }
+          ]
+        },
+        {
+          "name": "南部",
+          "municipality_groups": [
+            {
+              "name": "佐伯市",
+              "source_name": "佐伯市"
+            },
+            {
+              "name": "豊後大野市",
+              "source_name": "豊後大野市"
+            }
+          ]
+        },
+        {
+          "name": "西部",
+          "municipality_groups": [
+            {
+              "name": "日田玖珠",
+              "source_name": "日田玖珠"
+            },
+            {
+              "name": "竹田市",
+              "source_name": "竹田市"
+            }
+          ]
+        }
+      ]
+    },
+    "miyazaki": {
+      "name": "宮崎県",
+      "primary_subdivisions": [
+        {
+          "name": "北部平野部",
+          "municipality_groups": [
+            {
+              "name": "延岡・日向地区",
+              "source_name": "延岡・日向地区"
+            },
+            {
+              "name": "西都・高鍋地区",
+              "source_name": "西都・高鍋地区"
+            }
+          ]
+        },
+        {
+          "name": "北部山沿い",
+          "municipality_groups": [
+            {
+              "name": "高千穂地区",
+              "source_name": "高千穂地区"
+            },
+            {
+              "name": "椎葉・美郷地区",
+              "source_name": "椎葉・美郷地区"
+            }
+          ]
+        },
+        {
+          "name": "南部平野部",
+          "municipality_groups": [
+            {
+              "name": "宮崎地区",
+              "source_name": "宮崎地区"
+            },
+            {
+              "name": "日南・串間地区",
+              "source_name": "日南・串間地区"
+            }
+          ]
+        },
+        {
+          "name": "南部山沿い",
+          "municipality_groups": [
+            {
+              "name": "小林・えびの地区",
+              "source_name": "小林・えびの地区"
+            },
+            {
+              "name": "都城地区",
+              "source_name": "都城地区"
+            }
+          ]
+        }
+      ]
+    },
+    "kagoshima": {
+      "name": "鹿児島県",
+      "primary_subdivisions": [
+        {
+          "name": "薩摩地方",
+          "municipality_groups": [
+            {
+              "name": "出水・伊佐",
+              "source_name": "出水・伊佐"
+            },
+            {
+              "name": "川薩・姶良",
+              "source_name": "川薩・姶良"
+            },
+            {
+              "name": "甑島",
+              "source_name": "甑島"
+            },
+            {
+              "name": "鹿児島・日置",
+              "source_name": "鹿児島・日置"
+            },
+            {
+              "name": "指宿・川辺",
+              "source_name": "指宿・川辺"
+            }
+          ]
+        },
+        {
+          "name": "大隅地方",
+          "municipality_groups": [
+            {
+              "name": "曽於",
+              "source_name": "曽於"
+            },
+            {
+              "name": "肝属",
+              "source_name": "肝属"
+            }
+          ]
+        },
+        {
+          "name": "種子島・屋久島地方",
+          "municipality_groups": [
+            {
+              "name": "種子島地方",
+              "source_name": "種子島地方"
+            },
+            {
+              "name": "屋久島地方",
+              "source_name": "屋久島地方"
+            }
+          ]
+        },
+        {
+          "name": "奄美地方",
+          "municipality_groups": [
+            {
+              "name": "十島村",
+              "source_name": "十島村"
+            },
+            {
+              "name": "北部",
+              "source_name": "北部"
+            },
+            {
+              "name": "南部",
+              "source_name": "南部"
+            }
+          ]
+        }
+      ]
+    },
+    "okinawa": {
+      "name": "沖縄本島地方",
+      "primary_subdivisions": [
+        {
+          "name": "本島北部",
+          "municipality_groups": [
+            {
+              "name": "伊是名・伊平屋",
+              "source_name": "伊是名・伊平屋"
+            },
+            {
+              "name": "国頭地区",
+              "source_name": "国頭地区"
+            },
+            {
+              "name": "名護地区",
+              "source_name": "名護地区"
+            },
+            {
+              "name": "恩納・金武地区",
+              "source_name": "恩納・金武地区"
+            }
+          ]
+        },
+        {
+          "name": "本島中南部",
+          "municipality_groups": [
+            {
+              "name": "中部",
+              "source_name": "中部"
+            },
+            {
+              "name": "南部",
+              "source_name": "南部"
+            },
+            {
+              "name": "慶良間・粟国諸島",
+              "source_name": "慶良間・粟国諸島"
+            }
+          ]
+        },
+        {
+          "name": "久米島",
+          "municipality_groups": [
+            {
+              "name": "久米島",
+              "source_name": "（久米島）"
+            }
+          ]
+        }
+      ]
+    },
+    "daito": {
+      "name": "大東島地方",
+      "primary_subdivisions": [
+        {
+          "name": "大東島地方",
+          "municipality_groups": [
+            {
+              "name": "大東島地方",
+              "source_name": "（大東島地方）"
+            }
+          ]
+        }
+      ]
+    },
+    "miyako": {
+      "name": "宮古島地方",
+      "primary_subdivisions": [
+        {
+          "name": "宮古島地方",
+          "municipality_groups": [
+            {
+              "name": "宮古島",
+              "source_name": "宮古島"
+            },
+            {
+              "name": "多良間島",
+              "source_name": "多良間島"
+            }
+          ]
+        }
+      ]
+    },
+    "yaeyama": {
+      "name": "八重山地方",
+      "primary_subdivisions": [
+        {
+          "name": "石垣島地方",
+          "municipality_groups": [
+            {
+              "name": "石垣市",
+              "source_name": "石垣市"
+            },
+            {
+              "name": "竹富町",
+              "source_name": "竹富町"
+            }
+          ]
+        },
+        {
+          "name": "与那国島地方",
+          "municipality_groups": [
+            {
+              "name": "与那国島地方",
+              "source_name": "（与那国島地方）"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

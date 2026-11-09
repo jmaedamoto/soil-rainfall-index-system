@@ -5,6 +5,7 @@ import type {
   RiskAtTimeResponse,
   MeshDetailResponse,
   RainfallDataResponse,
+  AdjustedRainfallPreviewResponse,
   RecalculateRequest,
   RecalculateResponse,
 } from '../types/session';
@@ -107,22 +108,13 @@ class SessionAPIClient {
    * 雨量調整用の雨量データ取得
    */
   async getRainfallData(sessionId: string): Promise<RainfallDataResponse> {
-    const response = await axios.get<{
-      status: string;
-      area_rainfall: RainfallDataResponse['area_rainfall'];
-      subdivision_rainfall: RainfallDataResponse['subdivision_rainfall'];
-      area_orders?: RainfallDataResponse['area_orders'];
-      subdivision_orders?: RainfallDataResponse['subdivision_orders'];
-      area_rainfall_24hour?: RainfallDataResponse['area_rainfall_24hour'];
-      subdivision_rainfall_24hour?: RainfallDataResponse['subdivision_rainfall_24hour'];
-      guidance_type?: RainfallDataResponse['guidance_type'];
-      risk_rule?: RainfallDataResponse['risk_rule'];
-      input_mode?: RainfallDataResponse['input_mode'];
-      adjustment_mode?: RainfallDataResponse['adjustment_mode'];
-    }>(
+    const response = await axios.get<RainfallDataResponse & { status: string }>(
       `${this.apiBaseUrl}/session/${sessionId}/rainfall-data`
     );
     return {
+      adjustment_scope: response.data.adjustment_scope,
+      scope_rainfall: response.data.scope_rainfall,
+      scope_errors: response.data.scope_errors,
       area_rainfall: response.data.area_rainfall,
       subdivision_rainfall: response.data.subdivision_rainfall,
       area_orders: response.data.area_orders,
@@ -130,9 +122,46 @@ class SessionAPIClient {
       area_rainfall_24hour: response.data.area_rainfall_24hour,
       subdivision_rainfall_24hour: response.data.subdivision_rainfall_24hour,
       guidance_type: response.data.guidance_type,
-      risk_rule: response.data.risk_rule,
       input_mode: response.data.input_mode,
       adjustment_mode: response.data.adjustment_mode
+    };
+  }
+
+  /**
+   * 雨量調整後のメッシュ雨量を取得する（SWI・危険度は再計算しない）
+   */
+  async previewAdjustedRainfall(
+    sessionId: string,
+    adjustments: RecalculateRequest['adjustments'],
+    aggregateAdjustments: RecalculateRequest['aggregate_adjustments'],
+    inputMode: RecalculateRequest['input_mode'],
+    adjustmentMode: RecalculateRequest['adjustment_mode'],
+    adjustmentScope: RecalculateRequest['adjustment_scope'],
+    displayHours: 24 | 48 | 72 = 72
+  ): Promise<AdjustedRainfallPreviewResponse> {
+    const response = await axios.post<{
+      status: string;
+      display_hours: 24 | 48 | 72;
+      times: number[];
+      meshes: AdjustedRainfallPreviewResponse['meshes'];
+      mesh_count: number;
+    }>(
+      `${this.apiBaseUrl}/session/${sessionId}/rainfall-preview`,
+      {
+        adjustments,
+        aggregate_adjustments: aggregateAdjustments,
+        input_mode: inputMode,
+        adjustment_mode: adjustmentMode,
+        adjustment_scope: adjustmentScope,
+        display_hours: displayHours,
+      },
+      { timeout: 120000 }
+    );
+    return {
+      display_hours: response.data.display_hours,
+      times: response.data.times,
+      meshes: response.data.meshes,
+      mesh_count: response.data.mesh_count,
     };
   }
 
@@ -149,7 +178,7 @@ class SessionAPIClient {
     guidanceInitial: string,
     dataSource: string,
     guidanceType?: RecalculateRequest['guidance_type'],
-    riskRule?: RecalculateRequest['risk_rule']
+    adjustmentScope?: RecalculateRequest['adjustment_scope']
   ): Promise<RecalculateResponse> {
     const response = await axios.post<{
       status: string;
@@ -157,7 +186,6 @@ class SessionAPIClient {
       adjusted: RecalculateResponse['adjusted'];
       ft: RecalculateResponse['ft'];
       guidance_type?: RecalculateResponse['guidance_type'];
-      risk_rule?: RecalculateResponse['risk_rule'];
       mesh_risks: RecalculateResponse['mesh_risks'];
       mesh_coords: RecalculateResponse['mesh_coords'];
     }>(
@@ -165,13 +193,13 @@ class SessionAPIClient {
       {
         adjustments,
         aggregate_adjustments: aggregateAdjustments,
+        adjustment_scope: adjustmentScope,
         input_mode: inputMode,
         adjustment_mode: adjustmentMode,
         swi_initial: swiInitial,
         guidance_initial: guidanceInitial,
         data_source: dataSource,
         guidance_type: guidanceType,
-        risk_rule: riskRule
       },
       { timeout: 600000 }
     );
@@ -180,7 +208,6 @@ class SessionAPIClient {
       adjusted: response.data.adjusted,
       ft: response.data.ft,
       guidance_type: response.data.guidance_type,
-      risk_rule: response.data.risk_rule,
       mesh_risks: response.data.mesh_risks,
       mesh_coords: response.data.mesh_coords,
     };

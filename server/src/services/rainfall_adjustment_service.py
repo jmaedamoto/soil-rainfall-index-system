@@ -15,11 +15,6 @@ logger = logging.getLogger(__name__)
 class RainfallAdjustmentService:
     """雨量調整サービス"""
 
-    WINDOW_24H_MAP: Dict[int, Tuple[int, ...]] = {
-        24: (3, 6, 9, 12, 15, 18, 21, 24),
-        48: (27, 30, 33, 36, 39, 42, 45, 48),
-    }
-
     def calculate_mesh_ratios_from_session(
         self,
         prefectures_dict: Dict[str, Any],
@@ -239,7 +234,7 @@ class RainfallAdjustmentService:
         prefectures_dict: Dict[str, Any]
     ) -> Tuple[Dict[str, List[Dict[str, float]]], Dict[str, List[Dict[str, float]]]]:
         """
-        セッション辞書形式データから、市町村別・二次細分別の24時間代表雨量を集計する。
+        セッション辞書形式データから、市町村別・市町村等をまとめた地域別の24時間代表雨量を集計する。
 
         各領域では、各メッシュの24時間合計を求めたうえで最大値を代表値とする。
         """
@@ -318,6 +313,75 @@ class RainfallAdjustmentService:
             strategy='fill_peak_mesh'
         )
 
+    def build_adjusted_mesh_rainfall_for_mode(
+        self,
+        prefectures_dict: Dict[str, Any],
+        adjustments: Dict[str, Dict[int, float]],
+        aggregate_adjustments: Dict[str, Dict[int, float]],
+        input_mode: str,
+        adjustment_mode: str,
+    ) -> Dict[str, List[Tuple[int, float]]]:
+        """Apply the same mesh-rainfall transformation used by recalculation.
+
+        This method deliberately stops before SWI/risk recalculation so the UI
+        can preview adjusted rainfall without creating a forked session.
+        """
+        if input_mode == '24hour':
+            builders = {
+                'fill_24hour_uniform': self.build_fill_24hour_uniform_from_session,
+                'ratio_24hour_uniform': self.build_ratio_24hour_uniform_from_session,
+                'fill_24hour_peak_mesh': self.build_fill_24hour_peak_mesh_from_session,
+                'ratio_24hour_peak_mesh': self.build_ratio_24hour_peak_mesh_from_session,
+            }
+            builder = builders.get(adjustment_mode)
+            if builder is None:
+                raise ValueError(f'Unsupported adjustment_mode: {adjustment_mode}')
+            return builder(prefectures_dict, aggregate_adjustments)
+
+        if input_mode != '3hour':
+            raise ValueError(f'Unsupported input_mode: {input_mode}')
+
+        if adjustment_mode == 'fill_3hour':
+            return self.build_filled_mesh_rainfall_from_session(prefectures_dict, adjustments)
+        if adjustment_mode == 'fill_3hour_area_max':
+            return self.build_area_max_filled_mesh_rainfall_from_session(prefectures_dict, adjustments)
+        if adjustment_mode == 'ratio_3hour':
+            ratios = self.calculate_mesh_ratios_from_session(prefectures_dict, adjustments)
+            return self.build_adjusted_mesh_rainfall_from_session(prefectures_dict, ratios)
+        raise ValueError(f'Unsupported adjustment_mode: {adjustment_mode}')
+
+    @staticmethod
+    def build_adjusted_max_1hour_timeline(
+        mesh_dict: Dict[str, Any],
+        adjusted_3hour_timeline: List[Tuple[int, float]],
+    ) -> List[Tuple[int, float]]:
+        """Match the 3-hour-to-maximum-1-hour scaling used by recalculation."""
+        original_3hour = {
+            int(point['ft']): float(point['value'])
+            for point in mesh_dict.get('rain_timeline', [])
+        }
+        original_max_1hour = {
+            int(point['ft']): float(point['value'])
+            for point in mesh_dict.get('rain_1hour_max_timeline', [])
+        }
+        result = []
+        for ft, adjusted_value in adjusted_3hour_timeline:
+            ft = int(ft)
+            adjusted_value = float(adjusted_value)
+            original_3h = original_3hour.get(ft, 0.0)
+            original_1h_max = original_max_1hour.get(ft, 0.0)
+            if adjusted_value <= 0:
+                adjusted_1h_max = 0.0
+            elif original_1h_max > 0 and original_3h > 0:
+                adjusted_1h_max = min(
+                    adjusted_value,
+                    original_1h_max * (adjusted_value / original_3h),
+                )
+            else:
+                adjusted_1h_max = adjusted_value / 3.0
+            result.append((ft, max(0.0, min(adjusted_value, adjusted_1h_max))))
+        return result
+
     def extract_area_rainfall_timeseries(
         self,
         prefectures: List[Prefecture],
@@ -383,10 +447,10 @@ class RainfallAdjustmentService:
         guidance_grib2: Dict[str, Any]
     ) -> Dict[str, List[Dict[str, float]]]:
         """
-        二次細分ごとの雨量時系列を抽出
+        市町村等をまとめた地域ごとの雨量時系列を抽出
 
-        各二次細分の全メッシュから雨量データを収集し、
-        時刻（FT）ごとに最大値を取得して二次細分の代表値とする
+        各市町村等をまとめた地域の全メッシュから雨量データを収集し、
+        時刻（FT）ごとに最大値を取得して市町村等をまとめた地域の代表値とする
 
         Args:
             prefectures: 都道府県データリスト
@@ -402,7 +466,7 @@ class RainfallAdjustmentService:
                 ...
             }
         """
-        logger.info("二次細分別雨量時系列の抽出開始")
+        logger.info("市町村等をまとめた地域別雨量時系列の抽出開始")
         subdivision_rainfall = {}
 
         # FT値の範囲を取得
@@ -415,13 +479,13 @@ class RainfallAdjustmentService:
                 continue
 
             for subdivision in prefecture.secondary_subdivisions:
-                # 二次細分の一意キー
+                # 市町村等をまとめた地域の一意キー
                 subdiv_key = f"{prefecture.name}_{subdivision.name}"
 
                 # 各FTごとの最大雨量を収集
                 ft_max_values = {ft: 0.0 for ft in ft_list}
 
-                # 二次細分内の全市町村のメッシュから雨量を収集
+                # 市町村等をまとめた地域内の全市町村のメッシュから雨量を収集
                 for area in subdivision.areas:
                     for mesh in area.meshes:
                         # メッシュの3時間雨量を取得
@@ -438,7 +502,7 @@ class RainfallAdjustmentService:
                     for ft in sorted(ft_list)
                 ]
 
-        logger.info(f"二次細分別雨量時系列抽出完了: {len(subdivision_rainfall)}二次細分")
+        logger.info(f"市町村等をまとめた地域別雨量時系列抽出完了: {len(subdivision_rainfall)}市町村等をまとめた地域")
         return subdivision_rainfall
 
     def adjust_guidance_data_by_area_ratios(
@@ -673,10 +737,15 @@ class RainfallAdjustmentService:
     ) -> List[Dict[str, float]]:
         timeline: List[Dict[str, float]] = []
 
-        for window_end_ft, window_fts in self.WINDOW_24H_MAP.items():
+        mesh_timelines = [self._mesh_timeline_to_dict(mesh_dict) for mesh_dict in meshes]
+        max_ft = max((max(values, default=0) for values in mesh_timelines), default=0)
+        for window_end_ft in range(24, max_ft + 1, 3):
+            window_fts = self._window_fts_for_end(window_end_ft)
+            if not window_fts or not any(all(ft in values for ft in window_fts) for values in mesh_timelines):
+                continue
             max_value = 0.0
-            for mesh_dict in meshes:
-                total = self._sum_mesh_values_for_fts(mesh_dict, window_fts)
+            for values in mesh_timelines:
+                total = sum(values.get(ft, 0.0) for ft in window_fts)
                 max_value = max(max_value, total)
             timeline.append({"ft": window_end_ft, "value": round(max_value)})
 
@@ -860,7 +929,7 @@ class RainfallAdjustmentService:
         window_end_ft: int,
         target_24h: float
     ) -> Optional[Tuple[str, float, Dict[str, float], Dict[int, float]]]:
-        if window_end_ft not in self.WINDOW_24H_MAP:
+        if not self._window_fts_for_end(window_end_ft):
             return None
 
         peak_mesh_code = None
@@ -909,7 +978,14 @@ class RainfallAdjustmentService:
         }
 
     def _available_window_fts(self, timeline_dict: Dict[int, float], window_end_ft: int) -> List[int]:
-        return [ft for ft in self.WINDOW_24H_MAP.get(window_end_ft, ()) if ft in timeline_dict]
+        window_fts = self._window_fts_for_end(window_end_ft)
+        return list(window_fts) if window_fts and all(ft in timeline_dict for ft in window_fts) else []
+
+    def _window_fts_for_end(self, window_end_ft: int) -> Tuple[int, ...]:
+        """Return the eight 3-hour forecast steps ending at the selected 24-hour FT."""
+        if window_end_ft < 24 or window_end_ft % 3 != 0:
+            return ()
+        return tuple(range(window_end_ft - 21, window_end_ft + 1, 3))
 
     def _sum_mesh_values_for_fts(self, mesh_dict: Dict[str, Any], fts: Tuple[int, ...]) -> float:
         timeline_dict = self._mesh_timeline_to_dict(mesh_dict)

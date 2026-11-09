@@ -14,6 +14,7 @@
 - `GET /session/<session_id>/prefecture/<prefecture_code>`
 - `GET /session/<session_id>/risk-at-time`
 - `GET /session/<session_id>/rainfall-data`
+- `POST /session/<session_id>/rainfall-preview`
 - `POST /session/<session_id>/recalculate`
 
 開発・検証用 API:

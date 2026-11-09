@@ -31,6 +31,11 @@ def create_production_session_blueprint(session_controller):
     def get_rainfall_data(session_id):
         return session_controller.get_rainfall_data(session_id)
 
+    # 雨量調整後のメッシュ分布プレビュー（SWI・危険度の再計算は行わない）
+    @session_bp.route('/session/<session_id>/rainfall-preview', methods=['POST'])
+    def preview_adjusted_rainfall(session_id):
+        return session_controller.preview_adjusted_rainfall(session_id)
+
     # 雨量調整後の再計算（セッションベース）
     @session_bp.route('/session/<session_id>/recalculate', methods=['POST'])
     def recalculate_with_adjusted_rainfall(session_id):

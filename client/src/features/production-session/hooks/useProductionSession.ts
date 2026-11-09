@@ -11,7 +11,6 @@ interface UseProductionSessionParams {
   swiInitialTime: string;
   guidanceInitialTime: string;
   guidanceType?: 'msm' | 'gsm';
-  riskRule?: 'legacy' | 'lead_time_to_level4';
   regionCode: RegionCode;
 }
 
@@ -19,7 +18,6 @@ export const useProductionSession = ({
   swiInitialTime,
   guidanceInitialTime,
   guidanceType = 'msm',
-  riskRule = 'lead_time_to_level4',
   regionCode,
 }: UseProductionSessionParams) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -164,7 +162,6 @@ export const useProductionSession = ({
         swi_initial: swiInitialTime,
         guidance_initial: guidanceInitialTime,
         guidance_type: guidanceType,
-        risk_rule: riskRule,
         region: regionCode,
       });
 

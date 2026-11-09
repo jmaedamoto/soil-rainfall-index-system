@@ -129,6 +129,68 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
       }
     };
 
+    // Map clicks are used instead of per-cell hit layers so normal-risk (white)
+    // meshes remain identifiable without creating tens of thousands of Leaflet layers.
+    const handleMapClick = (event: L.LeafletMouseEvent) => {
+      const {
+        meshes: currentMeshes,
+        meshCoords: currentMeshCoords,
+        meshIntervals: currentMeshIntervals
+      } = propsRef.current;
+
+      const candidates = currentMeshCoords
+        ? Object.entries(currentMeshCoords).map(([code, coords]) => ({
+            code,
+            lat: coords.lat,
+            lon: coords.lon,
+          }))
+        : (currentMeshes || []).map(mesh => ({
+            code: mesh.code,
+            lat: mesh.lat,
+            lon: mesh.lon,
+          }));
+
+      const latInterval = currentMeshIntervals.latInterval;
+      const lonInterval = currentMeshIntervals.lonInterval;
+      let nearest: { code: string; lat: number; lon: number; distance: number } | null = null;
+
+      for (const candidate of candidates) {
+        const latDistance = Math.abs(event.latlng.lat - candidate.lat) / latInterval;
+        const lonDistance = Math.abs(event.latlng.lng - candidate.lon) / lonInterval;
+        // Ignore clicks outside the bounds of any known mesh cell.
+        if (latDistance > 0.5 || lonDistance > 0.5) continue;
+
+        const distance = latDistance * latDistance + lonDistance * lonDistance;
+        if (nearest === null || distance < nearest.distance) {
+          nearest = { ...candidate, distance };
+        }
+      }
+
+      if (nearest === null) {
+        map.closePopup();
+        return;
+      }
+
+      const content = document.createElement('div');
+      const label = document.createElement('div');
+      label.textContent = '格子番号';
+      const code = document.createElement('strong');
+      code.textContent = nearest.code;
+      code.style.userSelect = 'text';
+      code.style.fontSize = '16px';
+      const coordinates = document.createElement('div');
+      coordinates.textContent = `緯度 ${nearest.lat.toFixed(6)} / 経度 ${nearest.lon.toFixed(6)}`;
+      coordinates.style.marginTop = '4px';
+      coordinates.style.color = '#666';
+      coordinates.style.fontSize = '12px';
+      content.append(label, code, coordinates);
+
+      L.popup({ autoPan: false })
+        .setLatLng(event.latlng)
+        .setContent(content)
+        .openOn(map);
+    };
+
     // 初回描画
     drawMeshes();
 
@@ -145,6 +207,7 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
 
     map.on('zoomend', handleViewChange);
     map.on('moveend', handleViewChange);
+    map.on('click', handleMapClick);
 
     return () => {
       if (layerGroupRef.current) {
@@ -155,6 +218,7 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
       drawFunctionRef.current = null;
       map.off('zoomend', handleViewChange);
       map.off('moveend', handleViewChange);
+      map.off('click', handleMapClick);
     };
   }, [map, onMeshClick]);
 

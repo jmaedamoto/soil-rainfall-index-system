@@ -323,7 +323,6 @@ class DataService:
                         self.global_mesh_static_info_lookup[mesh.code] = {
                             "mesh_code": mesh.code,
                             "advisary_bound": mesh.advisary_bound,
-                            "warning_bound": mesh.warning_bound,
                             "dosyakei_bound": mesh.dosyakei_bound,
                             "level4_curve": None if mesh.level4_curve is None else mesh.level4_curve.copy(),
                         }
@@ -336,8 +335,8 @@ class DataService:
             copied_payload["level4_curve"] = copied_payload["level4_curve"].copy()
         return copied_payload
 
-    def load_csv_data(self, prefecture_code: str) -> Tuple[Optional[pd.DataFrame], Optional[Dict[str, Dict[str, Any]]], Optional[pd.DataFrame]]:
-        """CSVデータ読み込み（dosha, 2_2, VBA SWI data）"""
+    def load_csv_data(self, prefecture_code: str) -> Tuple[Optional[pd.DataFrame], Optional[Dict[str, Dict[str, Any]]]]:
+        """CSVデータ読み込み（dosha, 2_2）"""
         dosha_file = os.path.join(self.data_dir, f"dosha_{prefecture_code}.csv")
         dosha_data = None
         if os.path.exists(dosha_file):
@@ -351,17 +350,7 @@ class DataService:
         if dosha_data is not None:
             self._validate_level4_join(prefecture_code, dosha_data, level4_curve_lookup)
 
-        # VBA SWI CSVファイル読み込み（VBA X,Y座標のため）
-        vba_swi_file = os.path.join(self.data_dir, f"{prefecture_code}_swi.csv")
-        vba_swi_data = None
-        if os.path.exists(vba_swi_file):
-            try:
-                vba_swi_data = pd.read_csv(vba_swi_file, encoding='shift_jis', skiprows=1)
-                logger.info(f"Loaded {vba_swi_file}: {len(vba_swi_data)} rows")
-            except Exception as e:
-                logger.error(f"Error loading {vba_swi_file}: {e}")
-
-        return dosha_data, level4_curve_lookup, vba_swi_data
+        return dosha_data, level4_curve_lookup
 
     def prepare_areas(self, prefecture_codes: Optional[List[str]] = None) -> List[Prefecture]:
         """地域データ構築（最適化版）"""
@@ -384,19 +373,16 @@ class DataService:
         csv_loading_start = time.time()
         all_dosha_data = {}
         all_level4_curve_lookup = {}
-        all_vba_swi_data = {}
 
         prefecture_definitions = self.get_prefecture_definitions(prefecture_codes)
 
         for pref in prefecture_definitions:
             pref_code = pref["code"]
-            dosha_data, level4_curve_lookup, vba_swi_data = self.load_csv_data(pref_code)
+            dosha_data, level4_curve_lookup = self.load_csv_data(pref_code)
             if dosha_data is not None:
                 all_dosha_data[pref_code] = dosha_data
             if level4_curve_lookup is not None:
                 all_level4_curve_lookup[pref_code] = level4_curve_lookup
-            if vba_swi_data is not None:
-                all_vba_swi_data[pref_code] = vba_swi_data
 
         csv_loading_time = time.time() - csv_loading_start
         logger.info(f"CSV読み込み時間: {csv_loading_time:.2f}秒")
@@ -414,15 +400,13 @@ class DataService:
 
             dosha_data = all_dosha_data[pref_code]
             level4_curve_lookup = all_level4_curve_lookup.get(pref_code)
-            vba_swi_data = all_vba_swi_data.get(pref_code)
 
             # pandas vectorized operations を使用
-            # 第1列: 二次細分名、第2列: 市町村名、第3列: メッシュコード
+            # 第1列: 市町村等をまとめた地域名、第2列: 市町村名、第3列: メッシュコード
             subdivision_names = dosha_data.iloc[:, 0].astype(str).str.strip().values
             area_names = dosha_data.iloc[:, 1].astype(str).str.strip().values
             mesh_codes = dosha_data.iloc[:, 2].astype(str).values
             advisary_bounds = dosha_data.iloc[:, 3].apply(self.parse_boundary_value).values
-            warning_bounds = dosha_data.iloc[:, 4].apply(self.parse_boundary_value).values
 
             # 座標計算をベクトル化（最適化: 一括処理）
             coords = self.meshcode_to_coordinate_vectorized(mesh_codes.tolist())
@@ -442,61 +426,20 @@ class DataService:
                 dosyakei_bounds = [999] * len(mesh_codes)
                 level4_curves = [None] * len(mesh_codes)
 
-            # VBA X,Y座標のルックアップテーブル作成（最適化: iterrows()→ベクトル演算）
-            vba_coordinates_lookup = {}
-            if vba_swi_data is not None:
-                try:
-                    # 列をベクトル化して処理
-                    area_names_vba = vba_swi_data.iloc[:, 0].astype(str).str.strip()
-                    vba_x_values = pd.to_numeric(vba_swi_data.iloc[:, 1], errors='coerce').fillna(0).astype(int)
-                    vba_y_values = pd.to_numeric(vba_swi_data.iloc[:, 2], errors='coerce').fillna(0).astype(int)
-
-                    # 境界値を処理
-                    def parse_vba_bound(val):
-                        if pd.isna(val) or str(val).strip() == '':
-                            return 9999
-                        try:
-                            return int(val)
-                        except:
-                            return 9999
-
-                    advisary_vba = vba_swi_data.iloc[:, 3].apply(parse_vba_bound)
-                    warning_vba = vba_swi_data.iloc[:, 4].apply(parse_vba_bound)
-                    dosyakei_vba = vba_swi_data.iloc[:, 5].apply(parse_vba_bound)
-
-                    # ディクショナリ構築
-                    for i in range(len(vba_swi_data)):
-                        key = f"{area_names_vba.iloc[i]}_{advisary_vba.iloc[i]}_{warning_vba.iloc[i]}_{dosyakei_vba.iloc[i]}"
-                        vba_coordinates_lookup[key] = {
-                            'vba_x': vba_x_values.iloc[i],
-                            'vba_y': vba_y_values.iloc[i]
-                        }
-                except Exception as e:
-                    logger.warning(f"VBA座標ルックアップテーブル作成エラー: {e}")
-
             # メッシュオブジェクト一括作成（最適化: zip使用で効率化）
             # OrderedDictを使用してCSV出現順を保持
             meshes = []
             area_dict = OrderedDict()
-            subdivision_dict = OrderedDict()  # 二次細分用
+            subdivision_dict = OrderedDict()  # 市町村等をまとめた地域用
 
             # zip()を使った効率的なイテレーション
-            for code, subdivision_name, area_name, coord, idx, adv, warn, dosa, level4_curve in zip(
+            for code, subdivision_name, area_name, coord, idx, adv, dosa, level4_curve in zip(
                 mesh_codes, subdivision_names, area_names, coords, indices,
-                advisary_bounds, warning_bounds, dosyakei_bounds, level4_curves
+                advisary_bounds, dosyakei_bounds, level4_curves
             ):
                 try:
                     lat, lon = coord
                     x, y = idx
-
-                    # VBA X,Y座標をルックアップ
-                    vba_x = None
-                    vba_y = None
-                    lookup_key = f"{area_name}_{int(adv)}_{int(warn)}_{dosa}"
-                    if lookup_key in vba_coordinates_lookup:
-                        vba_coords = vba_coordinates_lookup[lookup_key]
-                        vba_x = vba_coords['vba_x']
-                        vba_y = vba_coords['vba_y']
 
                     mesh = Mesh(
                         area_name=area_name,
@@ -506,7 +449,6 @@ class DataService:
                         x=x,
                         y=y,
                         advisary_bound=int(adv),
-                        warning_bound=int(warn),
                         dosyakei_bound=dosa,
                         swi=[],
                         swi_hourly=[],
@@ -516,8 +458,6 @@ class DataService:
                         risk_hourly=[],
                         risk_3hour_max=[],
                         level4_curve=level4_curve,
-                        vba_x=vba_x,
-                        vba_y=vba_y
                     )
 
                     meshes.append(mesh)
@@ -537,7 +477,7 @@ class DataService:
                     logger.warning(f"Error creating mesh: {e}")
                     continue
 
-            # 二次細分構造を構築（CSV出現順を保持）
+            # 市町村等をまとめた地域構造を構築（CSV出現順を保持）
             for area in area_dict.values():
                 subdiv_name = area.secondary_subdivision_name
                 if subdiv_name not in subdivision_dict:

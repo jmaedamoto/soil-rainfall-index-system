@@ -8,12 +8,13 @@ import {
   buildIsoStringFromJst,
   getDefaultJstSelection,
   getGuidanceHourOptions,
+  getLatestAvailableJstSelection,
   MSM_HOUR_OPTIONS,
 } from '../features/production-session/utils/dateTime';
 import {
   useProductionSession,
 } from '../features/production-session/hooks/useProductionSession';
-import type { RiskRule, RiskTimelineViewMode } from '../types/api';
+import type { RiskTimelineViewMode } from '../types/api';
 import { REGION_CONFIGS, type RegionCode } from '../features/production-session/regions';
 
 interface ProductionSessionProps {
@@ -30,7 +31,6 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
   const [swiInitialTime, setSwiInitialTime] = useState<string>('');
   const [guidanceInitialTime, setGuidanceInitialTime] = useState<string>('');
   const [guidanceType, setGuidanceType] = useState<'msm' | 'gsm'>('msm');
-  const [riskRule, setRiskRule] = useState<RiskRule>('lead_time_to_level4');
   const [riskTimelineViewMode, setRiskTimelineViewMode] = useState<RiskTimelineViewMode>('municipality');
 
   const {
@@ -59,7 +59,6 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
     swiInitialTime,
     guidanceInitialTime,
     guidanceType,
-    riskRule,
     regionCode,
   });
 
@@ -82,17 +81,16 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
     setGuidanceHour(defaultSelection.hour);
   }, []);
 
-  useEffect(() => {
-    const guidanceOptions = getGuidanceHourOptions(guidanceType);
-
-    if (!guidanceOptions.includes(guidanceHour)) {
-      const defaultSelection = getDefaultJstSelection(guidanceType);
-      setGuidanceHour(defaultSelection.hour);
-      if (!guidanceDate) {
-        setGuidanceDate(defaultSelection.date);
-      }
-    }
-  }, [guidanceDate, guidanceHour, guidanceType]);
+  const handleGuidanceTypeChange = (nextType: 'msm' | 'gsm') => {
+    const correctedSelection = getLatestAvailableJstSelection(
+      guidanceDate,
+      guidanceHour,
+      nextType,
+    );
+    setGuidanceType(nextType);
+    setGuidanceDate(correctedSelection.date);
+    setGuidanceHour(correctedSelection.hour);
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (!sessionInfo) return;
@@ -193,37 +191,6 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
 
         <div style={{ marginBottom: '20px' }}>
           <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-            危険度ルール
-          </label>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input
-                type="radio"
-                name="riskRule"
-                value="legacy"
-                checked={riskRule === 'legacy'}
-                onChange={() => setRiskRule('legacy')}
-              />
-              旧基準
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input
-                type="radio"
-                name="riskRule"
-                value="lead_time_to_level4"
-                checked={riskRule === 'lead_time_to_level4'}
-                onChange={() => setRiskRule('lead_time_to_level4')}
-              />
-              現行基準
-            </label>
-          </div>
-          <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
-            レベル4に最初に到達する2時間前以降をレベル3、6時間前以降をレベル2として扱います。
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
             ガイダンス種別
           </label>
           <div style={{ display: 'flex', gap: '12px' }}>
@@ -233,7 +200,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
                 name="guidanceType"
                 value="msm"
                 checked={guidanceType === 'msm'}
-                onChange={() => setGuidanceType('msm')}
+                onChange={() => handleGuidanceTypeChange('msm')}
               />
               MSM
             </label>
@@ -243,7 +210,7 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
                 name="guidanceType"
                 value="gsm"
                 checked={guidanceType === 'gsm'}
-                onChange={() => setGuidanceType('gsm')}
+                onChange={() => handleGuidanceTypeChange('gsm')}
               />
               GSM
             </label>
@@ -451,7 +418,6 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
           swiInitial={swiInitialTime}
           guidanceInitial={guidanceInitialTime}
           guidanceType={sessionInfo.guidance_type ?? guidanceType}
-          riskRule={sessionInfo.risk_rule ?? riskRule}
           prefectureDetails={sessionInfo.available_prefecture_details}
           dataSource="production"
           onSessionRecalculated={async (newSessionId, _meshRisks, _newMeshCoords, metadata) => {
@@ -463,7 +429,6 @@ const ProductionSession: React.FC<ProductionSessionProps> = ({ regionCode }) => 
               ...prev,
               session_id: newSessionId,
               guidance_type: metadata?.guidanceType ?? prev.guidance_type,
-              risk_rule: metadata?.riskRule ?? prev.risk_rule,
             }) : prev);
             // 府県リスクデータキャッシュをクリア（ベースセッションのデータが古いため）
             setPrefectureRiskData({});

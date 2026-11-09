@@ -11,8 +11,6 @@ export interface RiskTimePoint {
   rainfall_to_level4_1h_mm?: number | null; // 直後1時間でレベル4到達に必要な追加雨量
 }
 
-export type RiskRule = 'legacy' | 'lead_time_to_level4';
-
 export interface Mesh {
   code: string;  // メッシュコード
   lat: number;   // 緯度
@@ -28,7 +26,7 @@ export interface Mesh {
 
 export interface Area {
   name: string;  // 地域名（市町村名）
-  secondary_subdivision_name?: string;  // 所属する二次細分名
+  secondary_subdivision_name?: string;  // 所属する市町村等をまとめた地域名
   meshes: Mesh[];  // メッシュデータ
   risk_timeline: RiskTimePoint[];  // リスク時系列
   swi_timeline?: TimeSeriesPoint[];  // 領域内のSWI最大値
@@ -36,19 +34,19 @@ export interface Area {
 }
 
 export interface SecondarySubdivision {
-  name: string;  // 二次細分名（例：「阪神」「播磨北西部」）
+  name: string;  // 市町村等をまとめた地域名（例：「阪神」「播磨北西部」）
   area_names: string[];  // 所属市町村名リスト
-  rain_1hour_max_timeline: TimeSeriesPoint[];  // 二次細分内の最大1時間雨量
-  rain_3hour_timeline: TimeSeriesPoint[];  // 二次細分内の最大3時間雨量
-  risk_timeline: RiskTimePoint[];  // 二次細分内の最大リスク
-  swi_timeline?: TimeSeriesPoint[];  // 二次細分内のSWI最大値
+  rain_1hour_max_timeline: TimeSeriesPoint[];  // 市町村等をまとめた地域内の最大1時間雨量
+  rain_3hour_timeline: TimeSeriesPoint[];  // 市町村等をまとめた地域内の最大3時間雨量
+  risk_timeline: RiskTimePoint[];  // 市町村等をまとめた地域内の最大リスク
+  swi_timeline?: TimeSeriesPoint[];  // 市町村等をまとめた地域内のSWI最大値
 }
 
 export interface Prefecture {
   name: string;  // 都道府県名
   code: string;  // 都道府県コード
   areas: Area[];  // 地域データ（市町村）
-  secondary_subdivisions?: SecondarySubdivision[];  // 二次細分リスト
+  secondary_subdivisions?: SecondarySubdivision[];  // 市町村等をまとめた地域リスト
   prefecture_rain_1hour_max_timeline?: TimeSeriesPoint[];  // 府県全体の最大1時間雨量
   prefecture_rain_3hour_timeline?: TimeSeriesPoint[];  // 府県全体の最大3時間雨量
   prefecture_risk_timeline?: RiskTimePoint[];  // 府県全体の最大リスク
@@ -100,7 +98,6 @@ export interface SessionInfo {
   swi_initial_time: string;         // SWI初期時刻
   guidance_initial_time: string;    // ガイダンス初期時刻
   guidance_type?: 'msm' | 'gsm';
-  risk_rule?: RiskRule;
   prefecture_count: number;
   prefecture_codes: string[];
 }
@@ -111,7 +108,6 @@ export interface LightweightCalculationResult {
   swi_initial_time: string;         // SWI初期時刻（ISO8601）
   guidance_initial_time: string;    // ガイダンス初期時刻（ISO8601）
   guidance_type?: 'msm' | 'gsm';
-  risk_rule?: RiskRule;
   available_prefectures: string[];  // 利用可能な府県コード
   available_times: number[];        // 利用可能なFT値
   used_urls?: {                     // 使用したGRIB2 URL
@@ -120,7 +116,6 @@ export interface LightweightCalculationResult {
     guidance_url: string;
     guidance_initial_time: string;
     guidance_type?: 'msm' | 'gsm';
-    risk_rule?: RiskRule;
   };
 }
 

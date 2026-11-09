@@ -42,7 +42,7 @@ class GuidanceTimeSeries:
 class Risk:
     """リスクレベル情報"""
     ft: int  # 予測時間（時間）
-    value: int  # リスクレベル（0-3）
+    value: int  # リスクレベル（0, 2, 3, 4）
     rainfall_to_level4_1h_mm: Optional[int] = None  # 直後1時間でレベル4到達に必要な追加雨量
 
 
@@ -56,7 +56,6 @@ class Mesh:
     x: int  # グリッドX座標
     y: int  # グリッドY座標
     advisary_bound: int  # 注意報基準値
-    warning_bound: int   # 警報基準値
     dosyakei_bound: int  # 土砂災害基準値
     swi: List[SwiTimeSeries]  # 3時間ごとのSWI
     swi_hourly: List[SwiTimeSeries]  # 1時間ごとのSWI
@@ -75,7 +74,7 @@ class Area:
     """地域データ（市町村）"""
     name: str
     meshes: List[Mesh]
-    secondary_subdivision_name: str = ""  # 所属する二次細分名
+    secondary_subdivision_name: str = ""  # 所属する市町村等をまとめた地域名
     risk_timeline: List[Risk] = None  # エリア別リスクタイムライン
 
     def __post_init__(self):
@@ -85,12 +84,12 @@ class Area:
 
 @dataclass
 class SecondarySubdivision:
-    """二次細分（市町村をまとめた地域）"""
-    name: str  # 二次細分名（例：「阪神」「播磨北西部」）
+    """市町村等をまとめた地域"""
+    name: str  # 市町村等をまとめた地域名（例：「阪神」「播磨北西部」）
     areas: List[Area] = None  # 所属市町村リスト
-    rain_1hour_max_timeline: List[GuidanceTimeSeries] = None  # 二次細分内の最大1時間雨量
-    rain_3hour_timeline: List[GuidanceTimeSeries] = None  # 二次細分内の最大3時間雨量
-    risk_timeline: List[Risk] = None  # 二次細分内の最大リスク
+    rain_1hour_max_timeline: List[GuidanceTimeSeries] = None  # 市町村等をまとめた地域内の最大1時間雨量
+    rain_3hour_timeline: List[GuidanceTimeSeries] = None  # 市町村等をまとめた地域内の最大3時間雨量
+    risk_timeline: List[Risk] = None  # 市町村等をまとめた地域内の最大リスク
 
     def __post_init__(self):
         if self.areas is None:
@@ -111,7 +110,7 @@ class Prefecture:
     areas: List[Area]
     area_min_x: int
     area_max_y: int
-    secondary_subdivisions: List[SecondarySubdivision] = None  # 二次細分リスト
+    secondary_subdivisions: List[SecondarySubdivision] = None  # 市町村等をまとめた地域リスト
     prefecture_rain_1hour_max_timeline: List[GuidanceTimeSeries] = None  # 府県全体の最大1時間雨量
     prefecture_rain_3hour_timeline: List[GuidanceTimeSeries] = None  # 府県全体の最大3時間雨量
     prefecture_risk_timeline: List[Risk] = None  # 府県全体の最大リスク

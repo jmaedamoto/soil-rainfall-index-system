@@ -1,5 +1,14 @@
 # 土壌雨量指数計算システム
 
+## 保存の指示
+
+ユーザーが「保存してください」と指示した場合は、関連Markdownを実装・検証・残課題に
+合わせて更新し、対象変更をコミットしてGitHubの対応ブランチへpushする。
+単なるファイル書き込みで終了しない。既存の未コミット差分を確認し、別件の変更は混ぜない。
+ブランチ昇格・実機デプロイは「保存」に含めず、指定された場合に実施する。
+保存後はブランチ、コミット、push結果、未実施の確認事項を短く報告する。
+
+
 Excel VBAで運用されていた土壌雨量指数計算を、Python/Flask API と React/TypeScript クライアントへ移植したシステムです。
 
 ## 現在の構成
@@ -39,6 +48,7 @@ Excel VBAで運用されていた土壌雨量指数計算を、Python/Flask API 
 - `GET /session/<session_id>/prefecture/<prefecture_code>`
 - `GET /session/<session_id>/risk-at-time`
 - `GET /session/<session_id>/rainfall-data`
+- `POST /session/<session_id>/rainfall-preview`
 - `POST /session/<session_id>/recalculate`
 
 詳しい昇格ルールは `docs/staging-promotion-rules.md` を参照してください。
@@ -65,6 +75,14 @@ Excel VBAで運用されていた土壌雨量指数計算を、Python/Flask API 
 セッションは通常メモリに保持します。ベースセッションは `cache_key` 参照を `cache/session_refs` に保存するため、プロセス内メモリにないセッションもキャッシュから復元できます。雨量調整後はフォークセッションとして差分を保持します。
 
 ## 雨量調整
+
+一次細分区域と市町村等をまとめた地域の全国対応表は
+`server/config/forecast_area_hierarchy.json`、説明と更新手順は
+`server/config/FORECAST_AREA_HIERARCHY.md` にあります。雨量調整の「一次細分ごと」はこの設定を
+利用します。「一次細分ごと」「府県ごと」はセッション内の全府県を同時表示し、
+府県選択を使いません。3時間・24時間入力に対応し、補正基準は選択した地域全体で算出します。
+詳細は `RAINFALL_ADJUSTMENT_FEATURE.md` を参照してください。
+
 
 本番クライアントはセッションベースの雨量調整を使います。
 

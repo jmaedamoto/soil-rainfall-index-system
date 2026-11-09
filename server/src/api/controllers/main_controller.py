@@ -16,6 +16,7 @@ sys.path.append(project_root)
 
 from services.main_service import MainService
 from services.cache_service import get_cache_service
+from services.performance_timing import record_stage, session_reference
 from config.config_service import ConfigService
 from models import REGION_PREFECTURES
 
@@ -172,19 +173,18 @@ class MainController:
         swi_initial,
         guidance_initial,
         guidance_type: str,
-        risk_rule: str,
         region: str,
         swi_url: str,
         guidance_url: str,
     ):
         """軽量セッションレスポンスを組み立てる"""
-        return jsonify({
+        response_started_at = time.perf_counter()
+        response = jsonify({
             "status": "success",
             "session_id": session_id,
             "swi_initial_time": swi_initial.isoformat() + 'Z',
             "guidance_initial_time": guidance_initial.isoformat() + 'Z',
             "guidance_type": guidance_type,
-            "risk_rule": risk_rule,
             "region": region,
             "available_prefectures": list(prefectures.keys()),
             "available_prefecture_details": self._build_available_prefecture_details(
@@ -197,10 +197,15 @@ class MainController:
                 "guidance_url": guidance_url,
                 "guidance_initial_time": guidance_initial.isoformat() + 'Z',
                 "guidance_type": guidance_type,
-                "risk_rule": risk_rule,
                 "region": region,
             }
         })
+        record_stage(
+            "initial_session_response_assembly",
+            (time.perf_counter() - response_started_at) * 1000,
+            prefecture_count=len(prefectures),
+        )
+        return response
 
     def _build_cached_response(
         self,
@@ -208,7 +213,6 @@ class MainController:
         swi_initial,
         guidance_initial,
         guidance_type: str,
-        risk_rule: str,
         region: str,
         cache_key: str,
         swi_url: str,
@@ -223,14 +227,21 @@ class MainController:
         )
 
         if self.session_service:
+            session_started_at = time.perf_counter()
             session_id = self.session_service.create_session(
                 cached_result['prefectures'],
                 swi_initial.isoformat(),
                 guidance_initial.isoformat(),
                 datetime.now().isoformat(),
                 guidance_type,
-                risk_rule,
                 cache_key,
+            )
+            record_stage(
+                "base_session_creation",
+                (time.perf_counter() - session_started_at) * 1000,
+                prefecture_count=len(cached_result.get("prefectures", {})),
+                cache_hit=True,
+                session_ref=session_reference(session_id),
             )
             return self._build_lightweight_session_response(
                 session_id,
@@ -238,7 +249,6 @@ class MainController:
                 swi_initial,
                 guidance_initial,
                 guidance_type,
-                risk_rule,
                 region,
                 swi_url,
                 guidance_url,
@@ -246,14 +256,12 @@ class MainController:
 
         cached_result["status"] = "success"
         cached_result["guidance_type"] = guidance_type
-        cached_result["risk_rule"] = risk_rule
         cached_result["used_urls"] = {
             "swi_url": swi_url,
             "swi_initial_time": swi_initial.isoformat() + 'Z',
             "guidance_url": guidance_url,
             "guidance_initial_time": guidance_initial.isoformat() + 'Z',
             "guidance_type": guidance_type,
-            "risk_rule": risk_rule,
             "region": region,
         }
         return jsonify(cached_result)
@@ -264,7 +272,6 @@ class MainController:
         swi_initial,
         guidance_initial,
         guidance_type: str,
-        risk_rule: str,
         region: str,
         cache_key: str,
         swi_url: str,
@@ -282,7 +289,6 @@ class MainController:
                 "swi_initial_time": swi_initial.isoformat() + 'Z',
                 "guidance_initial_time": guidance_initial.isoformat() + 'Z',
                 "guidance_type": guidance_type,
-                "risk_rule": risk_rule,
                 "region": region,
                 "available_prefectures": summary.get("available_prefectures", []),
                 "available_prefecture_details": summary.get("available_prefecture_details", []),
@@ -293,7 +299,6 @@ class MainController:
                     "guidance_url": guidance_url,
                     "guidance_initial_time": guidance_initial.isoformat() + 'Z',
                     "guidance_type": guidance_type,
-                    "risk_rule": risk_rule,
                     "region": region,
                     "cache_key": cache_key,
                     "cache_response": "summary",
@@ -307,7 +312,6 @@ class MainController:
                 swi_initial,
                 guidance_initial,
                 guidance_type,
-                risk_rule,
                 region,
                 cache_key,
                 swi_url,
@@ -504,6 +508,7 @@ class MainController:
         """
         try:
             request_started_at = time.perf_counter()
+            request_parse_started_at = request_started_at
             trace_context = self._build_request_trace_context()
             trace_prefix = self._trace_prefix(trace_context)
             logger.info(f"{trace_prefix} 本番処理リクエスト受信")
@@ -538,12 +543,9 @@ class MainController:
                 guidance_type = self.config_service.normalize_guidance_type(
                     data.get('guidance_type', 'msm')
                 )
-                risk_rule = self.main_service.calculation_service.normalize_risk_rule(
-                    data.get('risk_rule', 'legacy')
-                )
                 region = self._normalize_region(data.get('region', 'kinki'))
             except ValueError as e:
-                logger.warning(f"{trace_prefix} guidance_type/risk_rule 検証エラー: {e}")
+                logger.warning(f"{trace_prefix} guidance_type/region 検証エラー: {e}")
                 return jsonify({
                     "status": "error",
                     "message": str(e)
@@ -582,13 +584,19 @@ class MainController:
                     "message": str(e)
                 }), 400
 
+            record_stage(
+                "initial_request_parse_and_validation",
+                (time.perf_counter() - request_parse_started_at) * 1000,
+            )
+
             logger.info(
                 f"{trace_prefix} 本番処理開始: SWI初期時刻={swi_initial}, "
                 f"ガイダンス初期時刻={guidance_initial}, guidance_type={guidance_type}, "
-                f"risk_rule={risk_rule}, region={region}"
+                f"region={region}"
             )
 
             # 設定ファイルからURL構築
+            request_setup_started_at = time.perf_counter()
             swi_url = self.config_service.build_swi_url(swi_initial)
             guidance_url = self.config_service.build_guidance_url(guidance_initial, guidance_type)
 
@@ -597,18 +605,26 @@ class MainController:
                 swi_initial.isoformat(),
                 guidance_initial.isoformat(),
                 guidance_type,
-                risk_rule,
                 region,
             )
             logger.info(f"{trace_prefix} キャッシュキー算出: {cache_key}")
+            record_stage(
+                "initial_url_and_cache_key_preparation",
+                (time.perf_counter() - request_setup_started_at) * 1000,
+            )
 
             # 先に軽量キャッシュサマリーを確認し、ヒット時はGRIB2取得前に即返却する
+            cache_lookup_started_at = time.perf_counter()
             cached_summary = self.cache_service.get_cached_summary(
                 cache_key,
                 swi_initial.isoformat(),
                 guidance_initial.isoformat(),
                 guidance_type,
-                risk_rule,
+            )
+            record_stage(
+                "initial_result_cache_lookup",
+                (time.perf_counter() - cache_lookup_started_at) * 1000,
+                cache_hit=bool(cached_summary),
             )
             if cached_summary:
                 self.cache_service.cleanup_completed_calculation_lock(cache_key)
@@ -622,14 +638,20 @@ class MainController:
                     swi_initial,
                     guidance_initial,
                     guidance_type,
-                    risk_rule,
                     region,
                     cache_key,
                     swi_url,
                     guidance_url,
                 )
 
-            if self.cache_service.exists(cache_key):
+            cache_state_started_at = time.perf_counter()
+            cache_exists = self.cache_service.exists(cache_key)
+            if cache_exists:
+                record_stage(
+                    "initial_cache_state_inspection",
+                    (time.perf_counter() - cache_state_started_at) * 1000,
+                    cache_exists=True,
+                )
                 return self._calculation_pending_response(
                     "キャッシュサマリーを作成中です。自動的に再確認します。"
                 )
@@ -648,6 +670,15 @@ class MainController:
 
             cache_write_in_progress = self.cache_service.is_cache_write_in_progress(cache_key)
             cache_materializing = self.cache_service.is_cache_materializing(cache_key)
+            record_stage(
+                "initial_cache_state_inspection",
+                (time.perf_counter() - cache_state_started_at) * 1000,
+                cache_exists=False,
+                cache_write_in_progress=cache_write_in_progress,
+                cache_materializing=cache_materializing,
+                calculation_in_progress=calculation_in_progress,
+                stale_tmp_deleted=stale_tmp_deleted,
+            )
             if cache_write_in_progress or cache_materializing or calculation_in_progress:
                 wait_started_at = time.perf_counter()
                 logger.info(
@@ -659,13 +690,21 @@ class MainController:
                     cache_materializing,
                 )
 
-                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=2.0):
+                cache_ready = self.cache_service.wait_for_cache_materialization(
+                    cache_key,
+                    timeout_seconds=2.0,
+                )
+                record_stage(
+                    "initial_cache_materialization_wait",
+                    (time.perf_counter() - wait_started_at) * 1000,
+                    cache_ready=cache_ready,
+                )
+                if cache_ready:
                     cached_summary = self.cache_service.get_cached_summary(
                         cache_key,
                         swi_initial.isoformat(),
                         guidance_initial.isoformat(),
                         guidance_type,
-                        risk_rule,
                     )
                     if cached_summary:
                         self.cache_service.cleanup_completed_calculation_lock(cache_key)
@@ -680,7 +719,6 @@ class MainController:
                             swi_initial,
                             guidance_initial,
                             guidance_type,
-                            risk_rule,
                             region,
                             cache_key,
                             swi_url,
@@ -701,19 +739,33 @@ class MainController:
             # ========================================
 
             # 計算ロック取得を試みる
+            lock_started_at = time.perf_counter()
             lock_acquired = self.cache_service.acquire_calculation_lock(cache_key)
+            record_stage(
+                "initial_calculation_lock_acquisition",
+                (time.perf_counter() - lock_started_at) * 1000,
+                lock_acquired=lock_acquired,
+            )
             if not lock_acquired:
                 wait_started_at = time.perf_counter()
                 logger.info(
                     f"{trace_prefix} 別リクエストが計算を開始したため待機に切り替え: {cache_key}"
                 )
-                if self.cache_service.wait_for_cache_materialization(cache_key, timeout_seconds=2.0):
+                cache_ready = self.cache_service.wait_for_cache_materialization(
+                    cache_key,
+                    timeout_seconds=2.0,
+                )
+                record_stage(
+                    "initial_calculation_lock_wait",
+                    (time.perf_counter() - wait_started_at) * 1000,
+                    cache_ready=cache_ready,
+                )
+                if cache_ready:
                     cached_summary = self.cache_service.get_cached_summary(
                         cache_key,
                         swi_initial.isoformat(),
                         guidance_initial.isoformat(),
                         guidance_type,
-                        risk_rule,
                     )
                     if cached_summary:
                         self.cache_service.cleanup_completed_calculation_lock(cache_key)
@@ -728,7 +780,6 @@ class MainController:
                             swi_initial,
                             guidance_initial,
                             guidance_type,
-                            risk_rule,
                             region,
                             cache_key,
                             swi_url,
@@ -744,7 +795,13 @@ class MainController:
                     "同一条件の計算が進行中です。自動的に再確認します。"
                 )
 
+            slot_started_at = time.perf_counter()
             calculation_slot_acquired = self.cache_service.acquire_calculation_slot(cache_key)
+            record_stage(
+                "initial_calculation_slot_acquisition",
+                (time.perf_counter() - slot_started_at) * 1000,
+                slot_acquired=calculation_slot_acquired,
+            )
             if not calculation_slot_acquired:
                 lock_released = self.cache_service.release_calculation_lock(cache_key)
                 lock_acquired = not lock_released
@@ -767,12 +824,17 @@ class MainController:
                     swi_url,
                     guidance_url,
                     guidance_type=guidance_type,
-                    risk_rule=risk_rule,
                     use_cache=False,
                     async_cache_save=False,
                     prefecture_codes=REGION_PREFECTURES[region],
                 )
                 calculation_elapsed = time.perf_counter() - calculation_started_at
+                record_stage(
+                    "initial_main_service_total",
+                    calculation_elapsed * 1000,
+                    region=region,
+                    guidance_type=guidance_type,
+                )
                 logger.info(
                     f"{trace_prefix} 計算処理完了: {cache_key} "
                     f"(calculation_elapsed={calculation_elapsed:.2f}s)"
@@ -785,9 +847,14 @@ class MainController:
                     swi_initial.isoformat(),
                     guidance_initial.isoformat(),
                     guidance_type,
-                    risk_rule,
                 )
                 cache_save_elapsed = time.perf_counter() - cache_save_started_at
+                record_stage(
+                    "initial_result_cache_save",
+                    cache_save_elapsed * 1000,
+                    cache_saved=bool(cache_saved),
+                    prefecture_count=len(result.get("prefectures", {})),
+                )
                 if not cache_saved:
                     lock_released = self.cache_service.release_calculation_lock(cache_key)
                     slot_released = self.cache_service.release_calculation_slot()
@@ -825,14 +892,21 @@ class MainController:
                 # セッションサービスが有効な場合、セッション作成して軽量レスポンスを返す
                 if self.session_service:
                     # ベースセッション作成
+                    session_started_at = time.perf_counter()
                     session_id = self.session_service.create_session(
                         result['prefectures'],
                         swi_initial.isoformat(),
                         guidance_initial.isoformat(),
                         datetime.now().isoformat(),
                         guidance_type,
-                        risk_rule,
                         cache_key,
+                    )
+                    record_stage(
+                        "base_session_creation",
+                        (time.perf_counter() - session_started_at) * 1000,
+                        prefecture_count=len(result.get("prefectures", {})),
+                        cache_hit=False,
+                        session_ref=session_reference(session_id),
                     )
                     total_elapsed = time.perf_counter() - request_started_at
                     logger.info(
@@ -846,7 +920,6 @@ class MainController:
                         swi_initial,
                         guidance_initial,
                         guidance_type,
-                        risk_rule,
                         region,
                         swi_url,
                         guidance_url,
@@ -874,7 +947,6 @@ class MainController:
                     "region": region,
                 }
                 result["guidance_type"] = guidance_type
-                result["risk_rule"] = risk_rule
                 result["region"] = region
                 total_elapsed = time.perf_counter() - request_started_at
                 logger.info(
@@ -951,7 +1023,6 @@ class MainController:
                     guidance_initial_time,
                     datetime.now().isoformat(),
                     'msm',
-                    'legacy'
                 )
 
                 # 利用可能な時刻を抽出
@@ -973,7 +1044,6 @@ class MainController:
                     "swi_initial_time": swi_initial_time + 'Z' if not swi_initial_time.endswith('Z') else swi_initial_time,
                     "guidance_initial_time": guidance_initial_time + 'Z' if not guidance_initial_time.endswith('Z') else guidance_initial_time,
                     "guidance_type": "msm",
-                    "risk_rule": "legacy",
                     "available_prefectures": available_prefs,
                     "available_prefecture_details": self._build_available_prefecture_details(
                         result['prefectures']
@@ -985,7 +1055,6 @@ class MainController:
                         "guidance_url": f"file://{guidance_file}",
                         "guidance_initial_time": guidance_initial_time,
                         "guidance_type": "msm",
-                        "risk_rule": "legacy"
                     }
                 })
 
