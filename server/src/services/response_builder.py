@@ -169,6 +169,7 @@ class ResponseBuilder:
             "rain_timeline": ResponseBuilder._build_guidance_timeline(mesh.rain_3hour),
             "risk_hourly_timeline": ResponseBuilder._build_risk_timeline(mesh.risk_hourly),
             "risk_3hour_max_timeline": ResponseBuilder._build_risk_timeline(mesh.risk_3hour_max),
+            "_advisary_bound": int(mesh.advisary_bound),
             "_dosyakei_bound": int(mesh.dosyakei_bound),
             "_level4_curve": (
                 [int(value) for value in mesh.level4_curve]

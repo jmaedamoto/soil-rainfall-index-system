@@ -4,6 +4,7 @@ import type {
   PrefectureDataResponse,
   RiskAtTimeResponse,
   MeshDetailResponse,
+  SnakeLineResponse,
   RainfallDataResponse,
   AdjustedRainfallPreviewResponse,
   RecalculateRequest,
@@ -63,6 +64,14 @@ class SessionAPIClient {
   async getMeshDetail(sessionId: string, meshCode: string): Promise<MeshDetailResponse> {
     const response = await axios.get<MeshDetailResponse>(
       `${this.apiBaseUrl}/session/${sessionId}/mesh/${meshCode}`
+    );
+    return response.data;
+  }
+
+  /** クリックした格子のスネークラインデータを取得 */
+  async getMeshSnakeLine(sessionId: string, meshCode: string): Promise<SnakeLineResponse> {
+    const response = await axios.get<SnakeLineResponse>(
+      `${this.apiBaseUrl}/session/${sessionId}/mesh/${meshCode}/snake-line`
     );
     return response.data;
   }

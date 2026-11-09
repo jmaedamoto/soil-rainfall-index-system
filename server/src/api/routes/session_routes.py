@@ -26,6 +26,11 @@ def create_production_session_blueprint(session_controller):
     def get_risk_at_time(session_id):
         return session_controller.get_risk_at_time(session_id)
 
+    # クリックした格子のスネークライン用時系列と基準値を取得
+    @session_bp.route('/session/<session_id>/mesh/<mesh_code>/snake-line', methods=['GET'])
+    def get_mesh_snake_line(session_id, mesh_code):
+        return session_controller.get_mesh_snake_line(session_id, mesh_code)
+
     # 雨量調整用の雨量データ取得
     @session_bp.route('/session/<session_id>/rainfall-data', methods=['GET'])
     def get_rainfall_data(session_id):

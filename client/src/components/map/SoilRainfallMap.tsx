@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import { LatLngBounds } from 'leaflet';
 import { Mesh, RISK_COLORS, RiskLevel, TimeSeriesPoint } from '../../types/api';
 import MapLegend from './MapLegend';
 import SimpleCanvasLayer from './SimpleCanvasLayer';
+import SnakeLineChart from '../charts/SnakeLineChart';
+import { sessionApiClient } from '../../services/sessionApi';
+import type { SnakeLineResponse } from '../../types/session';
 import './LeafletIcons'; // アイコン修正をインポート
 import 'leaflet/dist/leaflet.css';
 
@@ -17,6 +20,7 @@ interface SoilRainfallMapProps {
   selectedPrefecture?: string; // 選択された都道府県
   prefectureData?: { [prefCode: string]: { areas: { meshes: Mesh[] }[] } }; // 都道府県データ
   onMeshClick?: (mesh: Mesh) => void;
+  sessionId?: string;
   isLoading?: boolean; // ローディング状態
   swiInitialTime?: string; // SWI初期時刻（ISO8601形式）
   guidanceInitialTime?: string; // ガイダンス初期時刻（ISO8601形式）
@@ -30,6 +34,7 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
   selectedPrefecture,
   prefectureData,
   onMeshClick,
+  sessionId,
   isLoading = false,
   swiInitialTime,
   guidanceInitialTime
@@ -40,6 +45,45 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
   const [showRelief, setShowRelief] = useState(false);
   const [showSlope, setShowSlope] = useState(false);
   const [showFlood, setShowFlood] = useState(false);
+  const [selectedMesh, setSelectedMesh] = useState<{ code: string; lat: number; lon: number } | null>(null);
+  const [snakeLine, setSnakeLine] = useState<SnakeLineResponse | null>(null);
+  const [snakeLineLoading, setSnakeLineLoading] = useState(false);
+  const [snakeLineError, setSnakeLineError] = useState<string | null>(null);
+  const snakeLineRequestId = useRef(0);
+
+  const handleMeshSelect = useCallback(async (mesh: { code: string; lat: number; lon: number }) => {
+    if (!sessionId) return;
+
+    const requestId = snakeLineRequestId.current + 1;
+    snakeLineRequestId.current = requestId;
+    setSelectedMesh(mesh);
+    setSnakeLine(null);
+    setSnakeLineError(null);
+    setSnakeLineLoading(true);
+
+    try {
+      const response = await sessionApiClient.getMeshSnakeLine(sessionId, mesh.code);
+      if (requestId === snakeLineRequestId.current) {
+        setSnakeLine(response);
+      }
+    } catch (error) {
+      if (requestId === snakeLineRequestId.current) {
+        setSnakeLineError(error instanceof Error ? error.message : 'スネークラインを取得できませんでした');
+      }
+    } finally {
+      if (requestId === snakeLineRequestId.current) {
+        setSnakeLineLoading(false);
+      }
+    }
+  }, [sessionId]);
+
+  const closeSnakeLine = () => {
+    snakeLineRequestId.current += 1;
+    setSelectedMesh(null);
+    setSnakeLine(null);
+    setSnakeLineError(null);
+    setSnakeLineLoading(false);
+  };
 
   // メッシュから都道府県のマッピングを作成（prefectureDataを使用）
   const meshToPrefecture = useMemo(() => {
@@ -302,6 +346,7 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
           selectedTime={selectedTime}
           meshIntervals={meshIntervals}
           onMeshClick={onMeshClick}
+          onMeshSelect={sessionId ? handleMeshSelect : undefined}
         />
 
         {/* 土地条件図レイヤー */}
@@ -355,6 +400,47 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
         )}
 
       </MapContainer>
+
+      {selectedMesh && (
+        <section
+          aria-label="格子スネークライン"
+          style={{
+            position: 'absolute',
+            top: '54px',
+            right: '62px',
+            zIndex: 1200,
+            width: 'min(620px, calc(100% - 78px))',
+            padding: '14px 16px 10px',
+            borderRadius: '8px',
+            backgroundColor: 'rgba(255, 255, 255, 0.98)',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.28)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+            <div>
+              <strong style={{ fontSize: '15px' }}>格子番号 {selectedMesh.code}</strong>
+              <div style={{ marginTop: '3px', color: '#555', fontSize: '12px' }}>
+                緯度 {selectedMesh.lat.toFixed(6)} / 経度 {selectedMesh.lon.toFixed(6)}
+              </div>
+            </div>
+            <button
+              type="button"
+              aria-label="スネークラインを閉じる"
+              onClick={closeSnakeLine}
+              style={{ border: 0, background: 'transparent', fontSize: '22px', lineHeight: 1, cursor: 'pointer' }}
+            >
+              ×
+            </button>
+          </div>
+          <div style={{ height: '350px', marginTop: '8px' }}>
+            {snakeLineLoading && <div style={{ padding: '24px', textAlign: 'center' }}>スネークラインを読み込み中...</div>}
+            {snakeLineError && <div role="alert" style={{ padding: '24px', color: '#b42318' }}>{snakeLineError}</div>}
+            {snakeLine && !snakeLineLoading && (
+              <SnakeLineChart data={snakeLine} initialTime={swiInitialTime} />
+            )}
+          </div>
+        </section>
+      )}
 
       <div style={{
         position: 'absolute',
