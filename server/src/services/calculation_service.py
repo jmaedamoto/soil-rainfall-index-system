@@ -328,7 +328,7 @@ class CalculationService:
             return []
 
     def calc_hourly_risk(self, swi_hourly: List[SwiTimeSeries],
-                         advisary_bound: int, warning_bound: int,
+                         advisary_bound: int,
                          dosyakei_bound: int,
                          rain_hourly: Optional[List[GuidanceTimeSeries]] = None,
                          level4_curve=None) -> List[Risk]:
@@ -338,7 +338,6 @@ class CalculationService:
         Args:
             swi_hourly: 1時間ごとのSWI時系列
             advisary_bound: 注意報基準値
-            warning_bound: 警報基準値
             dosyakei_bound: 土砂災害基準値
 
         Returns:
@@ -363,8 +362,6 @@ class CalculationService:
                 # リスクレベル判定（政府ガイドライン準拠: レベル0,2,3,4）
                 if level4_threshold is not None and swi_value >= level4_threshold:
                     risk = 4  # レベル4: 土砂災害
-                elif swi_value >= warning_bound:
-                    risk = 3  # レベル3: 警報
                 elif swi_value >= advisary_bound:
                     risk = 2  # レベル2: 注意
                 else:
@@ -558,40 +555,33 @@ class CalculationService:
             # 時系列の長さを取得
             timeline_length = len(first_mesh.swi)
             logger.info(f"Timeline length: {timeline_length}")
-            logger.info(f"First mesh boundaries: advisory={getattr(first_mesh, 'advisary_bound', 'N/A')}, warning={getattr(first_mesh, 'warning_bound', 'N/A')}, dosyakei={getattr(first_mesh, 'dosyakei_bound', 'N/A')}")
+            logger.info(f"First mesh boundaries: advisory={getattr(first_mesh, 'advisary_bound', 'N/A')}, dosyakei={getattr(first_mesh, 'dosyakei_bound', 'N/A')}")
             logger.info(f"First 3 SWI values: {[first_mesh.swi[i].value for i in range(min(3, timeline_length))]}")
 
             risk_timeline = []
+            risk_by_mesh_and_ft = {}
+            for mesh in meshes:
+                risk_points = getattr(mesh, 'risk_3hour_max', None) or []
+                risk_by_ft = {
+                    point.ft: point.value for point in risk_points
+                }
+                if getattr(mesh, 'risk_hourly', None):
+                    hourly_derived_points = self.calc_3hour_max_risk_from_hourly(
+                        mesh.risk_hourly
+                    )
+                    for point in hourly_derived_points:
+                        risk_by_ft.setdefault(point.ft, point.value)
+                risk_by_mesh_and_ft[mesh.code] = risk_by_ft
 
             for t in range(timeline_length):
                 ft = first_mesh.swi[t].ft
                 max_risk = 0
 
                 for mesh in meshes:
-                    mesh_risk_3hour_max = getattr(mesh, 'risk_3hour_max', None)
-                    if mesh_risk_3hour_max:
-                        matching_point = next((point for point in mesh_risk_3hour_max if point.ft == ft), None)
-                        if matching_point is not None:
-                            max_risk = max(max_risk, matching_point.value)
-                            continue
-
-                    if not hasattr(mesh, 'swi') or not mesh.swi:
-                        continue
-
-                    if t < len(mesh.swi):
-                        swi_value = mesh.swi[t].value
-
-                        # リスクレベル判定（政府ガイドライン準拠: レベル0,2,3,4）
-                        if swi_value >= mesh.dosyakei_bound:
-                            risk = 4  # レベル4: 土砂災害
-                        elif swi_value >= mesh.warning_bound:
-                            risk = 3  # レベル3: 警報
-                        elif swi_value >= mesh.advisary_bound:
-                            risk = 2  # レベル2: 注意
-                        else:
-                            risk = 0  # レベル0: 正常
-
-                        max_risk = max(max_risk, risk)
+                    max_risk = max(
+                        max_risk,
+                        risk_by_mesh_and_ft.get(mesh.code, {}).get(ft, 0),
+                    )
 
                 risk_timeline.append(
                     Risk(
@@ -892,7 +882,6 @@ class CalculationService:
                 mesh.risk_hourly = self.calc_hourly_risk(
                     mesh.swi_hourly,
                     mesh.advisary_bound,
-                    mesh.warning_bound,
                     mesh.dosyakei_bound,
                     rain_hourly=mesh.rain_1hour,
                     level4_curve=getattr(mesh, 'level4_curve', None),
@@ -957,7 +946,6 @@ class CalculationService:
                 mesh.risk_hourly = self.calc_hourly_risk(
                     mesh.swi_hourly,
                     mesh.advisary_bound,
-                    mesh.warning_bound,
                     mesh.dosyakei_bound,
                     rain_hourly=mesh.rain_1hour,
                     level4_curve=getattr(mesh, 'level4_curve', None),

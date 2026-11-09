@@ -1170,7 +1170,6 @@ class SessionController:
                             'mesh_code': mesh_code,
                             'initial_swi': initial_swi,
                             'advisory_bound': static_info['advisary_bound'],
-                            'warning_bound': static_info['warning_bound'],
                             'dosyakei_bound': static_info['dosyakei_bound'],
                             'level4_curve': (
                                 static_info['level4_curve'].tolist()

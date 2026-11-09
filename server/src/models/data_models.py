@@ -42,7 +42,7 @@ class GuidanceTimeSeries:
 class Risk:
     """リスクレベル情報"""
     ft: int  # 予測時間（時間）
-    value: int  # リスクレベル（0-3）
+    value: int  # リスクレベル（0, 2, 3, 4）
     rainfall_to_level4_1h_mm: Optional[int] = None  # 直後1時間でレベル4到達に必要な追加雨量
 
 
@@ -56,7 +56,6 @@ class Mesh:
     x: int  # グリッドX座標
     y: int  # グリッドY座標
     advisary_bound: int  # 注意報基準値
-    warning_bound: int   # 警報基準値
     dosyakei_bound: int  # 土砂災害基準値
     swi: List[SwiTimeSeries]  # 3時間ごとのSWI
     swi_hourly: List[SwiTimeSeries]  # 1時間ごとのSWI
