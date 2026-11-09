@@ -7,6 +7,7 @@ interface SimpleCanvasLayerProps {
   meshes?: Mesh[]; // 通常モード: 全メッシュデータ
   meshRisks?: Record<string, number>; // セッションモード: メッシュコード→リスク値
   meshCoords?: Record<string, { lat: number; lon: number }>; // セッションモード: メッシュ座標
+  selectedMeshCode?: string;
   selectedTime: number;
   meshIntervals: { latInterval: number; lonInterval: number };
   onMeshClick?: (mesh: Mesh) => void;
@@ -17,6 +18,7 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
   meshes,
   meshRisks,
   meshCoords,
+  selectedMeshCode,
   selectedTime,
   meshIntervals,
   onMeshClick,
@@ -28,11 +30,11 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
   const drawFunctionRef = useRef<(() => void) | null>(null);
 
   // 最新の値を参照するためのref
-  const propsRef = useRef({ meshes, meshRisks, meshCoords, selectedTime, meshIntervals, onMeshSelect });
+  const propsRef = useRef({ meshes, meshRisks, meshCoords, selectedMeshCode, selectedTime, meshIntervals, onMeshSelect });
 
   // propsRefを常に最新の値で更新
   useEffect(() => {
-    propsRef.current = { meshes, meshRisks, meshCoords, selectedTime, meshIntervals, onMeshSelect };
+    propsRef.current = { meshes, meshRisks, meshCoords, selectedMeshCode, selectedTime, meshIntervals, onMeshSelect };
   });
 
   useEffect(() => {
@@ -54,6 +56,7 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
         meshes: currentMeshes,
         meshRisks: currentMeshRisks,
         meshCoords: currentMeshCoords,
+        selectedMeshCode: currentSelectedMeshCode,
         selectedTime: currentSelectedTime,
         meshIntervals: currentMeshIntervals
       } = propsRef.current;
@@ -102,6 +105,25 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
           meshLayerGroup.addLayer(rectangle);
           drawnCount++;
         });
+
+        const selectedCoords = currentSelectedMeshCode
+          ? currentMeshCoords[currentSelectedMeshCode]
+          : undefined;
+        if (selectedCoords) {
+          const selectedBounds = L.latLngBounds(
+            [selectedCoords.lat - latHalfSize, selectedCoords.lon - lonHalfSize],
+            [selectedCoords.lat + latHalfSize, selectedCoords.lon + lonHalfSize]
+          );
+          meshLayerGroup.addLayer(L.rectangle(selectedBounds, {
+            color: '#1565C0',
+            fill: false,
+            fillOpacity: 0,
+            weight: 3,
+            opacity: 1,
+            interactive: false,
+            renderer: canvasRenderer,
+          }));
+        }
 
         console.log(`[SimpleCanvasLayer.drawMeshes] 描画完了 - 描画: ${drawnCount}, スキップ(通常): ${skippedNormalCount}, スキップ(座標なし): ${skippedNoCoordCount}`);
       }
@@ -252,7 +274,7 @@ const SimpleCanvasLayer: React.FC<SimpleCanvasLayerProps> = ({
     } else {
       console.warn(`[SimpleCanvasLayer] drawFunctionRefが未初期化`);
     }
-  }, [selectedTime, meshes, meshRisks, meshCoords, meshIntervals]);
+  }, [selectedTime, meshes, meshRisks, meshCoords, selectedMeshCode, meshIntervals]);
 
   return null;
 };
