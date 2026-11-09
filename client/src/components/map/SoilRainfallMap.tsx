@@ -26,6 +26,22 @@ interface SoilRainfallMapProps {
   guidanceInitialTime?: string; // ガイダンス初期時刻（ISO8601形式）
 }
 
+const MapViewportUpdater: React.FC<{ targetBounds: LatLngBounds | null }> = ({ targetBounds }) => {
+  const map = useMap();
+  const lastFittedBounds = useRef<LatLngBounds | null>(null);
+
+  useEffect(() => {
+    if (!targetBounds) return;
+
+    if (lastFittedBounds.current?.equals(targetBounds)) return;
+
+    map.fitBounds(targetBounds, { padding: [20, 20] });
+    lastFittedBounds.current = targetBounds;
+  }, [map, targetBounds]);
+
+  return null;
+};
+
 const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
   meshes,
   meshRisks,
@@ -259,19 +275,6 @@ const SoilRainfallMap: React.FC<SoilRainfallMapProps> = React.memo(({
     console.log(`[SoilRainfallMap.currentTimeDisplay] 計算結果: ${result} (JST表示)`);
     return result;
   }, [selectedTime, swiInitialTime]);
-
-  const MapViewportUpdater: React.FC<{ targetBounds: LatLngBounds | null }> = ({ targetBounds }) => {
-    const map = useMap();
-
-    useEffect(() => {
-      if (!targetBounds) {
-        return;
-      }
-      map.fitBounds(targetBounds, { padding: [20, 20] });
-    }, [map, targetBounds]);
-
-    return null;
-  };
 
   return (
     <div style={{ height: '600px', width: '100%', position: 'relative' }}>
